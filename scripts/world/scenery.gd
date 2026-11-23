@@ -295,6 +295,31 @@ func _make_labels(parent: Node3D, info: Dictionary, text: String) -> void:
 		parent.add_child(l)
 
 
+var _scared := {}
+
+
+## Spectators jump back off the road edge when a car comes close.
+func scare(p: Vector2) -> void:
+	if not popups:
+		return
+	var c := Vector2i(floori(p.x / PCELL), floori(p.y / PCELL))
+	for dx in range(-1, 2):
+		for dy in range(-1, 2):
+			var key := Vector2i(c.x + dx, c.y + dy)
+			if not _pgrid.has(key):
+				continue
+			for i in _pgrid[key]:
+				if _scared.has(i) or placements[i]["kind"] != "spectators":
+					continue
+				if _ppos[i].distance_to(p) < 11.0:
+					_scared[i] = true
+					var pv := _pivots[i]
+					var away := Vector3(sin(float(placements[i]["out_yaw"])), 0, cos(float(placements[i]["out_yaw"])))
+					var tw := pv.create_tween()
+					tw.tween_property(pv, "position", pv.position + away * 2.5 + Vector3.UP * 0.6, 0.22).set_trans(Tween.TRANS_SINE)
+					tw.tween_property(pv, "position", pv.position + away * 3.2, 0.2).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+
+
 ## Props near p that a car can hit: Array of [x, z, r, index, breakable] (broken ones excluded).
 func props_near(p: Vector2) -> Array:
 	var out: Array = []

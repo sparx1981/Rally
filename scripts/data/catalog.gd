@@ -38,6 +38,23 @@ static func cars() -> Array:
 	return _cars
 
 
+const LIVERY_NAMES := ["Works", "Privateer", "Heritage"]
+
+
+## A car with one of three liveries: the works colours, a swapped privateer scheme, a cream heritage one.
+static func livery(car: Dictionary, i: int) -> Dictionary:
+	var c := car.duplicate()
+	match i % 3:
+		1:
+			c["body"] = car["accent"]
+			c["accent"] = car["body"]
+		2:
+			c["body"] = Color("#efe3c8") if Color(car["body"]).v < 0.85 else Color("#35302c")
+			c["accent"] = car["body"]
+			c["stripe"] = car["accent"]
+	return c
+
+
 ## Light sets follow the papercraft skill: one warm low key, a frontal fill, shadows that leak the
 ## world's colour (never grey), and weather that changes the light and grip, not the prints.
 static func weather(id: String) -> Dictionary:

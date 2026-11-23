@@ -61,7 +61,10 @@ func setup(stage_i: int, mode_v: int, entrants: Array, attract_v := false, tod :
 		car.driver_name = e["name"]
 		car.is_player = bool(e["player"]) and not attract
 		add_child(car)
-		car.setup(Catalog.cars()[int(e["car"])], i + 1, stage, stage.paper_mat)
+		var cdef: Dictionary = Catalog.cars()[int(e["car"])]
+		if bool(e["player"]) and not attract:
+			cdef = Catalog.livery(cdef, Game.livery)
+		car.setup(cdef, i + 1, stage, stage.paper_mat)
 		var row := i / 2
 		var lat := 0.0 if n == 1 else (-2.2 if i % 2 == 0 else 2.2)
 		car.place_at(tr.start_s - 5.0 - row * 8.0, lat)
@@ -83,6 +86,10 @@ func setup(stage_i: int, mode_v: int, entrants: Array, attract_v := false, tod :
 	camera.current = true
 	if attract:
 		camera.force_view = 0
+	if mode == Game.Mode.TIME_TRIAL and not attract:
+		ghost = Ghost.new()
+		add_child(ghost)
+		ghost.setup(Catalog.stages()[stage_i]["id"], player.stats)
 	if stage.wx.get("headlights", false):
 		for c in cars:
 			c.enable_lights(c == player and int(Settings.g("shadows")) > 0)
@@ -200,6 +207,11 @@ func _process(delta: float) -> void:
 			race_time += FIXED
 	if sim_dt > 0.0 and OS.get_cmdline_user_args().has("--trace") and Engine.get_process_frames() % 10 == 0:
 		print("TRACE s=%.1f lat=%.2f v=%.1f y=%.2f air=%s steer=%.2f slip=%.2f h=%.2f" % [player.s, player.lat, player.v_long, player.y, player.airborne, player.steer, player.slip, player.h])
+	if ghost and state == State.RACING:
+		ghost.record(race_time, player)
+		ghost.update(race_time)
+	if not attract and player:
+		stage.scenery.scare(player.pos)
 	_check_finish()
 	camera.follow(dt)
 	var vi := camera.view_index()
@@ -259,6 +271,10 @@ func _check_finish() -> void:
 				_done_t = 0.0
 				drivers[player] = AIDriver.new(player, 0.7)   # coast it through the finish
 				Haptics.pattern_finish()
+				if ghost:
+					var best := Game.best_time(stage_index)
+					if best < 0.0 or race_time < best:
+						ghost.save(Catalog.stages()[stage_index]["id"])
 				hud.show_center("FINISH", 2.6, 84)
 				Sfx.play("go", -2.0, 0.8)
 
@@ -384,6 +400,8 @@ func _on_impact(c: Car, strength: float, at: Vector2 = Vector2.INF, paper := fal
 		return
 	if at != Vector2.INF and strength > 2.5:
 		_debris(Vector3(at.x, c.y + 0.6, at.y), strength)
+	if at != Vector2.INF and strength > 4.0:
+		c.add_damage(at, strength)
 	if c != player or attract:
 		return
 	var k := clampf(strength / 14.0, 0.15, 1.0)
@@ -393,6 +411,7 @@ func _on_impact(c: Car, strength: float, at: Vector2 = Vector2.INF, paper := fal
 
 
 var _cheered := {}
+var ghost: Ghost
 var _last_view := -1
 var _debris_pool: Array[CPUParticles3D] = []
 var _debris_i := 0
@@ -544,7 +563,7 @@ func _results() -> Dictionary:
 			# Estimate the remaining time from the car's average pace so far.
 			var avg := maxf((c.s - tr.start_s) / maxf(race_time, 1.0), 8.0)
 			t = race_time + (tr.finish_s - c.s) / avg
-		rows.append({"name": c.driver_name, "time": t, "car": Catalog.cars().find(c.stats), "player": c == player})
+		rows.append({"name": c.driver_name, "time": t, "car": Catalog.cars().map(func(x): return x["id"]).find(c.stats["id"]), "player": c == player})
 	rows.sort_custom(func(a, b): return a["time"] < b["time"])
 	var medal := 3
 	for i in 3:

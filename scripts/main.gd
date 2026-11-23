@@ -328,9 +328,9 @@ func _car_select() -> void:
 		iv.add_child(pb)
 		bars[stat[1]] = pb
 	var refresh := func():
-		var c: Dictionary = Catalog.cars()[Game.car_index]
+		var c: Dictionary = Catalog.livery(Catalog.cars()[Game.car_index], Game.livery)
 		name_l.text = c["name"]
-		desc.text = c["desc"]
+		desc.text = "%s  -  %s drive\n%s" % [c["class"], {"rwd": "Rear", "fwd": "Front", "awd": "Four-wheel"}[c["drive"]], c["desc"]]
 		for k in bars.keys():
 			bars[k].value = clampf((float(c[k]) - 0.8) / 0.38, 0.05, 1.0)
 			bars[k].queue_redraw()
@@ -346,6 +346,12 @@ func _car_select() -> void:
 		refresh.call(), 80)
 	nav.add_child(prev)
 	nav.add_child(nxt)
+	var liv := _button("Livery: %s" % Catalog.LIVERY_NAMES[Game.livery], func(): pass, 0)
+	liv.pressed.connect(func():
+		Game.livery = (Game.livery + 1) % 3
+		liv.text = "Livery: %s" % Catalog.LIVERY_NAMES[Game.livery]
+		refresh.call())
+	iv.add_child(liv)
 	var go := _button("Select", func():
 		Game.save()
 		if Game.mode == Game.Mode.CHAMPIONSHIP:
@@ -600,6 +606,7 @@ func _pause_menu() -> void:
 	v.add_child(PaperTheme.tag("Paused", 44))
 	v.add_child(_button("Resume", _resume, 340))
 	v.add_child(_button("Restart stage", _start_race, 340))
+	v.add_child(_button("Photo mode", _photo_mode, 340))
 	v.add_child(_button("Settings", func():
 		_settings_return = _pause_menu
 		_settings(), 340))
@@ -609,6 +616,23 @@ func _pause_menu() -> void:
 		await _start_attract(Game.stage_index)
 		_title(), 340))
 	_focus_first(v)
+
+
+func _photo_mode() -> void:
+	_clear_menu()
+	_back = Callable()
+	if race._hud_layer:
+		race._hud_layer.visible = false
+	var pm := PhotoMode.new()
+	pm.setup(race.camera, race.player, post.material)
+	menu.add_child(pm)
+	pm.closed.connect(func():
+		pm.queue_free()
+		if race._hud_layer:
+			race._hud_layer.visible = true
+		_apply_post()
+		race.camera.snap()
+		_pause_menu())
 
 
 func _resume() -> void:

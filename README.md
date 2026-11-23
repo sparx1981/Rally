@@ -20,7 +20,11 @@ screenshots.
 | ![](docs/screenshots/race_snow.png) | ![](docs/screenshots/race_taiga.png) |
 | **Jump with taped-off crowd** | **Water splash in Race vs AI** |
 | ![](docs/screenshots/jump.png) | ![](docs/screenshots/splash.png) |
-| **Bonnet view** | **High overhead view** |
+| **Night: headlights cast light and shadow** | **All 15 cars** |
+| ![](docs/screenshots/night.png) | ![](docs/screenshots/cars.png) |
+| **Cockpit view** | **Hills and stacked-card contours** |
+| ![](docs/screenshots/cockpit.png) | ![](docs/screenshots/terrain.png) |
+| **Bonnet view: Alpine climb** | **High overhead view** |
 | ![](docs/screenshots/bonnet.png) | ![](docs/screenshots/overhead.png) |
 | **Title (live diorama behind the menu)** | **Settings: presets, individual options, pop-up toggle** |
 | ![](docs/screenshots/title.png) | ![](docs/screenshots/settings.png) |
@@ -29,13 +33,19 @@ screenshots.
 
 | | |
 |---|---|
-| **Game modes** | **Time Trial** (best times, gold/silver/bronze medals), **Championship** (4 series of AI-contested stages with points: 10-8-6-4-2-1), **Race vs AI** (head-to-head on one stage, 3 or 5 opponents) |
-| **Stages** | 9 procedurally generated point-to-point stages: 3 dry (Meadow Run, Sandstone Canyon, Autumn Ridge), 3 rain (Moorland Mire, Pinewood Deluge, Harbour Lanes), 3 snow (Alpine Pass, Frozen Lakes, Twilight Taiga). Each one has its own palette, scenery set, light set and grip |
+| **Game modes** | **Time Trial** (best times, gold/silver/bronze medals and a ghost of your best run), **Championship** (6 series with points 10-8-6-4-2-1, including the always-at-night **Night Rally**), **Race vs AI** (head-to-head on one stage, 3 or 5 opponents) |
+| **Stages** | 27 procedurally generated point-to-point stages: 9 locations, each with a **Sprint (~1 km)**, **Classic (~2 km)** and **Marathon (~4 km)** layout. 3 dry (Meadow Run, Sandstone Canyon, Autumn Ridge), 3 rain (Moorland Mire, Pinewood Deluge, Harbour Lanes), 3 snow (Alpine Pass, Frozen Lakes, Twilight Taiga) |
+| **Altitude** | Every stage climbs, dips and rolls. A road altitude profile (overall climb, rolling undulation, maximum grade) and a landscape heightfield blend into each other. Hills, ridges and valleys rise and fall beside the road, drawn as stacked card contours. Climbs cost speed and descents add it, and crests can lift the car off the ground. Each location's layout and altitude are modelled on a real rally region: British farm lanes, Mexico / Acropolis mountain switchbacks, German vineyard ridges, Welsh moors, fast Finnish forest crests, Corsican coastal climbs, the Monte Carlo Col de Turini hairpin climb, the Swedish frozen lakes, Arctic forest |
+| **Time of day** | Day, Dusk or Night for any stage. At dusk and night every car's headlights light the road (the player's beam also casts shadows), lamp posts and cabin windows glow, and the shadows turn navy |
 | **Weather** | Rain: wet roads, puddles that splash and drag, paper rain streaks, about 72 % grip. Snow: paper snowflakes, cold lilac shadows, 49-56 % grip. Dry: dust trails |
-| **Cars** | 6 cars with different speed, acceleration, grip and handling: Pip 1300, Kestrel GT, Badger 4x4, Marten RS, Lynx Turbo, Otter Estate |
+| **Cars** | 15 original cars (no real makes or liveries) covering the classes found across rally games: 1960s classic (Ventura 60), 1970s Group 2 (Pip 1300, Comet 1600), 1980s Group B (Strega B, Tempest S1), Group S prototype (Wraith S), 1990s Group A (Marten RS, Kestrel GT), 2000s WRC (Lynx Turbo), modern Rally2 (Fennec R2) and Rally1 (Vortex R1), estate (Otter Estate), off-road 4x4 (Badger 4x4), trophy truck (Mule Trophy) and dune buggy (Sandhopper). Rear-drive cars slide under power, front-drive cars understeer, four-wheel drive is neutral, and off-road machines shrug off rough ground. 3 liveries each, and they pick up visible paper damage in crashes |
+| **Volumetric effects** | Dust, snow, spray, tyre and exhaust smoke (backfires, launches), chimney smoke and water-splash bursts are 3D faceted paper puffs that swell and fade, lit like the rest of the world. Low mist is layered cut-paper sheets lying in the valleys |
+| **Signage** | Fictional sponsor A-frame banners (FOLDLINE OIL, CARDSTOCK TYRES, CREASE COLA, PULPWORKS, SCISSOR SPEED, ORIGAMI AIR), billboards, warning boards before every hazard, kilometre boards, flags at the start and finish |
+| **Destructible props** | Marker posts, signs, banners, bales, crates, tape, bushes, snowbanks and chevrons break and tumble away when hit, then lie on the ground. Trees, rocks, logs and buildings stay solid. Spectators jump back when you come close |
+| **Photo mode** | From the pause menu: orbit a free camera, adjust blur, focus and warmth, hide the UI and save PNGs (to the phone's Pictures/Paper Rally folder where allowed, otherwise the app's photos folder) |
 | **Hazards** | Built paper ramps for **crests and jumps** (real airtime, landing thud and rumble), **water splashes** (drag, spray, splash sound), **hay-bale chicanes**, **loose surfaces** (gravel, mud, ice, deep snow patches with less grip), and **roadside obstacles**: marker posts, plus rocks, logs and bales on the inside of tight bends to punish corner cutting. Crowds stand behind tape at jumps and splashes and cheer as you pass |
 | **Co-driver** | Pace-note cards for each upcoming bend (direction, severity 1-6, hairpins) and for every hazard (JUMP, CREST, SPLASH, CHICANE, GRAVEL, MUD, ICE, DEEP SNOW) |
-| **Camera views** | Tap the **camera icon** (top right), press Back/LB on a controller or C on a keyboard to cycle: Chase, Close chase, Far chase, High overhead, Top-down and Bonnet. Bonnet is a low, wide view with a paper sky and fog |
+| **Camera views** | Tap the **camera icon** (top right), press Back/LB on a controller or C on a keyboard to cycle: Chase, Close chase, Far chase, High overhead, Top-down, Bonnet and **Cockpit**. Cockpit is an in-car view with a dashboard, pillars, a steering wheel that turns and a moving rev needle. Bonnet and Cockpit use a paper sky and fog |
 | **Living world** | Flocks of paper birds perch at fixed spots, pecking. They scatter when a car comes near, circle with flap-and-glide wingbeats while banking, then glide back down and land |
 | **Collisions** | Each car collides as its real box-shaped body, not a circle, so contact happens where the bodywork touches. Paper scraps burst from the contact point, and glancing blows nudge the car's yaw |
 | **Controllers** | Any Bluetooth or USB-C game controller (Xbox, PlayStation, 8BitDo and similar), with analog steering and triggers. All menus can be driven from the controller |
@@ -43,6 +53,31 @@ screenshots.
 | **Haptics** | Controller rumble for road texture, sliding, off-road, gear shifts, impacts, puddles, the countdown and the finish. Short, rate-limited phone vibration when no controller is connected. Strength slider and on/off toggles |
 | **Graphics settings** | Low / Medium / High presets plus individual options: render resolution, shadows, tilt-shift blur, MSAA, scenery density, draw distance, weather particles, paper fibre detail, 30/60 fps cap, FPS counter |
 | **Pop-up toggle** | *Settings → Graphics → Pop-up scenery animation*. **On**: every piece of scenery lies folded flat until it comes into the camera's view, then unfolds in staggered waves on a paper-flap spring, and folds away again once it is out of view. **Off**: the same paper scenery stands still and is batched into chunked MultiMeshes (far fewer draw calls). Switch it mid-race from the pause menu to compare |
+
+## Compared with art of rally
+
+Research into *art of rally* found these features in it: an era-based career (Group 2 to Group B, S
+and A), 50+ cars, free roam with collectibles, photo mode, replays, weather and time of day, and
+online events ([Wikipedia](https://en.wikipedia.org/wiki/Art_of_Rally),
+[TV Tropes](https://tvtropes.org/pmwiki/pmwiki.php/VideoGame/ArtOfRally),
+[GamePretty collectibles guide](https://gamepretty.com/art-of-rally-all-collectibles-guide/)).
+Reviewers criticised its single distant camera with no bonnet or driver cam, its lack of pace notes,
+night stages where terrain height is hard to read, repetitive locations, and damage that rarely
+matters ([gameblur](https://gameblur.net/reviews/game-reviews/art-of-rally-xbox-series-review/),
+[GameSpot user review](https://www.gamespot.com/art-of-rally/user-reviews/2200-12868954/)).
+
+| art of rally has | Paper Rally |
+|---|---|
+| Era classes from Group 2 to Group S | Yes: 15 cars from 1960s to modern Rally1, plus off-road classes it doesn't have (truck, buggy, 4x4) |
+| Weather and time of day | Yes: dry / rain / snow, and day / dusk / night with working headlights |
+| Photo mode | Yes (pause menu) |
+| Replays | Partly: a Time Trial ghost of your best run, but no full replay viewer yet |
+| Liveries | Yes: 3 per car |
+| Damage | Visual paper damage patches. It doesn't affect handling yet |
+| Career with unlocks | Not yet: every car and stage is open. Championship series are the closest |
+| Free roam and collectibles | Not yet |
+| Online leaderboards and daily events | Not yet (needs a server) |
+| Its weak spots | Covered: 7 camera views incl. bonnet and cockpit, pace notes for every bend and hazard, headlights and contour-lined terrain at night, 27 stages |
 
 ## Controls
 
@@ -90,6 +125,10 @@ scripts/world/track.gd      seeded stage generator, projection queries, pace not
 scripts/world/scenery.gd    clustered placement; pop-up (animated) vs batched (static) scenery
 scripts/world/stage.gd      lights, ground, road and ramps, gantries, hazards, puddles, rain/snow particles
 scripts/world/birds.gd      world-anchored bird flocks (perch, scatter, circle, land)
+scripts/world/terrain.gd    landscape heightfield blended to the road's altitude
+scripts/world/puffs.gd      volumetric paper puff emitters (dust, smoke, spray, chimneys)
+scripts/race/ghost.gd       Time Trial ghost recording and playback
+scripts/ui/photo_mode.gd    photo mode
 audio/kenney/               CC0 recorded sounds
 scripts/car/                paper car model, arcade rally physics, AI driver, player input
 scripts/race/               race controller (fixed 120 Hz physics, collisions, timing), chase camera

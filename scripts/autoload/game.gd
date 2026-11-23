@@ -7,6 +7,7 @@ enum Mode { TIME_TRIAL, CHAMPIONSHIP, RACE }
 
 var mode: int = Mode.TIME_TRIAL
 var car_index := 6
+var livery := 0
 var stage_index := 0
 var series_index := 0
 var time_of_day := -1        # -1 = the stage's own default, 0 day, 1 dusk, 2 night
@@ -142,6 +143,7 @@ func save() -> void:
 	cf.set_value("progress", "best_times", best_times)
 	cf.set_value("progress", "cups", cups)
 	cf.set_value("progress", "car_index", car_index)
+	cf.set_value("progress", "livery", livery)
 	cf.save(SAVE_PATH)
 
 
@@ -151,4 +153,5 @@ func _load() -> void:
 		return
 	best_times = cf.get_value("progress", "best_times", {})
 	cups = cf.get_value("progress", "cups", {})
+	livery = int(cf.get_value("progress", "livery", 0))
 	car_index = clampi(int(cf.get_value("progress", "car_index", 6)), 0, Catalog.cars().size() - 1)

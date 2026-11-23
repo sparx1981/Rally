@@ -215,6 +215,36 @@ func enable_lights(shadows: bool) -> void:
 	_lights.append(beam)
 
 
+var _damage := 0
+
+
+## Visual damage: a crumpled, torn paper patch where the bodywork took a hit.
+func add_damage(at: Vector2, strength: float) -> void:
+	if _damage >= 14 or _body == null:
+		return
+	_damage += 1
+	var local := global_transform.affine_inverse() * Vector3(at.x, global_position.y + 0.5, at.y)
+	var top: float = _model["lamp"].y + 0.1
+	var nrm := Vector3.ZERO
+	var p := local
+	if absf(local.x) / half_wid > absf(local.z) / half_len:
+		nrm = Vector3(signf(local.x), 0, 0)
+		p = Vector3(signf(local.x) * (half_wid + 0.025), clampf(local.y, 0.4, top), clampf(local.z, -half_len + 0.3, half_len - 0.3))
+	else:
+		nrm = Vector3(0, 0, signf(local.z))
+		p = Vector3(clampf(local.x, -half_wid + 0.3, half_wid - 0.3), clampf(local.y, 0.4, top), signf(local.z) * (half_len + 0.025))
+	var b := PaperKit.Builder.new(_damage * 31)
+	var r := clampf(strength / 30.0, 0.12, 0.35)
+	var basis := Basis.looking_at(-nrm, Vector3.UP) if absf(nrm.y) < 0.9 else Basis()
+	b.card(PaperKit.blob(r, 0, 0, 7, 0.35, _damage * 7, 16), Transform3D(basis, p), PaperKit.KRAFT, {"thick": 0.015, "edge": 0.025, "lip": 0.0})
+	b.card(PaperKit.blob(r * 0.5, r * 0.15, -r * 0.1, 5, 0.4, _damage * 9, 12), Transform3D(basis, p + nrm * 0.012), Color("#8a7a68"), {"thick": 0.01, "edge": 0.0, "lip": 0.0})
+	var mi := MeshInstance3D.new()
+	mi.mesh = b.mesh()
+	mi.material_override = _mat
+	mi.rotation.z = randf_range(-0.5, 0.5)
+	_body.add_child(mi)
+
+
 ## The in-car view rig (dashboard, wheel, rev needle), shown only in the cockpit camera.
 func cockpit(show: bool) -> void:
 	if show and _cockpit.is_empty():
