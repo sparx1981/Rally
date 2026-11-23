@@ -5,6 +5,7 @@ extends RefCounted
 
 static var _cars: Array = []
 static var _stages: Array = []
+static var _locations: Array = []
 static var _weather: Dictionary = {}
 static var _series: Array = []
 
@@ -82,74 +83,124 @@ static func _pal(d: Dictionary) -> Dictionary:
 	return out
 
 
-static func stages() -> Array:
-	if _stages.is_empty():
-		_stages = [
-			{"id": "meadow", "name": "Meadow Run", "weather": "dry_day", "seed": 1101, "length": 1700.0, "twist": 0.35, "width": 8.5,
+static func locations() -> Array:
+	if _locations.is_empty():
+		_locations = [
+			{"id": "meadow", "region": "British farmland lanes (Rally GB style): narrow, rolling, hedged.", "elev": {"climb": 0.0, "amp": 6.0, "wave": 190.0, "grade": 0.08, "hills": 9.0}, "name": "Meadow Run", "weather": "dry_day", "seed": 1101, "length": 1700.0, "twist": 0.35, "width": 8.5,
 				"desc": "Rolling farmland lanes between hay fields and red barns.",
 				"pal": _pal({"ground": "#d9d7bc", "ground2": "#cbcfa9", "ground3": "#e3dcc6", "road": "#c9ab7e", "rut": "#a88a62",
 					"f_dark": "#5f7f4a", "f_mid": "#7d9a5a", "f_light": "#a3b56e", "trunk": "#7a5235", "accent": "#c8553d",
 					"accent2": "#e8b04a", "wall": "#efe3c8", "roof": "#b5523b", "wood": "#8a5a3b", "stone": "#a99d8a", "flower": "#e8d06a"}),
 				"kinds": {"tree": 5, "bush": 4, "tuft": 5, "flowers": 3, "house": 1, "barn": 1, "bale": 3, "rock": 1, "logs": 1, "spectators": 0}},
-			{"id": "canyon", "name": "Sandstone Canyon", "weather": "dry_noon", "seed": 2207, "length": 1900.0, "twist": 0.5, "width": 8.5,
+			{"id": "canyon", "region": "High desert mountain roads (Mexico / Acropolis style): rocky climbs and switchbacks.", "elev": {"climb": 32.0, "amp": 9.0, "wave": 260.0, "grade": 0.11, "hills": 26.0}, "name": "Sandstone Canyon", "weather": "dry_noon", "seed": 2207, "length": 1900.0, "twist": 0.5, "width": 8.5,
 				"desc": "Sun-baked switchbacks through red mesas and cactus flats.",
 				"pal": _pal({"ground": "#ead8b2", "ground2": "#e0c79c", "ground3": "#f0e2c4", "road": "#c99c6c", "rut": "#a87a50",
 					"f_dark": "#5f7a50", "f_mid": "#7d9264", "f_light": "#a4b07a", "trunk": "#7a5235", "accent": "#2f8a8a",
 					"accent2": "#e8c05a", "wall": "#e9cfa6", "roof": "#b5623b", "wood": "#8a5a3b", "stone": "#c9774a", "flower": "#e2763a"}),
 				"kinds": {"cactus": 5, "mesa": 3, "rock": 5, "bush": 2, "tuft": 3, "tent": 1, "logs": 1}},
-			{"id": "autumn", "name": "Autumn Ridge", "weather": "dry_golden", "seed": 3313, "length": 2000.0, "twist": 0.6, "width": 8.0,
+			{"id": "autumn", "region": "Vineyard and forest ridges (Germany / Ardennes style): twisty, up and down.", "elev": {"climb": 14.0, "amp": 9.0, "wave": 150.0, "grade": 0.1, "hills": 15.0}, "name": "Autumn Ridge", "weather": "dry_golden", "seed": 3313, "length": 2000.0, "twist": 0.6, "width": 8.0,
 				"desc": "Twisting forest gravel under copper and gold leaves.",
 				"pal": _pal({"ground": "#e6d2a8", "ground2": "#dcc394", "ground3": "#ecdcbc", "road": "#b8946a", "rut": "#94704c",
 					"f_dark": "#a8452e", "f_mid": "#d0682e", "f_light": "#e8a040", "trunk": "#6e4a32", "accent": "#e8c05a",
 					"accent2": "#7a8a4a", "wall": "#efe3c8", "roof": "#8a4a32", "wood": "#7a5235", "stone": "#a89c8a", "flower": "#e8c05a"}),
 				"kinds": {"tree": 7, "pine": 3, "bush": 3, "tuft": 3, "logs": 2, "rock": 2, "cabin": 1}},
-			{"id": "moor", "name": "Moorland Mire", "weather": "rain_mist", "seed": 4421, "length": 1800.0, "twist": 0.45, "width": 8.5,
+			{"id": "moor", "region": "Open moorland (Welsh forests and moors style): rolling crests, wet and rough.", "elev": {"climb": 0.0, "amp": 10.0, "wave": 210.0, "grade": 0.09, "hills": 16.0}, "name": "Moorland Mire", "weather": "rain_mist", "seed": 4421, "length": 1800.0, "twist": 0.45, "width": 8.5,
 				"desc": "Wet peat tracks across heather moors. Puddles everywhere.",
 				"pal": _pal({"ground": "#c2c6ad", "ground2": "#b2b99c", "ground3": "#cdcdb6", "road": "#8f7a62", "rut": "#6f5c48",
 					"f_dark": "#5d7556", "f_mid": "#7b9068", "f_light": "#9aa87a", "trunk": "#6a4a36", "accent": "#c8553d",
 					"accent2": "#c9a447", "wall": "#e2dccb", "roof": "#5d6b7a", "wood": "#6e5038", "stone": "#9c9a90", "flower": "#a77ba0"}),
 				"kinds": {"heather": 6, "rock": 4, "bush": 3, "tuft": 4, "pine": 1, "house": 1, "tent": 1}},
-			{"id": "pinewood", "name": "Pinewood Deluge", "weather": "rain_mist", "seed": 5531, "length": 2000.0, "twist": 0.62, "width": 8.0,
+			{"id": "pinewood", "region": "Fast forest gravel (Finland style): short sharp crests and yumps between the trees.", "elev": {"climb": 0.0, "amp": 4.0, "wave": 75.0, "grade": 0.1, "hills": 8.0}, "name": "Pinewood Deluge", "weather": "rain_mist", "seed": 5531, "length": 2000.0, "twist": 0.62, "width": 8.0,
 				"desc": "Dark, dripping pine forest with tight muddy hairpins.",
 				"pal": _pal({"ground": "#bcc2a8", "ground2": "#aab396", "ground3": "#c8c9b0", "road": "#7e6a55", "rut": "#5e4c3c",
 					"f_dark": "#3f5e4a", "f_mid": "#557560", "f_light": "#6d8a6c", "trunk": "#6a4a36", "accent": "#d9a441",
 					"accent2": "#c8553d", "wall": "#e2dccb", "roof": "#5d6b7a", "wood": "#6e5038", "stone": "#9a9a90", "flower": "#d9a441"}),
 				"kinds": {"pine": 9, "bush": 3, "tuft": 3, "logs": 2, "rock": 2, "tent": 1, "cabin": 1}},
-			{"id": "harbour", "name": "Harbour Lanes", "weather": "rain_overcast", "seed": 6619, "length": 1750.0, "twist": 0.55, "width": 8.0,
+			{"id": "harbour", "region": "Coastal mountain roads (Corsica / Sardinia style): climbing away from the sea.", "elev": {"climb": 26.0, "amp": 6.0, "wave": 160.0, "grade": 0.11, "hills": 22.0}, "name": "Harbour Lanes", "weather": "rain_overcast", "seed": 6619, "length": 1750.0, "twist": 0.55, "width": 8.0,
 				"desc": "Slippery cobbles through a painted fishing village.",
 				"pal": _pal({"ground": "#c9c5b3", "ground2": "#b9b7a6", "ground3": "#d6d1bd", "road": "#8a8278", "rut": "#6c665e",
 					"f_dark": "#5d7556", "f_mid": "#7b9068", "f_light": "#9aa87a", "trunk": "#6a4a36", "accent": "#c8553d",
 					"accent2": "#2f8a8a", "wall": "#d98c6a", "roof": "#5d6b7a", "wood": "#7a5a40", "stone": "#9c988c", "flower": "#e2c26a"}),
 				"kinds": {"house": 6, "crates": 3, "lamp": 2, "bush": 2, "tuft": 2, "rock": 1, "spectators": 0}},
-			{"id": "alpine", "name": "Alpine Pass", "weather": "snow_bright", "seed": 7717, "length": 1900.0, "twist": 0.6, "width": 8.0,
+			{"id": "alpine", "region": "Alpine col (Monte Carlo, Col de Turini style): a long hairpin climb to the summit.", "elev": {"climb": 55.0, "amp": 5.0, "wave": 220.0, "grade": 0.12, "hills": 42.0}, "name": "Alpine Pass", "weather": "snow_bright", "seed": 7717, "length": 1900.0, "twist": 0.6, "width": 8.0,
 				"desc": "High mountain hairpins on packed snow. Brake early.",
 				"pal": _pal({"ground": "#e4e8ef", "ground2": "#d8dee8", "ground3": "#eef0f5", "road": "#cdd2dc", "rut": "#a7aec0",
 					"f_dark": "#4a6b5e", "f_mid": "#628374", "f_light": "#7d9a88", "trunk": "#6a4a36", "accent": "#c8553d",
 					"accent2": "#3f6fa8", "wall": "#e8dcc8", "roof": "#8a4a3a", "wood": "#7a5235", "stone": "#9a9fae", "flower": "#f3f4f7"}),
 				"kinds": {"pine_snow": 8, "rock": 3, "snowbank": 5, "cabin": 1, "logs": 1}},
-			{"id": "lakes", "name": "Frozen Lakes", "weather": "snow_ice", "seed": 8803, "length": 1800.0, "twist": 0.4, "width": 9.0,
+			{"id": "lakes", "region": "Frozen lakes and snowbanks (Rally Sweden style): fast and nearly flat.", "elev": {"climb": 0.0, "amp": 3.0, "wave": 240.0, "grade": 0.06, "hills": 6.0}, "name": "Frozen Lakes", "weather": "snow_ice", "seed": 8803, "length": 1800.0, "twist": 0.4, "width": 9.0,
 				"desc": "Fast, icy straights between birch woods. Almost no grip.",
 				"pal": _pal({"ground": "#e2e7ee", "ground2": "#cddbe8", "ground3": "#edf0f5", "road": "#c9cfda", "rut": "#a3abbd",
 					"f_dark": "#5a7a6a", "f_mid": "#7a9a7a", "f_light": "#a4b88a", "trunk": "#efeae0", "accent": "#d98c3a",
 					"accent2": "#a84a3a", "wall": "#a84a3a", "roof": "#3f4a5a", "wood": "#7a5235", "stone": "#9aa0ae", "flower": "#f3f4f7"}),
 				"kinds": {"birch": 6, "pine_snow": 3, "snowbank": 5, "cabin": 1, "rock": 2}},
-			{"id": "taiga", "name": "Twilight Taiga", "weather": "snow_dusk", "seed": 9901, "length": 2000.0, "twist": 0.55, "width": 8.0,
+			{"id": "taiga", "tod": 1, "region": "Arctic forest (Arctic Rally / Norway style): rolling snow roads under a low sun.", "elev": {"climb": 10.0, "amp": 7.0, "wave": 170.0, "grade": 0.09, "hills": 12.0}, "name": "Twilight Taiga", "weather": "snow_bright", "seed": 9901, "length": 2000.0, "twist": 0.55, "width": 8.0,
 				"desc": "Snowy forest at dusk, lit by cabin windows and lamps.",
 				"pal": _pal({"ground": "#dcdbe6", "ground2": "#cfcfdd", "ground3": "#e6e5ee", "road": "#c2c1d0", "rut": "#9e9cb4",
 					"f_dark": "#3e5a5a", "f_mid": "#53706a", "f_light": "#6d8a80", "trunk": "#6a4a36", "accent": "#c8553d",
 					"accent2": "#e8c05a", "wall": "#a85a3a", "roof": "#4a4a5a", "wood": "#7a5235", "stone": "#9a9aae", "flower": "#f3f4f7"}),
 				"kinds": {"pine_snow": 8, "snowbank": 4, "cabin": 2, "lamp": 2, "rock": 1, "logs": 1}},
 		]
+	return _locations
+
+
+const VARIANTS := [["Sprint", 1100.0], ["Classic", 2100.0], ["Marathon", 4200.0]]
+const TOD_NAMES := ["Day", "Dusk", "Night"]
+
+
+## 27 stages: every location in a Sprint (~1 km), Classic (~2 km) and Marathon (~4 km) layout.
+static func stages() -> Array:
+	if _stages.is_empty():
+		for li in locations().size():
+			var loc: Dictionary = locations()[li]
+			for v in VARIANTS.size():
+				var st := loc.duplicate()
+				st["loc"] = li
+				st["variant"] = v
+				st["id"] = "%s_%s" % [loc["id"], VARIANTS[v][0].to_lower()]
+				st["name"] = loc["name"]
+				st["variant_name"] = VARIANTS[v][0]
+				st["length"] = float(VARIANTS[v][1]) * (1.0 + 0.06 * ((li % 3) - 1))
+				st["seed"] = int(loc["seed"]) + v * 977
+				st["tod"] = int(loc.get("tod", 0))
+				_stages.append(st)
 	return _stages
+
+
+static func stage_title(i: int) -> String:
+	var st: Dictionary = stages()[i]
+	return "%s - %s" % [st["name"], st["variant_name"]]
+
+
+## Time-of-day lighting on top of a weather set: Dusk (low warm sun, violet fill) and Night (pale
+## blue moon, deep navy shadows, lit windows). Car headlights switch on at dusk and night.
+static func lighting(weather_id: String, tod: int) -> Dictionary:
+	var w: Dictionary = weather(weather_id).duplicate()
+	w["tod"] = tod
+	w["headlights"] = tod > 0
+	var snow: bool = w["kind"] == "snow"
+	if tod == 1:
+		w.merge({"key": Color("#ffb38a"), "key_e": float(w["key_e"]) * 0.8, "elev": 22.0, "fill": Color("#6f63a8"), "fill_e": 0.28,
+			"amb": Color(w["amb"]).lerp(Color("#a898d0"), 0.6), "amb_e": 0.3, "leak": Color("#5e5c98") if snow else Color("#6a4a8a"),
+			"wrap": 0.36, "glow": 1.1, "vig": 0.14, "vig_col": Color("#1a1430"), "exposure": 1.0, "contrast": 1.06,
+			"tint": Vector3(1.01, 0.98, 1.01)}, true)
+	elif tod == 2:
+		w.merge({"key": Color("#c8d6ff"), "key_e": 0.3, "elev": 52.0, "fill": Color("#7890d0"), "fill_e": 0.14,
+			"amb": Color("#4a5ea8"), "amb_e": 0.34 if snow else 0.3, "leak": Color("#26368a"), "wrap": 0.4, "glow": 1.4,
+			"vig": 0.18, "vig_col": Color("#0a0c24"), "exposure": 1.08, "contrast": 1.05, "sat": 1.05,
+			"tint": Vector3(0.98, 0.98, 1.03), "green_pull": 0.1}, true)
+	return w
 
 
 static func series() -> Array:
 	if _series.is_empty():
 		_series = [
-			{"id": "dry", "name": "Dry Cup", "desc": "Three dry stages: meadow, canyon and forest.", "stages": [0, 1, 2]},
-			{"id": "storm", "name": "Storm Cup", "desc": "Three rain-soaked stages with puddles and mud.", "stages": [3, 4, 5]},
-			{"id": "winter", "name": "Winter Cup", "desc": "Three snow and ice stages. Very low grip.", "stages": [6, 7, 8]},
-			{"id": "grand", "name": "Grand Rally", "desc": "The full season: all nine stages.", "stages": [0, 3, 6, 1, 4, 7, 2, 5, 8]},
+			{"id": "sprint", "name": "Sprint Cup", "desc": "Five short, sharp Sprint stages.", "stages": [0, 12, 21, 3, 15]},
+			{"id": "dry", "name": "Dry Cup", "desc": "Three dry Classic stages: meadow, canyon and forest.", "stages": [1, 4, 7]},
+			{"id": "storm", "name": "Storm Cup", "desc": "Three rain-soaked Classic stages with puddles and mud.", "stages": [10, 13, 16]},
+			{"id": "winter", "name": "Winter Cup", "desc": "Three snow and ice Classic stages. Very low grip.", "stages": [19, 22, 25]},
+			{"id": "night", "name": "Night Rally", "desc": "Four stages always run at night, on headlights alone.", "stages": [19, 12, 4, 25], "night": true},
+			{"id": "grand", "name": "Grand Rally", "desc": "The full season: nine locations, Sprint to Marathon.", "stages": [2, 10, 18, 5, 13, 23, 7, 15, 26]},
 		]
 	return _series
 

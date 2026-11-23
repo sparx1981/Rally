@@ -97,7 +97,7 @@ func _start_race() -> void:
 	if _shot.has("path"):
 		race.sim_dt = 1.0 / 30.0
 	world.add_child(race)
-	race.setup(Game.stage_index, Game.mode, entrants, false)
+	race.setup(Game.stage_index, Game.mode, entrants, false, Game.race_tod())
 	race.finished.connect(_on_race_finished)
 	race.pause_requested.connect(_pause)
 	if _shot.has("hazard"):
@@ -444,35 +444,75 @@ func _weather_style(kind: String) -> StyleBoxFlat:
 func _stage_select() -> void:
 	var pg := _page("Choose a stage  -  %s" % Game.mode_name(), _car_select)
 	var content: VBoxContainer = pg["content"]
+	var cur_loc: int = Catalog.stages()[Game.stage_index]["loc"]
+	var opts := HBoxContainer.new()
+	opts.add_theme_constant_override("separation", 12)
+	content.add_child(opts)
+	opts.add_child(_choice_inline(["Sprint (~1 km)", "Classic (~2 km)", "Marathon (~4 km)"], int(Catalog.stages()[Game.stage_index]["variant"]), func(i):
+		Game.stage_index = cur_loc * 3 + i
+		_stage_select()))
+	opts.add_child(_choice_inline(["Time: stage default", "Time: Day", "Time: Dusk", "Time: Night"], Game.time_of_day + 1, func(i):
+		Game.time_of_day = i - 1))
 	var grid := GridContainer.new()
 	grid.columns = 3
 	grid.add_theme_constant_override("h_separation", 14)
-	grid.add_theme_constant_override("v_separation", 12)
+	grid.add_theme_constant_override("v_separation", 10)
 	grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	content.add_child(grid)
 	var first: Button
-	for i in Catalog.stages().size():
-		var sd: Dictionary = Catalog.stages()[i]
+	var variant: int = Catalog.stages()[Game.stage_index]["variant"]
+	for li in Catalog.locations().size():
+		var si := li * 3 + variant
+		var sd: Dictionary = Catalog.stages()[si]
 		var wx := Catalog.weather(sd["weather"])
-		var best := Game.best_time(i)
-		var txt := "%s\n%s  -  %.1f km\nBest %s" % [sd["name"], wx["label"], float(sd["length"]) / 1000.0, Game.fmt_time(best)]
-		var idx := i
+		var best := Game.best_time(si)
+		var txt := "%s\n%s  -  %.1f km  -  Best %s" % [sd["name"], wx["label"], float(sd["length"]) / 1000.0, Game.fmt_time(best)]
 		var b := _button(txt, func():
-			Game.stage_index = idx
+			Game.stage_index = si
 			_start_race())
-		b.custom_minimum_size = Vector2(380, 118)
+		b.custom_minimum_size = Vector2(380, 88)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.add_theme_font_size_override("font_size", 21)
+		b.add_theme_font_size_override("font_size", 19)
 		b.add_theme_stylebox_override("normal", _weather_style(wx["kind"]))
-		b.tooltip_text = sd["desc"]
+		b.tooltip_text = "%s\n%s" % [sd["desc"], sd["region"]]
+		b.focus_entered.connect(func(): _stage_info.text = "%s  %s" % [sd["region"], sd["desc"]])
 		grid.add_child(b)
-		if i == Game.stage_index:
+		if li == cur_loc:
 			first = b
-	var desc := PaperTheme.tag("Dry stages grip well. Rain halves your margin. Snow and ice need gentle hands.", 18)
-	content.add_child(desc)
+	_stage_info = Label.new()
+	_stage_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_stage_info.add_theme_font_size_override("font_size", 18)
+	_stage_info.custom_minimum_size.x = 900
+	content.add_child(_stage_info)
 	await get_tree().process_frame
 	if first:
 		first.grab_focus()
+
+
+var _stage_info: Label
+
+
+## A compact cycling button for option rows.
+func _choice_inline(options: Array, current: int, on_change: Callable) -> Button:
+	var state := {"i": clampi(current, 0, options.size() - 1)}
+	var b := Button.new()
+	b.focus_mode = Control.FOCUS_ALL
+	b.text = "<  %s  >" % options[state["i"]]
+	b.custom_minimum_size.x = 330
+	var change := func(d: int):
+		state["i"] = (state["i"] + d + options.size()) % options.size()
+		b.text = "<  %s  >" % options[state["i"]]
+		Sfx.toggle()
+		on_change.call(state["i"])
+	b.pressed.connect(func(): change.call(1))
+	b.gui_input.connect(func(ev: InputEvent):
+		if ev.is_action_pressed("ui_left"):
+			change.call(-1)
+			b.accept_event()
+		elif ev.is_action_pressed("ui_right"):
+			change.call(1)
+			b.accept_event())
+	return b
 
 
 func _series_select() -> void:
@@ -503,7 +543,7 @@ func _champ_intro() -> void:
 	var content: VBoxContainer = pg["content"]
 	var sd: Dictionary = Catalog.stages()[Game.stage_index]
 	var wx := Catalog.weather(sd["weather"])
-	content.add_child(PaperTheme.tag("Next: %s  (%s, %.1f km)" % [sd["name"], wx["label"], float(sd["length"]) / 1000.0], 28))
+	content.add_child(PaperTheme.tag("Next: %s  (%s, %.1f km%s)" % [Catalog.stage_title(Game.stage_index), wx["label"], float(sd["length"]) / 1000.0, ", night" if Game.race_tod() == 2 else ""], 28))
 	var dl := PaperTheme.tag(sd["desc"], 20)
 	content.add_child(dl)
 	_standings_table(content)
@@ -756,7 +796,7 @@ func _tt_results(r: Dictionary) -> void:
 	var pg := _page("Stage complete", Callable())
 	var content: VBoxContainer = pg["content"]
 	var sd: Dictionary = Catalog.stages()[int(r["stage"])]
-	content.add_child(PaperTheme.tag(sd["name"], 30))
+	content.add_child(PaperTheme.tag(Catalog.stage_title(int(r["stage"])), 30))
 	content.add_child(PaperTheme.tag("Time  %s%s" % [Game.fmt_time(r["player_time"]), "   NEW RECORD!" if record else ""], 40))
 	var medal_names := ["GOLD", "SILVER", "BRONZE", "No medal"]
 	var medal_cols := [Color("#f0cf6a"), Color("#dfe2e6"), Color("#d9a070"), PaperTheme.CREAM]

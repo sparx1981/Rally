@@ -251,6 +251,11 @@ func rebuild_visuals(use_popups: bool) -> void:
 		_build_static()
 
 
+## Ground height under a piece (pieces beside the road stand on the landscape).
+func _ground(p: Vector2) -> float:
+	return track.terrain.height(p) if track.terrain else 0.0
+
+
 func _piece_mesh(pl: Dictionary) -> Mesh:
 	return lib[pl["kind"]][pl["var"]]["mesh"]
 
@@ -259,7 +264,7 @@ func _build_popups() -> void:
 	for pl in placements:
 		var pivot := Node3D.new()
 		var p: Vector2 = pl["pos"]
-		pivot.position = Vector3(p.x, 0.02, p.y)
+		pivot.position = Vector3(p.x, _ground(p) + 0.02, p.y)
 		pivot.rotation.y = pl["out_yaw"]
 		var mi := MeshInstance3D.new()
 		mi.mesh = _piece_mesh(pl)
@@ -303,11 +308,11 @@ func _build_static() -> void:
 		var center := Vector3.ZERO
 		for pl in arr:
 			var p: Vector2 = pl["pos"]
-			center += Vector3(p.x, 0, p.y)
+			center += Vector3(p.x, _ground(p), p.y)
 		center /= arr.size()
 		for i in arr.size():
 			var p: Vector2 = arr[i]["pos"]
-			var t := Transform3D(Basis(Vector3.UP, float(arr[i]["yaw"])), Vector3(p.x, 0.02, p.y) - center)
+			var t := Transform3D(Basis(Vector3.UP, float(arr[i]["yaw"])), Vector3(p.x, _ground(p) + 0.02, p.y) - center)
 			mm.set_instance_transform(i, t)
 		var mmi := MultiMeshInstance3D.new()
 		mmi.multimesh = mm

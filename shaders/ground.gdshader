@@ -35,6 +35,11 @@ void fragment() {
 		float f = texture(fibre, p * 0.5).r * 0.6 + texture(fibre, p * 1.83 + vec2(0.37, 0.11)).r * 0.4;
 		c *= 1.0 + (f - 0.5) * fibre_amount * 2.0;
 	}
+	// Stacked card contours: every 2.5 m of altitude is a new sheet, a step lighter, with a thin cut edge.
+	float lay = wpos.y / 2.5;
+	float fl = fract(lay);
+	c *= 1.0 + (mod(floor(lay), 2.0) * 0.035);
+	c *= 1.0 - (1.0 - smoothstep(0.0, 0.05, fl)) * 0.14;
 	// Slow cloud shadows.
 	float cl = texture(noise, p * 0.006 + vec2(TIME * 0.004, TIME * 0.0025)).r;
 	float cs = smoothstep(0.55, 0.68, cl) * cloud_amount;
@@ -47,6 +52,11 @@ void fragment() {
 void light() {
 	float nl = dot(NORMAL, LIGHT);
 	float front = clamp((nl + wrap) / (1.0 + wrap), 0.0, 1.0);
-	vec3 shadowed = mix(leak, vec3(1.0), ATTENUATION);
-	DIFFUSE_LIGHT += front * LIGHT_COLOR * shadowed / PI;
+	if (LIGHT_IS_DIRECTIONAL) {
+		vec3 shadowed = mix(leak, vec3(1.0), ATTENUATION);
+		DIFFUSE_LIGHT += front * LIGHT_COLOR * shadowed / PI;
+	} else {
+		// Headlights and lamps: plain wrap-lit falloff (their cone and shadow are in ATTENUATION).
+		DIFFUSE_LIGHT += front * LIGHT_COLOR * ATTENUATION / PI;
+	}
 }

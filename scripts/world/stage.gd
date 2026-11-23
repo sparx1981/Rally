@@ -57,11 +57,19 @@ static func fibre_tex() -> NoiseTexture2D:
 	return _fibre_tex
 
 
-func build(stage_def: Dictionary) -> void:
+var tod := 0
+
+
+func build(stage_def: Dictionary, time_of_day := -1) -> void:
 	def = stage_def
-	wx = Catalog.weather(def["weather"])
+	tod = int(def.get("tod", 0)) if time_of_day < 0 else time_of_day
+	wx = Catalog.lighting(def["weather"], tod)
 	track.generate(int(def["seed"]), float(def["length"]), float(def["twist"]), float(def["width"]))
+	var ep: Dictionary = def.get("elev", {})
+	track.build_elevation(ep, int(def["seed"]))
 	track.build_hazards(int(def["seed"]), wx["kind"], float(def["twist"]))
+	track.terrain = Terrain.new()
+	track.terrain.build(track, float(ep.get("hills", 10.0)), int(def["seed"]) + 5)
 	_make_materials()
 	_make_lights()
 	_make_ground()
@@ -167,13 +175,18 @@ func _make_lights() -> void:
 
 
 func _make_ground() -> void:
-	var b := track.bounds().grow(260.0)
+	var holder := Node3D.new()
+	holder.name = "Terrain"
+	add_child(holder)
+	track.terrain.build_meshes(holder, ground_mat)
+	# A wide base sheet far below, so high views never see past the landscape edge.
+	var b = track.bounds().grow(900.0)
 	var pm := PlaneMesh.new()
 	pm.size = b.size
 	var mi := MeshInstance3D.new()
 	mi.mesh = pm
 	mi.material_override = ground_mat
-	mi.position = Vector3(b.get_center().x, 0.0, b.get_center().y)
+	mi.position = Vector3(b.get_center().x, track.terrain.min_h - 3.0, b.get_center().y)
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
 
@@ -196,17 +209,18 @@ func _make_road() -> void:
 			var r := p - track.nrm[i] * hw
 			var vv := track.dist[i] / track.width
 			var base := v.size()
-			var hy := ROAD_Y + track.heights[i]
-			var slope := (track.heights[mini(i + 1, n - 1)] - track.heights[maxi(i - 1, 0)]) / (2.0 * Track.STEP)
+			var hy = ROAD_Y + track.road_h_i(i)
+			var slope = (track.road_h_i(mini(i + 1, n - 1)) - track.road_h_i(maxi(i - 1, 0))) / (2.0 * Track.STEP)
+			var low = track.elev[i] - 0.6
 			var tn := Vector3(-slope * track.tang[i].x, 1.0, -slope * track.tang[i].y).normalized()
 			# top-left, top-right, then the side skirts (a built paper ramp where the road rises)
 			v.append(Vector3(l.x, hy, l.y)); nn.append(tn); uv.append(Vector2(0, vv)); col.append(Color.WHITE)
 			v.append(Vector3(r.x, hy, r.y)); nn.append(tn); uv.append(Vector2(1, vv)); col.append(Color.WHITE)
 			var on := Vector3(track.nrm[i].x, 0, track.nrm[i].y)
 			v.append(Vector3(l.x, hy, l.y)); nn.append(on); uv.append(Vector2(0, vv)); col.append(Color.BLACK)
-			v.append(Vector3(l.x, -0.01, l.y)); nn.append(on); uv.append(Vector2(0, vv)); col.append(Color.BLACK)
+			v.append(Vector3(l.x, low, l.y)); nn.append(on); uv.append(Vector2(0, vv)); col.append(Color.BLACK)
 			v.append(Vector3(r.x, hy, r.y)); nn.append(-on); uv.append(Vector2(1, vv)); col.append(Color.BLACK)
-			v.append(Vector3(r.x, -0.01, r.y)); nn.append(-on); uv.append(Vector2(1, vv)); col.append(Color.BLACK)
+			v.append(Vector3(r.x, low, r.y)); nn.append(-on); uv.append(Vector2(1, vv)); col.append(Color.BLACK)
 			if i > i0:
 				var pb := base - 6
 				_quad_idx(idx, v, pb + 0, pb + 1, base + 1, base + 0, Vector3.UP)
@@ -245,7 +259,7 @@ func _make_gantries() -> void:
 		var mi := MeshInstance3D.new()
 		mi.mesh = Pieces.arch(track.width + 1.4, pair[1])
 		mi.material_override = paper_mat
-		mi.position = Vector3(p.x, 0.0, p.y)
+		mi.position = Vector3(p.x, track.elev[i], p.y)
 		mi.rotation.y = track.heading_at(i)
 		add_child(mi)
 		# Painted line across the road.
@@ -258,7 +272,7 @@ func _make_gantries() -> void:
 		lm.roughness = 1.0
 		lm.metallic_specular = 0.0
 		line.material_override = lm
-		line.position = Vector3(p.x, ROAD_Y + 0.006, p.y)
+		line.position = Vector3(p.x, track.road_h_i(i) + ROAD_Y + 0.006, p.y)
 		line.rotation.y = track.heading_at(i)
 		line.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(line)
@@ -275,7 +289,8 @@ func _make_puddles() -> void:
 		var mi := MeshInstance3D.new()
 		mi.mesh = meshes[rng.randi() % meshes.size()]
 		mi.material_override = paper_mat
-		mi.position = Vector3(p.x, ROAD_Y + 0.012, p.y)
+		var ps: float = track.project(p, track.nearest_global(p))[1]
+		mi.position = Vector3(p.x, track.road_h(ps) + ROAD_Y + 0.012, p.y)
 		mi.rotation.y = rng.randf() * TAU
 		var sc: float = pd[1] / 1.5
 		mi.scale = Vector3(sc, 1.0, sc)
@@ -316,7 +331,7 @@ func _make_hazards() -> void:
 				var mi := MeshInstance3D.new()
 				mi.mesh = b.mesh()
 				mi.material_override = paper_mat
-				mi.position = Vector3(p.x, ROAD_Y + 0.02, p.y)
+				mi.position = Vector3(p.x, track.road_h_i(i) + ROAD_Y + 0.02, p.y)
 				mi.rotation.y = hd
 				mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 				add_child(mi)
@@ -334,7 +349,8 @@ func _make_hazards() -> void:
 						bm.size = Vector3(0.18, h, 0.18)
 						post.mesh = bm
 						post.material_override = _flat_mat(Color("#6a4a32"))
-						post.position = Vector3(q.x, h * 0.5, q.y)
+						bm.size = Vector3(0.18, h + 0.6, 0.18)
+						post.position = Vector3(q.x, track.elev[j] - 0.6 + (h + 0.6) * 0.5, q.y)
 						add_child(post)
 	for pt in track.patches:
 		var b := PaperKit.Builder.new(rng.randi())
@@ -349,7 +365,7 @@ func _make_hazards() -> void:
 			var latc := (float(pt["lat0"]) + float(pt["lat1"])) * 0.5
 			var q := track.pts[j] + track.nrm[j] * latc
 			var blob := PaperKit.blob(minf(wdt * 0.48, 4.0), 0, 0, 5, 0.12, rng.randi(), 18, 0.9)
-			var xf := Transform3D(Basis(Vector3.UP, track.heading_at(j)), Vector3(q.x, ROAD_Y + track.heights[j] + 0.012, q.y)) * lay
+			var xf := Transform3D(Basis(Vector3.UP, track.heading_at(j)), Vector3(q.x, ROAD_Y + track.road_h_i(j) + 0.012, q.y)) * lay
 			b.card(blob, xf, col, {"thick": 0.015, "edge": 0.04, "lip": 0.05})
 			if pt["kind"] == "ice":
 				b.card(PaperKit.rrect(2.0, 0.1, 0.05, rng.randf_range(-1, 1), rng.randf_range(-1, 1)), xf * Transform3D(Basis(), Vector3(0, 0, 0.012)), Color("#f2f6f8"), {"thick": 0.005, "edge": 0.0, "lip": 0.0, "sides": false})
@@ -456,7 +472,7 @@ func update(dt: float, focus: Vector3, radius: float, player_s: float, cam: Came
 	_time += dt
 	if scenery:
 		scenery.update(Vector2(focus.x, focus.z), radius, dt)
-	weather_fx.position = Vector3(focus.x, 0, focus.z)
+	weather_fx.position = focus
 	if cam:
 		fill_light.global_basis = cam.global_basis
 

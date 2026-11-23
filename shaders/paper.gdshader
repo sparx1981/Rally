@@ -38,6 +38,11 @@ void fragment() {
 void light() {
 	float nl = dot(NORMAL, LIGHT);
 	float front = clamp((nl + wrap) / (1.0 + wrap), 0.0, 1.0);
-	vec3 shadowed = mix(leak, vec3(1.0), ATTENUATION);
-	DIFFUSE_LIGHT += front * LIGHT_COLOR * shadowed / PI;
+	if (LIGHT_IS_DIRECTIONAL) {
+		vec3 shadowed = mix(leak, vec3(1.0), ATTENUATION);
+		DIFFUSE_LIGHT += front * LIGHT_COLOR * shadowed / PI;
+	} else {
+		// Headlights and lamps: plain wrap-lit falloff (their cone and shadow are in ATTENUATION).
+		DIFFUSE_LIGHT += front * LIGHT_COLOR * ATTENUATION / PI;
+	}
 }

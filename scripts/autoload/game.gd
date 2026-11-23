@@ -9,6 +9,7 @@ var mode: int = Mode.TIME_TRIAL
 var car_index := 3
 var stage_index := 0
 var series_index := 0
+var time_of_day := -1        # -1 = the stage's own default, 0 day, 1 dusk, 2 night
 
 # Championship in progress.
 var champ_round := 0
@@ -23,6 +24,13 @@ var cups := {}               # "series_id" -> best finishing position
 
 func _ready() -> void:
 	_load()
+
+
+## Time of day for the next race: championship night series forces night.
+func race_tod() -> int:
+	if mode == Mode.CHAMPIONSHIP:
+		return 2 if bool(current_series().get("night", false)) else -1
+	return time_of_day
 
 
 func mode_name(m: int = -1) -> String:

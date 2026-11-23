@@ -26,10 +26,13 @@ func setup(track: Track, mat: Material, seed_v: int, rain: bool) -> void:
 		var side := -1.0 if _rng.randf() < 0.5 else 1.0
 		var home2 := track.pts[i] + track.nrm[i] * side * _rng.randf_range(track.width * 0.5 + 6.0, track.width * 0.5 + 26.0)
 		if track.clearance(home2) > track.width * 0.5 + 4.0:
-			var flock := {"home": Vector3(home2.x, 0.0, home2.y), "birds": [], "fled": false, "quiet": 0.0}
+			var gy = track.terrain.height(home2) if track.terrain else 0.0
+			var flock := {"home": Vector3(home2.x, gy, home2.y), "birds": [], "fled": false, "quiet": 0.0}
 			var n := _rng.randi_range(3, 6) if not rain else _rng.randi_range(2, 3)
 			for k in n:
-				var perch = flock["home"] + Vector3(_rng.randf_range(-3.5, 3.5), 0.0, _rng.randf_range(-3.5, 3.5))
+				var perch: Vector3 = flock["home"] + Vector3(_rng.randf_range(-3.5, 3.5), 0.0, _rng.randf_range(-3.5, 3.5))
+				if track.terrain:
+					perch.y = track.terrain.height(Vector2(perch.x, perch.z))
 				flock["birds"].append(_make_bird(body, wing_l, wing_r, mat, perch))
 			_flocks.append(flock)
 		s += _rng.randf_range(110.0, 220.0)
@@ -114,7 +117,7 @@ func _step_bird(b: Dictionary, fl: Dictionary, dt: float) -> void:
 		S.PERCH:
 			fold = 1.0
 			vel = Vector3.ZERO
-			pos.y = 0.02
+			pos.y = float(b["perch"].y) + 0.02
 			# Pecking: dip the whole body forward now and then; small hops to turn.
 			var peck := maxf(0.0, sin(_time * 5.0 + float(b["phase"])))
 			node.rotation.x = 0.35 * pow(peck, 6.0)
@@ -127,7 +130,7 @@ func _step_bird(b: Dictionary, fl: Dictionary, dt: float) -> void:
 			flap_hz = 9.0
 			vel += Vector3.UP * 4.0 * dt
 			vel.y = minf(vel.y, 6.0)
-			if pos.y > float(b["alt"]) or float(b["t"]) < 0.0:
+			if pos.y > home.y + float(b["alt"]) or float(b["t"]) < 0.0:
 				b["state"] = S.CIRCLE
 				b["t"] = _rng.randf_range(6.0, 10.0)
 		S.CIRCLE:
@@ -154,15 +157,15 @@ func _step_bird(b: Dictionary, fl: Dictionary, dt: float) -> void:
 			vel = vel.lerp(to_p.normalized() * spd, clampf(dt * 2.0, 0.0, 1.0))
 			flap_amp = 0.35 if dist > 4.0 else 0.6
 			flap_hz = 4.0 if dist > 4.0 else 8.0
-			if dist < 0.5 or pos.y <= 0.05:
+			if dist < 0.5 or pos.y <= perch.y + 0.05:
 				b["state"] = S.PERCH
 				b["t"] = _rng.randf_range(1.0, 3.0)
-				pos = Vector3(perch.x, 0.02, perch.z)
+				pos = Vector3(perch.x, perch.y + 0.02, perch.z)
 				node.rotation.y = atan2(vel.x, vel.z)
 				vel = Vector3.ZERO
 	pos += vel * dt
 	if b["state"] != S.PERCH:
-		pos.y = maxf(pos.y, 0.05)
+		pos.y = maxf(pos.y, float(b["perch"].y) + 0.05)
 		var hv := Vector2(vel.x, vel.z)
 		if hv.length() > 0.3:
 			var new_yaw := atan2(vel.x, vel.z)

@@ -185,7 +185,7 @@ func place_at(s_pos: float, lateral: float) -> void:
 	track_i = i
 	s = s_pos
 	lat = lateral
-	y = track.height_at(s_pos, lateral)
+	y = track.surface_height(pos, s_pos, lateral)
 	vy = 0.0
 	airborne = false
 	_sync_visual(0.0)
@@ -238,7 +238,7 @@ func step(dt: float) -> void:
 		splashed.emit(absf(vel.dot(fwd())))
 	in_water = water
 	# Vertical: follow the road over crests and ramps; leave it when it falls away faster than gravity.
-	var gh := track.height_at(s, lat)
+	var gh = track.surface_height(pos, s, lat)
 	if airborne:
 		air_time += dt
 		vy -= GRAVITY * dt
@@ -251,8 +251,8 @@ func step(dt: float) -> void:
 			if air_time > 0.12:
 				landed.emit(hit_v)
 	else:
-		var vy_ground := (gh - y) / dt
-		if vy_ground < vy - GRAVITY * dt * 1.5 and vy > -1.0 and y > 0.05:
+		var vy_ground = (gh - y) / dt
+		if vy_ground < vy - GRAVITY * dt * 1.5 and vy > -3.0:
 			airborne = true
 			air_time = 0.0
 			vy -= GRAVITY * dt
@@ -288,6 +288,9 @@ func step(dt: float) -> void:
 	if water:
 		a -= vl * 1.1
 	a -= vl * patch_drag
+	# Gravity along the slope: climbs cost speed, descents add it.
+	if grounded > 0.0:
+		a -= 9.0 * clampf(track.grade_along(pos, s, lat, f) , -0.4, 0.4)
 	var nvl := vl + a * dt
 	if vl != 0.0 and signf(nvl) != signf(vl):
 		nvl = 0.0
@@ -359,7 +362,7 @@ func _sync_visual(delta: float) -> void:
 	rotation.y = h
 	if _contact:
 		# The printed contact shadow stays on the road / ground while the car flies.
-		_contact.position.y = track.height_at(s, lat) - y
+		_contact.position.y = track.surface_height(pos, s, lat) - y
 	if _body == null:
 		return
 	# Paper-toy body roll and pitch.

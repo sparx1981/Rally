@@ -21,7 +21,9 @@ var start_s := 14.0
 var finish_s := 0.0
 
 # Hazards (rally-game staples: crests, jumps, water splashes, hay-bale chicanes, loose surfaces).
-var heights := PackedFloat32Array()  # road height per sample (crests and jump ramps are built paper ramps)
+var heights := PackedFloat32Array()  # hazard ramps per sample (crests and jump ramps are built paper ramps)
+var elev := PackedFloat32Array()     # road altitude per sample (climbs, descents, rolling undulation)
+var terrain: Terrain                 # the landscape heightfield around the road
 var features: Array = []             # {type: jump|crest|splash|chicane, s0, s1, s (centre), side}
 var patches: Array = []              # {s0, s1, lat0, lat1, kind, grip, drag}
 var notes: Array = []                # pace notes: corners + features, sorted by s0
@@ -143,6 +145,8 @@ func _finalize() -> void:
 	finish_s = length - 30.0
 	heights.resize(n)
 	heights.fill(0.0)
+	elev.resize(n)
+	elev.fill(0.0)
 	_find_corners()
 	notes = corners.duplicate()
 
@@ -314,6 +318,86 @@ func next_corner(s: float, ahead: float) -> Dictionary:
 	return {}
 
 
+# --- altitude -------------------------------------------------------------------------------------
+
+## Road altitude: an overall climb (Monte-Carlo-style cols), rolling undulation at two wavelengths
+## (Welsh moors, Finnish crests) and a maximum grade, smoothed so the road stays drivable.
+func build_elevation(params: Dictionary, seed_v: int) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_v * 11 + 1
+	var n := pts.size()
+	var climb: float = float(params.get("climb", 0.0)) * length / 1000.0
+	var amp: float = params.get("amp", 5.0)
+	var wave: float = params.get("wave", 180.0)
+	var grade: float = params.get("grade", 0.09)
+	var ph1 := rng.randf() * TAU
+	var ph2 := rng.randf() * TAU
+	var ph3 := rng.randf() * TAU
+	var raw := PackedFloat32Array()
+	raw.resize(n)
+	for i in n:
+		var d := dist[i]
+		var t := d / maxf(length, 1.0)
+		var climb_t := t * t * (3.0 - 2.0 * t)   # gentle start and summit
+		raw[i] = climb * climb_t + amp * (sin(d / wave * TAU + ph1) * 0.65 + sin(d / (wave * 0.37) * TAU + ph2) * 0.35) \
+			+ amp * 0.5 * sin(d / (wave * 2.7) * TAU + ph3)
+	# Flat start and finish areas for the grid and the gantries.
+	for i in n:
+		var d := dist[i]
+		var w0 := smoothstep(start_s + 30.0, start_s + 80.0, d) * (1.0 - smoothstep(finish_s - 60.0, finish_s, d))
+		raw[i] = lerpf(raw[index_at(start_s + 30.0)] if d < start_s + 80.0 else raw[index_at(finish_s)], raw[i], w0)
+	# Limit grade, then smooth (two passes of a 9-tap box).
+	var lim := grade * STEP
+	for _pass in 2:
+		for i in range(1, n):
+			raw[i] = clampf(raw[i], raw[i - 1] - lim, raw[i - 1] + lim)
+		for i in range(n - 2, -1, -1):
+			raw[i] = clampf(raw[i], raw[i + 1] - lim, raw[i + 1] + lim)
+	for _pass in 2:
+		var sm := raw.duplicate()
+		for i in n:
+			var acc := 0.0
+			var cnt := 0
+			for j in range(maxi(i - 4, 0), mini(i + 5, n)):
+				acc += raw[j]
+				cnt += 1
+			sm[i] = acc / cnt
+		raw = sm
+	var base := raw[0]
+	for i in n:
+		elev[i] = raw[i] - base
+
+
+## Road surface (altitude + hazard ramps) at distance s.
+func road_h(s: float) -> float:
+	var f := clampf(s / STEP, 0.0, pts.size() - 1.001)
+	var i := int(f)
+	return lerpf(elev[i] + heights[i], elev[i + 1] + heights[i + 1], f - i)
+
+
+## Height of whatever the car stands on: the road inside its edges, the landscape outside.
+func surface_height(p: Vector2, s: float, lat: float) -> float:
+	if absf(lat) <= width * 0.5 + 0.1:
+		return road_h(s)
+	if terrain:
+		return terrain.height(p)
+	return road_h(s)
+
+
+## Uphill grade along the given direction at a point (+ = climbing).
+func grade_along(p: Vector2, s: float, lat: float, dir: Vector2) -> float:
+	return (surface_height(p + dir, s + dir.dot(tang[index_at(s)]), lat) - surface_height(p - dir, s - dir.dot(tang[index_at(s)]), lat)) * 0.5
+
+
+## Flatten the road altitude around s (water splashes sit in a level dip).
+func flatten_at(s: float, half: float, blend: float) -> void:
+	var c := elev[index_at(s)]
+	for i in range(index_at(s - half - blend), index_at(s + half + blend) + 1):
+		var d := absf(dist[i] - s)
+		var w := 1.0 - smoothstep(half, half + blend, d)
+		elev[i] = lerpf(elev[i], c, w)
+
+
 # --- hazards ---------------------------------------------------------------------------------------
 
 ## Adds crests, jumps, water splashes, chicanes and loose-surface patches on straight sections.
@@ -353,6 +437,9 @@ func build_hazards(seed_v: int, kind: String, twist: float) -> void:
 					features.append({"type": "chicane", "s": sc, "s0": sc - 2.0, "s1": sc + 18.0, "side": -1.0 if rng.randf() < 0.5 else 1.0})
 			break
 	features.sort_custom(func(a, b): return a["s"] < b["s"])
+	for f in features:
+		if f["type"] == "splash" or f["type"] == "chicane":
+			flatten_at(float(f["s"]), 12.0 if f["type"] == "splash" else 14.0, 20.0)
 	for f in features:
 		if f["type"] == "jump" or f["type"] == "crest":
 			for i in range(index_at(f["s0"]) - 1, index_at(f["s1"]) + 2):
@@ -431,6 +518,10 @@ func height_at(s: float, lat: float) -> float:
 	var f := clampf(s / STEP, 0.0, pts.size() - 1.001)
 	var i := int(f)
 	return lerpf(heights[i], heights[i + 1], f - i)
+
+
+func road_h_i(i: int) -> float:
+	return elev[i] + heights[i]
 
 
 func patch_at(s: float, lat: float) -> Dictionary:

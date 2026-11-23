@@ -37,7 +37,7 @@ var sim_dt := 0.0        # test mode: fixed simulated frame time
 var autopilot := false   # test/screenshot mode: the AI drives the player's car
 
 
-func setup(stage_i: int, mode_v: int, entrants: Array, attract_v := false) -> void:
+func setup(stage_i: int, mode_v: int, entrants: Array, attract_v := false, tod := -1) -> void:
 	stage_index = stage_i
 	mode = mode_v
 	attract = attract_v
@@ -45,7 +45,7 @@ func setup(stage_i: int, mode_v: int, entrants: Array, attract_v := false) -> vo
 	stage = Stage.new()
 	stage.name = "Stage"
 	add_child(stage)
-	stage.build(Catalog.stages()[stage_i])
+	stage.build(Catalog.stages()[stage_i], tod)
 	var tr := stage.track
 	var n := entrants.size()
 	var player_slot := n - 1 if mode != Game.Mode.TIME_TRIAL else 0
@@ -141,7 +141,7 @@ func _make_hud() -> void:
 		var best := Game.best_time(stage_index)
 		hud.set_sub("Best %s   Gold %s" % [Game.fmt_time(best), Game.fmt_time(medals[0])])
 	else:
-		hud.set_sub(Catalog.stages()[stage_index]["name"])
+		hud.set_sub(Catalog.stage_title(stage_index))
 
 
 func _exit_tree() -> void:
