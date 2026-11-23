@@ -8,6 +8,9 @@ config/description="A papercraft rally racing game."
 config/quit_on_go_back=false
 run/main_scene="res://scenes/main.tscn"
 config/features=PackedStringArray("4.4", "GL Compatibility")
+boot_splash/bg_color=Color(0.917, 0.862, 0.752, 1)
+boot_splash/image="res://ui/boot.png"
+boot_splash/fullsize=false
 config/icon="res://icon.svg"
 
 [autoload]

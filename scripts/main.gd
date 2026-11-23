@@ -45,7 +45,7 @@ func _ready() -> void:
 	get_tree().get_root().size_changed.connect(_apply_post)
 	_parse_args()
 	if _shot.is_empty():
-		await _start_attract(randi() % Catalog.stages().size())
+		await _start_attract(randi() % Catalog.stages().size(), true)
 		_title()
 	else:
 		_run_shot()
@@ -59,9 +59,12 @@ func _clear_race() -> void:
 		race = null
 
 
-func _start_attract(stage_i: int) -> void:
+func _start_attract(stage_i: int, startup := false) -> void:
 	_clear_race()
-	await _loading("")
+	if startup:
+		await _loading_stage(Catalog.stages()[stage_i], true)
+	else:
+		await _loading("")
 	race = Race.new()
 	world.add_child(race)
 	race.setup(stage_i, Game.Mode.RACE, [{"name": "Demo", "car": randi() % Catalog.cars().size(), "skill": 0.9, "player": false}], true)
@@ -94,7 +97,7 @@ const TIPS := [
 
 
 ## Static loading card: the stage's preview picture, its name and conditions, and a driving tip.
-func _loading_stage(sdef: Dictionary) -> void:
+func _loading_stage(sdef: Dictionary, startup := false) -> void:
 	_clear_menu()
 	var bg := ColorRect.new()
 	bg.color = Color("#eadcc0")
@@ -117,7 +120,7 @@ func _loading_stage(sdef: Dictionary) -> void:
 		frame.add_child(tr)
 		frame.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		v.add_child(frame)
-	var title := PaperTheme.tag("%s  -  %s" % [sdef["name"], sdef["variant_name"]], 34)
+	var title := PaperTheme.tag("Paper Rally" if startup else "%s  -  %s" % [sdef["name"], sdef["variant_name"]], 34)
 	title.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	v.add_child(title)
 	var wx := Catalog.weather(sdef["weather"])
@@ -126,6 +129,8 @@ func _loading_stage(sdef: Dictionary) -> void:
 		tod_i = int(sdef.get("tod", 0))
 	var info := Label.new()
 	info.text = "%.0f km   -   %s   -   %s   -   %s" % [float(sdef["length"]) / 1000.0, wx["label"], Catalog.TOD_NAMES[clampi(tod_i, 0, 2)], Game.mode_name()]
+	if startup:
+		info.text = "Preparing %s" % sdef["name"]
 	info.add_theme_font_size_override("font_size", 22)
 	info.add_theme_color_override("font_color", PaperTheme.INK)
 	info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -715,11 +720,25 @@ func _photo_mode() -> void:
 	_back = Callable()
 	if race._hud_layer:
 		race._hud_layer.visible = false
+	var cockpit_view := race.camera.view_index() == ChaseCamera.COCKPIT
+	race.player.cockpit(false)
+	var orbit := Camera3D.new()
+	orbit.fov = 50.0
+	orbit.far = race.camera.far
+	race.add_child(orbit)
+	orbit.global_transform = race.camera.global_transform
+	var driving_post := post.material
+	post.material = driving_post.duplicate()
 	var pm := PhotoMode.new()
-	pm.setup(race.camera, race.player, post.material)
+	pm.setup(orbit, race.player, post.material)
+	orbit.make_current()
 	menu.add_child(pm)
 	pm.closed.connect(func():
 		pm.queue_free()
+		race.player.cockpit(cockpit_view)
+		race.camera.make_current()
+		orbit.queue_free()
+		post.material = driving_post
 		_apply_post()
 		race.camera.snap()
 		_pause_menu())

@@ -769,15 +769,48 @@ func bridge_at(s: float, margin := 0.0) -> Dictionary:
 	return {}
 
 
-## Distance from p to the nearest river (INF when the stage has none).
-func river_dist(p: Vector2) -> float:
-	var best := INF
-	for b in bridges:
-		var a: Vector2 = b["a"]
-		var e: Vector2 = b["b"]
-		var q := Geometry2D.get_closest_point_to_segment(p, a, e)
-		best = minf(best, p.distance_to(q))
-	return best
+## All water sheets use local X across the banks and local Z downstream.
+class Watercourse:
+	var middle: Vector2
+	var flow: Vector2
+	var across: Vector2
+	var length: float
+	var width: float
+	var bounds: Rect2
+
+	func _init(a: Vector2, b: Vector2, half_width: float) -> void:
+		middle = (a + b) * 0.5
+		flow = a.direction_to(b)
+		across = Vector2(flow.y, -flow.x)
+		length = a.distance_to(b)
+		width = half_width
+		bounds = Rect2(a, Vector2.ZERO).expand(b).grow(width * 1.45 + 1.0)
+
+	func overlaps(p: Vector2, radius: float) -> bool:
+		if not bounds.grow(radius).has_point(p):
+			return false
+		var delta := p - middle
+		return absf(delta.dot(flow)) <= length * 0.5 + radius and absf(delta.dot(across)) <= width * 1.45 + radius
+
+var watercourses: Array[Watercourse] = []
+
+
+func index_watercourses() -> void:
+	watercourses.clear()
+	for br in bridges:
+		watercourses.append(Watercourse.new(br["a"], br["b"], 5.5))
+	for f in features:
+		if f["type"] == "splash":
+			var i := index_at(f["s"])
+			var offset := nrm[i] * (width * 0.5 + 16.0)
+			watercourses.append(Watercourse.new(pts[i] - offset, pts[i] + offset, 3.6))
+
+
+func overlaps_water(p: Vector2, radius: float) -> bool:
+	for stream in watercourses:
+		if stream.overlaps(p, radius):
+			return true
+	return false
 
 
 ## Parapets: added after the ordinary barriers so a bridge always has its own.

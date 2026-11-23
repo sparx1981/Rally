@@ -41,6 +41,7 @@ func setup(t: Track, sdef: Dictionary, mat: Material, density: float, ddist: flo
 	draw_distance = ddist
 	popups = use_popups
 	_build_library()
+	_measure_footprints()
 	_place(density)
 	rebuild_visuals(use_popups)
 
@@ -67,6 +68,14 @@ func _build_library() -> void:
 	lib["_chev_r"] = [{"mesh": Pieces.chevron(1.0), "r": 1.3, "solid": true, "h": 2.0, "size": 0.4}]
 
 
+func _measure_footprints() -> void:
+	for variants: Array in lib.values():
+		for piece: Dictionary in variants:
+			var bounds: AABB = piece["mesh"].get_aabb()
+			var reach := Vector2(maxf(absf(bounds.position.x), absf(bounds.end.x)), maxf(absf(bounds.position.z), absf(bounds.end.z)))
+			piece["shore_radius"] = maxf(piece["r"], reach.length())
+
+
 func _weighted_kinds() -> Array:
 	var out: Array = []
 	var kinds: Dictionary = stage_def["kinds"]
@@ -81,7 +90,7 @@ func _place(density: float) -> void:
 	rng.seed = int(stage_def["seed"]) * 13 + 5
 	var pool := _weighted_kinds()
 	var w := track.width
-	var big := ["house", "barn", "cabin", "mesa", "tent"]
+	var big := ["house", "barn", "cabin", "mesa", "tent", "net_shed", "wood_store", "vine_row"]
 	var spacing := 5.5 / clampf(density, 0.2, 1.0)
 	var s := 4.0
 	while s < track.length - 4.0:
@@ -118,6 +127,20 @@ func _place(density: float) -> void:
 			if rng.randf() < 0.6:
 				var sp := track.pts[ia] + track.nrm[ia] * (out_lat + signf(out_lat) * 4.0)
 				_try_add("spectators", sp, rng, track.dist[ia], false)
+	# Broken runs of scrub frame a bank while leaving the bridge sightline open.
+	for br in track.bridges:
+		var a: Vector2 = br["a"]
+		var end: Vector2 = br["b"]
+		var flow := a.direction_to(end)
+		var normal := Vector2(flow.y, -flow.x)
+		var shrub := "heather" if lib.has("heather") else "bush"
+		if not lib.has(shrub):
+			continue
+		var t := 3.0
+		while t < a.distance_to(end) - 2.0:
+			var pos := a + flow * t + normal * rng.randf_range(10.5, 13.5)
+			_try_add(shrub, pos, rng, br["s"], false)
+			t += rng.randf_range(3.5, 8.0) / clampf(density, 0.4, 1.0)
 	_place_hazard_props(rng)
 	_place_signage(rng)
 	if stage_def.has("forest"):
@@ -249,8 +272,6 @@ func _try_add(kind: String, p: Vector2, rng: RandomNumberGenerator, s: float, bi
 		return
 	if p.distance_to(track.point_at(track.length - Stage.PARC_BACK)) < 34.0:
 		return   # keep the parc fermé lot clear
-	if track.river_dist(p) < 12.0:
-		return   # nothing stands in the river
 	if track.terrain.is_sea(p) or track.terrain.height(p) < track.terrain.sea_y + 1.0:
 		return
 	var vars: Array = lib[kind]
@@ -284,6 +305,8 @@ func _add(kind: String, vi: int, p: Vector2, yaw: float, s: float, rng: RandomNu
 	if not kind in CLIFF_OK and not kind.begins_with("flag") and _near_drop(p):
 		return   # sponsor banners, billboards and the like stay off the clifftops
 	var r: float = lib[kind][vi]["r"]
+	if track.overlaps_water(p, lib[kind][vi]["shore_radius"]):
+		return
 	# Fold direction: away from the road.
 	var hit: Array = track.project(p, track.index_at(s))
 	var tg: Vector2 = hit[3]

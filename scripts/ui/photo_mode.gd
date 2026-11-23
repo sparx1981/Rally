@@ -10,7 +10,7 @@ var cam: Camera3D
 var target: Node3D
 var post: ShaderMaterial
 var _yaw := 0.0
-var _pitch := 0.6
+var _pitch := 0.27
 var _dist := 18.0
 var _blur := 1.0
 var _warm := 0.0
@@ -25,7 +25,9 @@ func setup(c: Camera3D, t: Node3D, p: ShaderMaterial) -> void:
 	cam = c
 	target = t
 	post = p
-	_yaw = c.global_rotation.y + PI
+	_yaw = t.global_rotation.y + PI * 0.80
+	_dist = (t as Car).half_len * 4.2 if t is Car else 9.0
+	_position_camera()
 
 
 func _ready() -> void:
@@ -152,6 +154,10 @@ func _process(delta: float) -> void:
 	var zoom := Input.get_joy_axis(pad, JOY_AXIS_TRIGGER_RIGHT) - Input.get_joy_axis(pad, JOY_AXIS_TRIGGER_LEFT)
 	if absf(zoom) > 0.1:
 		_dist = clampf(_dist * (1.0 - zoom * delta), 4.0, 90.0)
+	_position_camera()
+
+
+func _position_camera() -> void:
 	var c := target.global_position + Vector3.UP * 0.8
 	var off := Vector3(sin(_yaw) * cos(_pitch), sin(_pitch), cos(_yaw) * cos(_pitch)) * _dist
 	cam.global_position = c + off

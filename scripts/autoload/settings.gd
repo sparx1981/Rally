@@ -127,11 +127,15 @@ func load_settings() -> void:
 func _setup_input() -> void:
 	_action("accelerate", 0.1)
 	_key("accelerate", KEY_W); _key("accelerate", KEY_UP)
-	_joy_axis("accelerate", JOY_AXIS_TRIGGER_RIGHT, 1.0); _joy_btn("accelerate", JOY_BUTTON_A)
+	_action("throttle_trigger", 0.0)
+	_joy_axis("throttle_trigger", JOY_AXIS_TRIGGER_RIGHT, 1.0)
+	_joy_btn("accelerate", JOY_BUTTON_A)
 
 	_action("brake", 0.1)
 	_key("brake", KEY_S); _key("brake", KEY_DOWN)
-	_joy_axis("brake", JOY_AXIS_TRIGGER_LEFT, 1.0); _joy_btn("brake", JOY_BUTTON_X)
+	_action("brake_trigger", 0.0)
+	_joy_axis("brake_trigger", JOY_AXIS_TRIGGER_LEFT, 1.0)
+	_joy_btn("brake", JOY_BUTTON_X)
 
 	_action("steer_left", 0.12)
 	_key("steer_left", KEY_A); _key("steer_left", KEY_LEFT)

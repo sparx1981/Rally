@@ -146,7 +146,10 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 				var sc: Color = SPONSOR_COLS[(number + k) % SPONSOR_COLS.size()]
 				b.card(PaperKit.rrect(0.6, 0.18, 0.04, pz, y0 + low * 0.74), body_side * Transform3D(Basis(), Vector3(0, 0, 0.02)), PaperKit.CREAM, {"thick": 0.01, "edge": 0.015, "lip": 0.0})
 				b.card(PaperKit.rect(0.44, 0.06, pz, y0 + low * 0.74 + 0.06), body_side * Transform3D(Basis(), Vector3(0, 0, 0.03)), sc, {"thick": 0.005, "edge": 0.0, "lip": 0.0, "sides": false})
-			# Mirror.
+			# A recessed door pull, mirror stalk and a rear-facing mirror insert.
+			b.box(Vector3(xs * (W * 0.5 + 0.018), top_y - 0.08, dz - 0.22), Vector3(0.027, 0.035, 0.16), I, ink)
+			b.box(Vector3(xs * (cw * 0.5 + 0.056), top_y + 0.10, cab_f - 0.12), Vector3(0.14, 0.035, 0.046), I, ink)
+			b.box(Vector3(xs * (cw * 0.5 + 0.12), top_y + 0.12, cab_f - 0.160), Vector3(0.11, 0.057, 0.013), I, glass.lightened(0.3))
 			b.box(Vector3(xs * (cw * 0.5 + 0.12), top_y + 0.12, cab_f - 0.12), Vector3(0.14, 0.09, 0.07), I, body_c)
 		var front := Transform3D(Basis(), Vector3(0, 0, L * 0.5 + 0.012))
 		var back := Transform3D(Basis(Vector3.UP, PI), Vector3(0, 0, -L * 0.5 - 0.012))
@@ -217,6 +220,16 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 				ring.append(Vector2(-(az - arch_r) * xs, wr - 0.08))
 				ring.append(Vector2(-(az - arch_r - flare) * xs, wr - 0.08))
 				b.card(ring, side_t, body_c.darkened(0.08), {"thick": 0.1 if flare > 0.1 else 0.05, "edge": 0.02, "lip": 0.0})
+		# Riveted roof intake on the newer competition shells, open toward the nose.
+		if style in ["rally1", "rally2", "wrc", "impreza", "evo"]:
+			var vent_z := roof_front - roof_print * 0.28
+			var vent_y := top_y + cab_h + 0.065
+			b.prism(PackedVector2Array([Vector2(-0.17, -0.045), Vector2(0.15, -0.045), Vector2(0.15, 0.055), Vector2(-0.09, 0.035)]),
+				-0.19, 0.19, Transform3D(Basis(), Vector3(0, vent_y, vent_z)), body_c)
+			b.box(Vector3(0, vent_y, vent_z + 0.152), Vector3(0.31, 0.058, 0.008), I, ink)
+		var exhaust := Transform3D(Basis(Vector3.UP, PI), Vector3(-W * 0.29, y0 + 0.015, -L * 0.5 - 0.07))
+		b.card(PaperKit.circle(0.077, 0, 0, 10), exhaust, Color("#8e8980"), {"thick": 0.20, "lip": 0.0})
+		b.card(PaperKit.circle(0.052, 0, 0, 10), exhaust.translated_local(Vector3(0, 0, 0.102)), ink, {"thick": 0.004, "edge": 0.0, "lip": 0.0})
 		# Wings and spoilers.
 		_wing(b, P, L, W, top_y, cab_h, cab_r, acc, ink)
 		# Rally lamp pod.
@@ -399,12 +412,25 @@ static func _spare_wheel(b: PaperKit.Builder, mount: Transform3D, radius: float,
 
 static func _wheel_mesh(hub: Color, r: float, width: float) -> ArrayMesh:
 	var b := PaperKit.Builder.new(5)
-	var oct := PackedVector2Array()
-	for i in 8:
-		var a := TAU * (i + 0.5) / 8.0
-		oct.append(Vector2(cos(a), sin(a)) * r)
+	# Fold a rounded shoulder into each sidewall. The centre tread and the
+	# two shoulder facets shade separately as the wheel turns.
 	var side := Transform3D(Basis(Vector3.UP, PI * 0.5), Vector3.ZERO)
-	b.card(oct, side, Color("#2b2420"), {"thick": width, "edge": 0.03, "lip": 0.0})
+	var tyre := Color("#302d2b")
+	var rim := PaperKit.circle(r * 0.88, 0, 0, 16)
+	for sign_x: float in [-1.0, 1.0]:
+		b.card(rim, Transform3D(Basis(Vector3.UP, sign_x * PI * 0.5), Vector3(sign_x * width * 0.5, 0, 0)), tyre, {"thick": 0.006, "edge": 0.018, "lip": 0.0, "sides": false})
+	for i in 16:
+		var start := TAU * i / 16.0
+		var end := TAU * (i + 1) / 16.0
+		var u := Vector3(0, sin(start), cos(start))
+		var v := Vector3(0, sin(end), cos(end))
+		var radial := (u + v).normalized()
+		var shoulder := Vector3.RIGHT * width * 0.32
+		b.quad(u*r - shoulder, v*r - shoulder, v*r + shoulder, u*r + shoulder, radial, PaperKit.lin(tyre.lightened(0.04)))
+		for sign_x: float in [-1.0, 1.0]:
+			var face := Vector3.RIGHT * sign_x * width * 0.5
+			b.quad(u*r + shoulder*sign_x, v*r + shoulder*sign_x, v*r*0.88 + face, u*r*0.88 + face,
+				(radial + Vector3.RIGHT * sign_x).normalized(), PaperKit.lin(tyre))
 	var hub_p := PaperKit.circle(r * 0.5, 0, 0, 10)
 	b.card(hub_p, side * Transform3D(Basis(), Vector3(0, 0, width * 0.5 + 0.01)), hub, {"thick": 0.02, "edge": 0.025, "lip": 0.03})
 	b.card(PaperKit.circle(r * 0.18, 0, 0, 8), side * Transform3D(Basis(), Vector3(0, 0, width * 0.5 + 0.03)), PaperKit.CREAM, {"thick": 0.01, "edge": 0.0, "lip": 0.0})
@@ -505,9 +531,20 @@ static func build_cockpit(car: Dictionary, model: Dictionary, mat: Material) -> 
 		b.box(Vector3(0, top_y - 0.05, cab_f - 0.05), Vector3(W * 0.9, 0.18, 0.5), I, Color("#4e4640"), Color("#6a6058"))
 		b.box(Vector3(0, top_y + 0.03, dash_z + 0.05), Vector3(W * 0.86, 0.12, 0.36), I, Color("#4e4640"), Color("#5e564e"))
 		# Rear-view mirror, seats, centre console and a roll cage.
-		b.box(Vector3(0.0, roof_y - 0.045, cab_f - rake + 0.04), Vector3(0.12, 0.035, 0.015), I, Color("#7d8a94"))
+		var mirror := Vector3(0, roof_y - 0.063, cab_f - rake + 0.04)
+		b.box(mirror + Vector3.UP * 0.035, Vector3(0.022, 0.075, 0.026), I, dark)
+		b.box(mirror, Vector3(0.21, 0.056, 0.03), I, dark)
+		b.box(mirror + Vector3.FORWARD * 0.018, Vector3(0.19, 0.042, 0.007), I, Color("#8498a1"))
+		for vside: float in [-0.36, 0.36]:
+			var vent := Vector3(W * vside, top_y + 0.035, dash_z - 0.136)
+			b.box(vent, Vector3(0.115, 0.065, 0.018), I, dark.darkened(0.4))
+			for slat in 3:
+				b.box(vent + Vector3(0, (slat - 1) * 0.017, -0.011), Vector3(0.10, 0.006, 0.008), I, Color("#81796c"))
 		for sx in [head.x, -head.x]:
 			b.box(Vector3(sx, top_y - 0.1, head.z - 0.3), Vector3(0.5, 0.75, 0.12), I, Color("#2e2a28"))
+			for side_x: float in [-0.215, 0.215]:
+				b.box(Vector3(sx + side_x, top_y - 0.11, head.z - 0.20), Vector3(0.085, 0.51, 0.19), I, dark.darkened(0.25))
+			b.box(Vector3(sx, top_y + 0.25, head.z - 0.3), Vector3(0.30, 0.18, 0.14), I, dark)
 			b.box(Vector3(sx, floor_y + 0.2, head.z + 0.05), Vector3(0.5, 0.12, 0.6), I, Color("#2e2a28"))
 		b.box(Vector3(0, floor_y + 0.2, head.z + 0.25), Vector3(0.22, 0.3, 0.8), I, Color("#3a3430"))
 		var cage := Color("#b8b2a8")
@@ -641,8 +678,10 @@ static func build_cockpit(car: Dictionary, model: Dictionary, mat: Material) -> 
 		var seg := PaperKit.rect((a1 - a0).length() + 0.02, 0.035, 0, -0.0175)
 		wb.card(seg, face * Transform3D(Basis(Vector3.BACK, (a1 - a0).angle()), Vector3(mid.x, mid.y, 0)), dark, {"thick": 0.03, "edge": 0.0, "lip": 0.0})
 	wb.card(PaperKit.circle(0.04, 0, 0, 10), face, Color("#5a524c"), {"thick": 0.035, "edge": 0.0, "lip": 0.0})
-	wb.card(PaperKit.rect(0.36, 0.05, 0, -0.025), face * Transform3D(Basis(), Vector3(0, 0, -0.02)), dark, {"thick": 0.02, "edge": 0.0, "lip": 0.0})
-	wb.card(PaperKit.rect(0.04, 0.05, 0, 0.15), face * Transform3D(Basis(), Vector3(0, 0, -0.02)), car["accent"], {"thick": 0.02, "edge": 0.0, "lip": 0.0})
+	for angle: float in [-1.33, 1.33, PI]:
+		var spoke := face * Transform3D(Basis(Vector3.BACK, angle), Vector3(0, 0, 0.004))
+		wb.card(PackedVector2Array([Vector2(-0.026, 0.02), Vector2(0.026, 0.02), Vector2(0.014, 0.155), Vector2(-0.014, 0.155)]), spoke, Color("#686057"), {"thick": 0.012, "edge": 0.0, "lip": 0.0})
+	wb.box(Vector3(0, 0.168, 0.018), Vector3(0.029, 0.036, 0.024), face, car["accent"])
 	var wmi := MeshInstance3D.new()
 	wmi.mesh = wb.mesh()
 	wmi.material_override = mat

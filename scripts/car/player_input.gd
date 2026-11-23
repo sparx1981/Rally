@@ -6,10 +6,15 @@ var touch: TouchControls
 var _steer := 0.0
 
 
+# Ignore rest noise and allow a slightly short physical throw to reach full pedal.
+static func pedal(travel: float) -> float:
+	return clampf((travel - 0.08) / (0.90 - 0.08), 0.0, 1.0)
+
+
 func apply(car: Car, dt: float) -> void:
 	var s_axis := Input.get_axis("steer_left", "steer_right")
-	var thr := Input.get_action_strength("accelerate")
-	var brk := Input.get_action_strength("brake")
+	var thr := maxf(Input.get_action_strength("accelerate"), pedal(Input.get_action_raw_strength("throttle_trigger")))
+	var brk := maxf(Input.get_action_strength("brake"), pedal(Input.get_action_raw_strength("brake_trigger")))
 	var hb := Input.get_action_strength("handbrake")
 	if touch and touch.visible:
 		thr = maxf(thr, touch.throttle)

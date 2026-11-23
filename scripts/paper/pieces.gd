@@ -28,6 +28,8 @@ static func make(kind: String, pal: Dictionary, seed_v: int, variant := 0, regio
 		"cactus": return cactus(pal, rng)
 		"house": return house(pal, rng, false, variant, region)
 		"cabin": return house(pal, rng, true, variant, region)
+		"vine_row": return vine_row(pal, rng)
+		"wood_store", "net_shed": return open_shed(pal, rng, kind == "net_shed")
 		"barn": return barn(pal, rng, variant)
 		"bale": return bale(pal, rng)
 		"logs": return logs(pal, rng)
@@ -347,6 +349,46 @@ static func house(pal: Dictionary, rng: RandomNumberGenerator, cabin: bool, vari
 	var out := _out(b, maxf(w, d) * 0.55, true, h + rh, 0.7)
 	out["chimney"] = Vector3(w * 0.22, h + rh * 1.28, -d * 0.15)
 	return out
+
+
+## Trellised grapes, a repeated low silhouette along the vineyard roads.
+static func vine_row(pal: Dictionary, rng: RandomNumberGenerator) -> Dictionary:
+	var b := PaperKit.Builder.new(rng.randi())
+	var wood: Color = pal["wood"]
+	for x: float in [-2.4, 0.0, 2.4]:
+		b.box(Vector3(x, 0.78, 0), Vector3(0.10, 1.56, 0.12), Transform3D(), wood)
+	for y: float in [0.65, 1.13]:
+		b.box(Vector3(0, y, 0), Vector3(4.9, 0.045, 0.05), Transform3D(), wood.darkened(0.22))
+	for i in 5:
+		var plant := Transform3D(Basis(), Vector3(-1.96 + i * 0.98, 0.92 + rng.randf_range(-0.1, 0.1), 0))
+		b.cross(PaperKit.blob(0.67, 0, 0, 5, 0.20, rng.randi(), 11, 0.65), plant, Color("#888044").lerp(pal["accent"], rng.randf_range(0.05, 0.32)), {"thick": 0.05, "lip": 0.0})
+	return _out(b, 2.55, true, 1.6, 0.4)
+
+
+## Open-sided stores share a timber frame. Their contents identify the trade.
+static func open_shed(pal: Dictionary, rng: RandomNumberGenerator, nets: bool) -> Dictionary:
+	var b := PaperKit.Builder.new(rng.randi())
+	var wood: Color = pal["wood"]
+	var I := Transform3D()
+	for x: float in [-1.9, 1.9]:
+		for z: float in [-1.25, 1.25]:
+			var h := 2.5 - z * 0.21
+			b.box(Vector3(x, h * 0.5, z), Vector3(0.16, h, 0.16), I, wood)
+	b.slab(Vector3(-2.16, 2.16, 1.52), Vector3(2.16, 2.16, 1.52), Vector3(2.16, 2.86, -1.52), Vector3(-2.16, 2.86, -1.52), 0.11, pal["roof"])
+	if nets:
+		for k in 8:
+			for tilt: float in [-0.28, 0.28]:
+				var xf := Transform3D(Basis(Vector3.BACK, tilt), Vector3(-1.45 + k * 0.40, 1.23, -1.18))
+				b.box(Vector3.ZERO, Vector3(0.045, 1.78, 0.06), xf, PaperKit.CREAM)
+		for k in 3:
+			b.box(Vector3(-1.15 + k * 0.79, 0.25, 0.30), Vector3(0.68, 0.50, 0.72), I, wood.lightened(0.12))
+	else:
+		for row in 3:
+			for k in range(5 - row):
+				var x := (k - (4 - row) * 0.5) * 0.55
+				var xf := Transform3D(Basis(), Vector3(x, 0.28 + row * 0.46, -0.1))
+				b.card(PaperKit.circle(0.29, 0, 0, 8), xf, wood.lightened(0.25), {"thick": 2.0, "edge": 0.035, "lip": 0.0})
+	return _out(b, 2.35, true, 2.9, 0.65)
 
 
 static func barn(pal: Dictionary, rng: RandomNumberGenerator, variant: int) -> Dictionary:

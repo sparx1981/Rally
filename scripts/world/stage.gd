@@ -69,6 +69,7 @@ func build(stage_def: Dictionary, time_of_day := -1) -> void:
 	track.build_elevation(ep, int(def["seed"]))
 	track.build_hazards(int(def["seed"]), wx["kind"], float(def["twist"]))
 	track.build_bridges(int(def["seed"]), def.get("bridges", []))
+	track.index_watercourses()
 	track.build_barriers(int(def["seed"]), def.get("barriers", []))
 	track.terrain = Terrain.new()
 	track.terrain.build(track, float(ep.get("hills", 10.0)), int(def["seed"]) + 5)
@@ -345,10 +346,11 @@ func _make_hazards() -> void:
 		match f["type"]:
 			"splash":
 				var wl := track.width * 0.5 + 16.0
-				var stream := _water_sheet(wl * 2.0, 3.6, Color("#7895a4"), rng.randi())
+				var stream := _water_sheet(wl * 2.0, 3.6, Color("#7895a4"), i)
 				stream.position = Vector3(p.x, track.road_h_i(i) + ROAD_Y + 0.025, p.y)
 				stream.rotation.y = hd + PI * 0.5
 				add_child(stream)
+				_riverbanks(stream, wl * 2.0, 3.6, i, track.width * 0.5 + 1.0)
 			"jump", "crest":
 				# Posts under the ramp edges so it reads as a built paper ramp.
 				for s_off in range(int(f["s0"]) + 2, int(f["s1"]), 3):
@@ -498,23 +500,20 @@ func _stone_wall(b: PaperKit.Builder, p0: Vector2, p1: Vector2, y0: float, y1: f
 ## Local Z follows the current for both the geometry and the moving ink marks.
 func _water_sheet(length: float, half_width: float, water: Color, seed_v: int) -> MeshInstance3D:
 	var b := PaperKit.Builder.new(seed_v)
-	var rng := RandomNumberGenerator.new()
-	rng.seed = seed_v
 	var steps := maxi(2, ceili(length / 3.5))
 	var last := PackedVector3Array()
-	var bands := [water.lightened(0.13), water, water.darkened(0.13), water.darkened(0.04), water.lightened(0.10)]
+	var shallows := water.lerp(Color("#b2b39a"), 0.48)
+	var depths := [shallows, water.lightened(0.06), water.darkened(0.22), water.darkened(0.17), water, shallows]
 	for i in steps + 1:
 		var z := length * (float(i) / steps - 0.5)
-		var drift := sin(i * 0.53 + seed_v % 17) * 0.10
 		var section := PackedVector3Array()
-		for x: float in [-1.0, -0.72, -0.30 + drift, 0.18 + drift, 0.72, 1.0]:
-			section.append(Vector3((x + rng.randf_range(-0.05, 0.05)) * half_width, 0, z))
+		for x: float in [-1.0, -0.68, -0.24, 0.26, 0.72, 1.0]:
+			section.append(Vector3(_channel_x(z, x, half_width, seed_v), 0, z))
 		if i > 0:
-			for j in bands.size():
-				var c := PaperKit.lin(bands[j])
-				var fold := PaperKit.lin(Color(bands[j]).lightened(rng.randf_range(0.012, 0.045)))
-				b.tri3(last[j], last[j + 1], section[j], Vector3.UP, c, c, c)
-				b.tri3(last[j + 1], section[j + 1], section[j], Vector3.UP, fold, fold, fold)
+			for j in range(depths.size() - 1):
+				var c := PaperKit.lin(depths[j])
+				var d := PaperKit.lin(depths[j + 1])
+				b.quad4(last[j], last[j + 1], section[j + 1], section[j], Vector3.UP, c, d, d, c)
 		last = section
 	var mi := MeshInstance3D.new()
 	mi.mesh = b.mesh()
@@ -523,6 +522,61 @@ func _water_sheet(length: float, half_width: float, water: Color, seed_v: int) -
 	mi.material_override = mat
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	return mi
+
+
+# Keep mesh edges and bank toes on exactly the same sampled curve.
+func _channel_x(z: float, fraction: float, width: float, seed_v: int) -> float:
+	var phase := float(seed_v % 41)
+	var bend := sin(z * 0.093 + phase) * 0.18 + sin(z * 0.22 - phase) * 0.065
+	var breadth := 1.0 + 0.09 * sin(z * 0.16 + phase)
+	return width * (bend + fraction * breadth)
+
+
+func _riverbanks(sheet: MeshInstance3D, length: float, width: float, seed_v: int, ford_gap := 0.0) -> void:
+	var b := PaperKit.Builder.new(seed_v)
+	var steps := maxi(2, ceili(length / 3.5))
+	var mud := PaperKit.lin(Color("#685947"))
+	var gravel := PaperKit.lin(Color(def["pal"]["stone"]).darkened(0.14))
+	var grass := PaperKit.lin(def["pal"]["ground"])
+	var colors := [mud, gravel, grass]
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_v
+	for side: float in [-1.0, 1.0]:
+		var last := PackedVector3Array()
+		for i in steps + 1:
+			var z := length * (float(i) / steps - 0.5)
+			if absf(z) < ford_gap:
+				last.clear()
+				continue
+			var edge := _channel_x(z, side, width, seed_v)
+			var outer := Vector3(edge + side * 3.8, 0, z)
+			var world := sheet.transform * outer
+			outer.y = track.terrain.height(Vector2(world.x, world.z)) - sheet.position.y - 0.15
+			var ridge := 0.48 + 0.17 * sin(z * 0.43 + side)
+			# Short gravel bars build up on one bank, tapering back into the flow.
+			var shelf := pow(maxf(0, sin(z * 0.21 + seed_v % 9 + side * 2.0)), 3.0)
+			var toe := edge - side * (0.13 + shelf * 1.35)
+			var strand := edge + side * (0.48 - shelf * 1.1)
+			var row := PackedVector3Array([Vector3(toe, -0.055, z), Vector3(strand, 0.13, z),
+				Vector3(edge + side * 1.65, maxf(ridge, outer.y * 0.62), z), outer])
+			if not last.is_empty():
+				for j in 3:
+					var normal := (row[j] - last[j]).cross(last[j + 1] - last[j]).normalized()
+					if normal.y < 0:
+						normal = -normal
+					b.quad(last[j], row[j], row[j + 1], last[j + 1], normal, colors[j])
+			if shelf > 0.25 and i > 0 and i < steps:
+				for k in 3:
+					var stone_z := z + rng.randf_range(-0.65, 0.65)
+					var x := strand + side * rng.randf_range(-0.22, 0.35)
+					var pebble := Transform3D(Basis(Vector3.UP, rng.randf_range(-0.6, 0.6)), Vector3(x, 0.13, stone_z))
+					var radius := rng.randf_range(0.10, 0.23)
+					b.card(PaperKit.circle(radius, 0, 0, 6), pebble * Transform3D(Basis(Vector3.RIGHT, -PI * 0.5), Vector3.ZERO), Color(def["pal"]["stone"]).lightened(rng.randf_range(0.02, 0.18)), {"thick": radius * 0.55, "lip": 0.0, "edge": 0.012})
+			last = row
+	var banks := MeshInstance3D.new()
+	banks.mesh = b.mesh()
+	banks.material_override = paper_mat
+	sheet.add_child(banks)
 
 
 ## Bridges and their rivers.
@@ -546,6 +600,7 @@ func _make_bridges() -> void:
 		river.position = Vector3(mid.x, wy, mid.y)
 		river.rotation.y = atan2(along.x, along.y)
 		add_child(river)
+		_riverbanks(river, along.length(), 5.5, int(sc))
 		# Local frame at the centre of the deck: x along the road, z across it, y up.
 		var ybase := track.road_h_i(ci) - 0.85 if br["kind"] == "stone" else track.road_h_i(ci)
 		var org := Vector3(c2.x, 0.0, c2.y)

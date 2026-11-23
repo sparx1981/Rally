@@ -329,9 +329,11 @@ func cockpit(show: bool) -> void:
 	if not _cockpit.is_empty():
 		_cockpit["root"].visible = show
 	var body_mesh: Node3D = _body.get_child(0)
-	body_mesh.visible = not show
+	# The open buggy's cage, exposed wheels and nose are visible from its seat.
+	var exterior_visible: bool = not show or stats["style"] == "buggy"
+	body_mesh.visible = exterior_visible
 	for wnode in _wheels:
-		(wnode as Node3D).visible = not show
+		(wnode as Node3D).visible = exterior_visible
 
 
 ## Where the driver's eyes are (for the cockpit camera).
