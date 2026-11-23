@@ -297,7 +297,9 @@ func _check_finish() -> void:
 ## car-vs-car uses the separating-axis test, and impulses act at the contact point so a clipped
 ## corner also nudges the car's yaw.
 const INERTIA := 1.6
-const RESTITUTION := 0.25
+const RESTITUTION := 0.15
+const MAX_IMPULSE := 9.0        # m/s of speed change per contact
+const MAX_YAW_KICK := 1.2       # rad/s of spin added per contact
 
 
 func _corner_support(c: Car, n: Vector2) -> Vector2:
@@ -325,15 +327,20 @@ func _apply_contact(c: Car, n: Vector2, cp: Vector2, other_vel: Vector2, other: 
 	var denom := 1.0 + ca * ca / INERTIA
 	if other:
 		denom += 1.0 + cb * cb / INERTIA
-	var j := -(1.0 + RESTITUTION) * vn / denom
+	var j := minf(-(1.0 + RESTITUTION) * vn / denom, MAX_IMPULSE)
+	var pre_a := c.vel.length()
+	var pre_b := other.vel.length() if other else 0.0
 	c.vel += n * j
-	c.yaw_rate = clampf(c.yaw_rate + j * ca / INERTIA * 0.6, -4.0, 4.0)
+	c.yaw_rate = clampf(c.yaw_rate + clampf(j * ca / INERTIA * 0.6, -MAX_YAW_KICK, MAX_YAW_KICK), -2.5, 2.5)
 	# Tangential scrub at the contact.
 	var t := Vector2(-n.y, n.x)
 	c.vel -= t * (c.vel - vb).dot(t) * 0.12
+	# A hit never leaves a car faster than it was going (or than the other car was going).
+	c.vel = c.vel.limit_length(maxf(pre_a, pre_b * 0.6))
 	if other:
 		other.vel -= n * j
-		other.yaw_rate = clampf(other.yaw_rate - j * cb / INERTIA * 0.6, -4.0, 4.0)
+		other.yaw_rate = clampf(other.yaw_rate - clampf(j * cb / INERTIA * 0.6, -MAX_YAW_KICK, MAX_YAW_KICK), -2.5, 2.5)
+		other.vel = other.vel.limit_length(maxf(pre_b, pre_a * 0.6))
 	return -vn
 
 
@@ -486,7 +493,7 @@ func _debris(p: Vector3, strength: float) -> void:
 
 func _on_landed(c: Car, v: float) -> void:
 	if sim_dt > 0.0 and c == player:
-		print("TEST landed v=%.1f air=%.2fs s=%.0f" % [v, c.air_time, c.s])
+		print("TEST landed v=%.1f air=%.2fs speed=%.1f flight~%.0fm" % [v, c.air_time, c.speed(), c.speed() * c.air_time])
 	if c != player or attract:
 		return
 	var k := clampf(v / 12.0, 0.2, 1.0)

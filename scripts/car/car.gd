@@ -16,6 +16,7 @@ const BRAKE := 28.0
 const RADIUS := 1.55
 const GEARS := [0.0, 8.0, 14.0, 20.0, 26.0, 31.0]
 const GRAVITY := 22.0
+const MAX_LAUNCH_VY := 4.2
 
 var stats: Dictionary
 var driver_name := ""
@@ -325,7 +326,9 @@ func step(dt: float) -> void:
 	_has_prev_gh = true
 	if airborne:
 		air_time += dt
-		vy -= GRAVITY * dt
+		# Air drag on the horizontal speed, and stronger gravity on long flights.
+		vel *= 1.0 - 0.12 * dt
+		vy -= GRAVITY * dt * (1.0 if air_time < 0.8 else 1.8)
 		y += vy * dt
 		if y <= gh:
 			var hit_v := ground_vy - vy
@@ -340,6 +343,8 @@ func step(dt: float) -> void:
 		if gh < predicted - 0.02 and vy > ground_vy + 0.5:
 			airborne = true
 			air_time = 0.0
+			# Cap the launch so ramps and crests give a short, controlled hop, never a fling.
+			vy = minf(vy, MAX_LAUNCH_VY)
 			vy -= GRAVITY * dt
 			y += vy * dt
 		else:

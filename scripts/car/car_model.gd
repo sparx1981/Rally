@@ -330,26 +330,82 @@ static func build_cockpit(car: Dictionary, model: Dictionary, mat: Material) -> 
 	var b := PaperKit.Builder.new(21)
 	var I := Transform3D()
 	var dash_z := head.z + 0.55
+	var gb := PaperKit.Builder.new(24)   # glass panes (drawn with a tinted see-through material)
 	if style != "buggy":
-		# Bonnet seen through the screen, dashboard, pillars and roof edge.
-		var front_z := cab_z + cab_l * 0.5
-		b.box(Vector3(0, top_y - 0.05, (front_z + L * 0.5) * 0.5), Vector3(W, 0.1, L * 0.5 - front_z), I, body_c, body_c.lightened(0.05))
-		b.box(Vector3(0, top_y - 0.06, dash_z + 0.14), Vector3(W * 0.82, 0.14, 0.34), I, Color("#4e4640"), Color("#6a6058"))
-		var roof_y := top_y + cab_h
+		# A closed cabin shell that follows the car's own cabin profile: the only openings are glass.
+		var cab_r: float = P["cab_r"]
+		var cab_f: float = P["cab_f"]
+		var rake: float = P["rake"]
+		var back: float = P["back"]
+		var cw: float = W * 0.84
+		var hx: float = cw * 0.5 - 0.015
+		var roof_y: float = top_y + cab_h
+		var floor_y: float = top_y - 0.5
+		var trim := Color(body_c).darkened(0.35)
+		var lining := Color("#8f877c")
+		var Lt := func(c: Color) -> Color: return PaperKit.lin(c, 1.0)
+		var outline := [Vector2(cab_r, top_y), Vector2(cab_f, top_y), Vector2(cab_f - rake, roof_y), Vector2(cab_r + back, roof_y)]
+		var cc := Vector2((cab_r + cab_f) * 0.5, top_y + cab_h * 0.5)
+		var inset: Array = []
+		for q in outline:
+			var d: Vector2 = q - cc
+			inset.append(cc + Vector2(d.x * 0.86, d.y * 0.7) + Vector2(0, 0.02))
 		for xs in [-1.0, 1.0]:
-			var a := Vector3(xs * W * 0.41, top_y + 0.12, front_z - 0.05)
-			var c := Vector3(xs * W * 0.38, roof_y, front_z - float(P["rake"]))
-			var mid := (a + c) * 0.5
-			b.box(Vector3.ZERO, Vector3(0.09, 0.09, (c - a).length()), Transform3D(Basis.looking_at((c - a).normalized(), Vector3.UP), mid), body_c.darkened(0.2))
-		b.box(Vector3(0, roof_y + 0.02, front_z - float(P["rake"]) - 0.05), Vector3(W * 0.8, 0.08, 0.14), I, body_c.darkened(0.2))
-		b.box(Vector3(0.0, roof_y - 0.08, front_z - float(P["rake"]) - 0.08), Vector3(0.28, 0.06, 0.04), I, dark)
-		# Door panels and window frames down both sides.
+			var x: float = xs * hx
+			var inward := Vector3(-xs, 0, 0)
+			# Window frame: a ring of panels between the cabin outline and the window opening.
+			for i in 4:
+				var j := (i + 1) % 4
+				var o0: Vector2 = outline[i]
+				var o1: Vector2 = outline[j]
+				var i0: Vector2 = inset[i]
+				var i1: Vector2 = inset[j]
+				b.quad(Vector3(x, o0.y, o0.x), Vector3(x, o1.y, o1.x), Vector3(x, i1.y, i1.x), Vector3(x, i0.y, i0.x), inward, Lt.call(trim))
+			# Side glass.
+			var g0: Vector2 = inset[0]
+			var g1: Vector2 = inset[1]
+			var g2: Vector2 = inset[2]
+			var g3: Vector2 = inset[3]
+			gb.quad(Vector3(x, g0.y, g0.x), Vector3(x, g1.y, g1.x), Vector3(x, g2.y, g2.x), Vector3(x, g3.y, g3.x), inward, Color.WHITE)
+			# B-pillar on longer cabins.
+			if cab_f - cab_r > 1.55:
+				b.box(Vector3(x * 0.99, top_y + cab_h * 0.5, cc.x - 0.05), Vector3(0.05, cab_h, 0.12), I, trim)
+			# Door panel below the window line, down to the floor.
+			var dz0 := cab_r - 0.1
+			var dz1 := cab_f + 0.35
+			var dx: float = xs * (W * 0.47)
+			b.quad(Vector3(dx, floor_y, dz0), Vector3(dx, floor_y, dz1), Vector3(dx, top_y + 0.02, dz1), Vector3(dx, top_y + 0.02, dz0), inward, Lt.call(trim.darkened(0.15)))
+			# Sill between door top and window frame.
+			b.quad(Vector3(dx, top_y + 0.02, dz0), Vector3(dx, top_y + 0.02, dz1), Vector3(x, top_y, dz1), Vector3(x, top_y, dz0), Vector3(-xs, 1, 0).normalized(), Lt.call(trim))
+		# Headliner.
+		var r0: Vector2 = outline[3]
+		var r1: Vector2 = outline[2]
+		b.quad(Vector3(-hx, roof_y, r0.x), Vector3(hx, roof_y, r0.x), Vector3(hx, roof_y, r1.x), Vector3(-hx, roof_y, r1.x), Vector3.DOWN, Lt.call(lining))
+		# Windscreen and rear window glass.
+		gb.quad(Vector3(-hx, top_y, cab_f), Vector3(hx, top_y, cab_f), Vector3(hx, roof_y, cab_f - rake), Vector3(-hx, roof_y, cab_f - rake), Vector3(0, -rake, -cab_h).normalized(), Color.WHITE)
+		gb.quad(Vector3(-hx, top_y + 0.12, cab_r + back * 0.12), Vector3(hx, top_y + 0.12, cab_r + back * 0.12), Vector3(hx, roof_y, cab_r + back), Vector3(-hx, roof_y, cab_r + back), Vector3(0, -back, cab_h).normalized(), Color.WHITE)
+		# Rear bulkhead below the rear window, floor, and the footwell under the dash.
+		b.quad(Vector3(-W * 0.47, floor_y, cab_r - 0.1), Vector3(W * 0.47, floor_y, cab_r - 0.1), Vector3(W * 0.47, top_y + 0.12, cab_r - 0.1), Vector3(-W * 0.47, top_y + 0.12, cab_r - 0.1), Vector3.BACK, Lt.call(trim.darkened(0.2)))
+		b.quad(Vector3(-hx, top_y + 0.12, cab_r - 0.1), Vector3(hx, top_y + 0.12, cab_r - 0.1), Vector3(hx, top_y + 0.12, cab_r + back * 0.12), Vector3(-hx, top_y + 0.12, cab_r + back * 0.12), Vector3.UP, Lt.call(dark))
+		b.quad(Vector3(-W * 0.47, floor_y, cab_r - 0.1), Vector3(W * 0.47, floor_y, cab_r - 0.1), Vector3(W * 0.47, floor_y, cab_f + 0.35), Vector3(-W * 0.47, floor_y, cab_f + 0.35), Vector3.UP, Lt.call(Color("#3a3430")))
+		b.quad(Vector3(-W * 0.47, floor_y, cab_f + 0.35), Vector3(W * 0.47, floor_y, cab_f + 0.35), Vector3(W * 0.47, top_y + 0.02, cab_f + 0.35), Vector3(-W * 0.47, top_y + 0.02, cab_f + 0.35), Vector3.FORWARD, Lt.call(dark))
+		# Bonnet seen through the screen, then the dashboard and cowl.
+		b.box(Vector3(0, top_y - 0.05, (cab_f + L * 0.5) * 0.5), Vector3(W, 0.1, L * 0.5 - cab_f), I, body_c, body_c.lightened(0.05))
+		b.box(Vector3(0, top_y - 0.05, cab_f - 0.05), Vector3(W * 0.9, 0.18, 0.5), I, Color("#4e4640"), Color("#6a6058"))
+		b.box(Vector3(0, top_y + 0.03, dash_z + 0.05), Vector3(W * 0.86, 0.12, 0.36), I, Color("#4e4640"), Color("#5e564e"))
+		# Rear-view mirror, seats, centre console and a roll cage.
+		b.box(Vector3(0.0, roof_y - 0.045, cab_f - rake + 0.04), Vector3(0.12, 0.035, 0.015), I, Color("#7d8a94"))
+		for sx in [head.x, -head.x]:
+			b.box(Vector3(sx, top_y - 0.1, head.z - 0.3), Vector3(0.5, 0.75, 0.12), I, Color("#2e2a28"))
+			b.box(Vector3(sx, floor_y + 0.2, head.z + 0.05), Vector3(0.5, 0.12, 0.6), I, Color("#2e2a28"))
+		b.box(Vector3(0, floor_y + 0.2, head.z + 0.25), Vector3(0.22, 0.3, 0.8), I, Color("#3a3430"))
+		var cage := Color("#b8b2a8")
 		for xs in [-1.0, 1.0]:
-			b.box(Vector3(xs * W * 0.46, top_y - 0.12, (front_z + head.z - 0.8) * 0.5), Vector3(0.08, 0.36, front_z - head.z + 0.8), I, body_c.darkened(0.25), body_c.darkened(0.15))
-			b.box(Vector3(xs * W * 0.44, top_y + cab_h - 0.02, head.z - 0.1), Vector3(0.07, 0.07, 1.0), I, body_c.darkened(0.2))
-			b.box(Vector3(xs * W * 0.43, top_y + cab_h * 0.5, head.z - 0.55), Vector3(0.08, cab_h, 0.12), I, body_c.darkened(0.2))
-		# Roll-cage bar across the door line.
-		b.box(Vector3(0, top_y + 0.04, head.z - 0.1), Vector3(W * 0.8, 0.06, 0.06), I, Color("#b8b2a8"))
+			var a2 := Vector3(xs * (hx - 0.08), top_y + 0.05, cab_f - 0.05)
+			var c2 := Vector3(xs * (hx - 0.08), roof_y - 0.06, cab_f - rake - 0.05)
+			b.box(Vector3.ZERO, Vector3(0.045, 0.045, (c2 - a2).length()), Transform3D(Basis.looking_at((c2 - a2).normalized(), Vector3.UP), (a2 + c2) * 0.5), cage)
+			b.box(Vector3(xs * (hx - 0.08), (top_y + roof_y) * 0.5, head.z - 0.45), Vector3(0.045, cab_h, 0.045), I, cage)
+		b.box(Vector3(0, roof_y - 0.06, head.z - 0.45), Vector3(hx * 2.0 - 0.16, 0.045, 0.045), I, cage)
 	else:
 		b.box(Vector3(0, float(P["ride"]) + 0.55, dash_z), Vector3(W * 0.5, 0.12, 0.25), I, dark)
 	# Rev dial on the dash.
@@ -361,6 +417,18 @@ static func build_cockpit(car: Dictionary, model: Dictionary, mat: Material) -> 
 	mi.material_override = mat
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	root.add_child(mi)
+	if gb.v.size() > 0:
+		var gm := StandardMaterial3D.new()
+		gm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		gm.albedo_color = Color(0.62, 0.74, 0.82, 0.16)
+		gm.roughness = 1.0
+		gm.metallic_specular = 0.0
+		gm.cull_mode = BaseMaterial3D.CULL_DISABLED
+		var gmi := MeshInstance3D.new()
+		gmi.mesh = gb.mesh()
+		gmi.material_override = gm
+		gmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		root.add_child(gmi)
 	# Steering wheel (its own node so it turns).
 	var wheel := Node3D.new()
 	wheel.position = Vector3(head.x, head.y - 0.36, head.z + 0.5)

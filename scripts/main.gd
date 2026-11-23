@@ -1004,7 +1004,9 @@ func _run_bench() -> void:
 	_shot["autopilot"] = true
 	Engine.max_fps = 0
 	var list: Array = range(Catalog.stages().size())
-	if OS.get_cmdline_user_args().has("--quick"):
+	if OS.get_cmdline_user_args().has("--mini"):
+		list = [0, 13, 24]
+	elif OS.get_cmdline_user_args().has("--quick"):
 		list = range(0, Catalog.stages().size(), 4)
 		list.append(35)
 	for si in list:
@@ -1047,6 +1049,48 @@ func _run_shot() -> void:
 	var stage_i: int = _shot.get("stage", 0)
 	Game.stage_index = stage_i
 	_shot["autopilot"] = true
+	if view == "crash":
+		Game.mode = Game.Mode.RACE
+		await _start_race()
+		var a: Car = race.cars[0]
+		var b: Car = race.cars[1]
+		for c in race.cars:
+			c.frozen = false
+			c.place_at(200.0 + race.cars.find(c) * 40.0, 3.5)
+		race.state = Race.State.RACING
+		race.drivers.clear()
+		a.place_at(300.0, 0.0)
+		b.place_at(312.0, 0.6)
+		a.vel = a.fwd() * 30.0
+		var max_b := 0.0
+		var max_a_after := 0.0
+		for k in 90:
+			a.throttle = 0.0
+			await get_tree().process_frame
+			max_b = maxf(max_b, b.speed())
+			if k > 20:
+				max_a_after = maxf(max_a_after, a.speed())
+		print("CRASH rear-end: hitter 30.0 -> %.1f, struck car max %.1f, struck car lat %.1f yaw %.2f" % [max_a_after, max_b, b.lat, b.yaw_rate])
+		# Into a solid prop at speed.
+		var tr := race.stage.track
+		var sol: Array = []
+		for o in race.stage.scenery.props_near(tr.point_at(600.0)):
+			if float(o[2]) > 0.5 and not o[4]:
+				sol = o
+				break
+		if not sol.is_empty():
+			var op := Vector2(sol[0], sol[1])
+			a.pos = op - Vector2(0, 8)
+			a.h = 0.0
+			a.vel = Vector2(0, 30)
+			var mx := 0.0
+			for k in 60:
+				await get_tree().process_frame
+				if k > 10:
+					mx = maxf(mx, a.speed())
+			print("CRASH tree at 30 m/s: speed afterwards max %.1f, distance from tree %.1f" % [mx, a.pos.distance_to(op)])
+		get_tree().quit()
+		return
 	if view == "results":
 		await _start_race()
 		for k in 60:

@@ -532,9 +532,9 @@ func build_hazards(seed_v: int, kind: String, twist: float) -> void:
 			used.append(sc)
 			match t:
 				"jump":
-					features.append({"type": "jump", "s": sc, "s0": sc - 12.0, "s1": sc + 3.0, "h": rng.randf_range(1.5, 1.9)})
+					features.append({"type": "jump", "s": sc, "s0": sc - 12.0, "s1": sc + 3.0, "h": rng.randf_range(1.2, 1.5)})
 				"crest":
-					features.append({"type": "crest", "s": sc, "s0": sc - 14.0, "s1": sc + 14.0, "h": rng.randf_range(0.9, 1.2)})
+					features.append({"type": "crest", "s": sc, "s0": sc - 14.0, "s1": sc + 14.0, "h": rng.randf_range(0.8, 1.05)})
 				"splash":
 					features.append({"type": "splash", "s": sc, "s0": sc - 3.5, "s1": sc + 3.5})
 				"chicane":
