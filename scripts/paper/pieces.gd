@@ -5,6 +5,9 @@ extends RefCounted
 ## {mesh, r (collision radius), solid, h (height), size (flap size 0..1)}.
 
 const SKIN := [Color("#e8c4a0"), Color("#c99470"), Color("#8f5f42"), Color("#f0d2b4")]
+## Fictional sponsors (no real brands).
+const SPONSORS := [["FOLDLINE OIL", "#c8553d", "#efe3c8"], ["CARDSTOCK TYRES", "#2b2b2b", "#e8b04a"], ["CREASE COLA", "#3f6fa8", "#efe3c8"],
+	["PULPWORKS", "#2f8a8a", "#efe3c8"], ["SCISSOR SPEED", "#e8b04a", "#2b2b2b"], ["ORIGAMI AIR", "#efe3c8", "#c8553d"]]
 const CLOTHES := [Color("#c8553d"), Color("#3f6fa8"), Color("#e8b04a"), Color("#2f8a8a"), Color("#7a3b3b"), Color("#e2763a"), Color("#5f7f4a")]
 
 
@@ -34,6 +37,11 @@ static func make(kind: String, pal: Dictionary, seed_v: int) -> Dictionary:
 		"snowbank": return snowbank(pal, rng)
 		"spectators": return spectators(pal, rng)
 		"post": return marker_post(pal, rng)
+		"banner": return banner(rng)
+		"board": return billboard(rng)
+		"warn": return warn_sign(rng)
+		"km": return km_board(rng)
+		"flag": return feather_flag(rng)
 		"tape": return tape(pal, rng)
 	return bush(pal, rng)
 
@@ -471,6 +479,92 @@ static func spectators(pal: Dictionary, rng: RandomNumberGenerator) -> Dictionar
 
 
 # --- functional track furniture ------------------------------------------------------------------
+
+## A label printed on a card: {text ("{TEXT}" = per-placement text), pos, yaw, size, color}.
+static func _label(text: String, pos: Vector3, yaw: float, size: int, col: Color) -> Dictionary:
+	return {"text": text, "pos": pos, "yaw": yaw, "size": size, "color": col}
+
+
+## Sponsor A-frame banner leaning back so its print faces the sky and the camera.
+static func banner(rng: RandomNumberGenerator) -> Dictionary:
+	var b := PaperKit.Builder.new(rng.randi())
+	var sp: Array = SPONSORS[rng.randi() % SPONSORS.size()]
+	var bg := Color(sp[1])
+	var fg := Color(sp[2])
+	var w := 5.6
+	var pitch := -0.95
+	var T := Transform3D(Basis(Vector3.RIGHT, pitch), Vector3(0, 0.12, 0))
+	b.card(PaperKit.rect(w, 1.3, 0, 0), T, bg, {"thick": 0.05, "edge": 0.05, "lip": 0.05})
+	b.card(PaperKit.rect(w - 0.3, 0.07, 0, 0.18), T * Transform3D(Basis(), Vector3(0, 0, 0.03)), fg, {"thick": 0.005, "edge": 0.0, "lip": 0.0, "sides": false})
+	for x in [-w * 0.42, w * 0.42]:
+		var top := T * Vector3(x, 1.2, 0)
+		b.slab(Vector3(x - 0.08, 0.0, top.z - 0.9), Vector3(x + 0.08, 0.0, top.z - 0.9), Vector3(x + 0.08, top.y, top.z - 0.05), Vector3(x - 0.08, top.y, top.z - 0.05), 0.04, Color("#6a4a32"))
+	var out := _out(b, 0.5, false, 1.2, 0.4)
+	out["labels"] = [{"text": sp[0], "pos": T * Vector3(0, 0.72, 0.035), "yaw": 0.0, "pitch": pitch, "size": 60, "color": fg}]
+	out["breakable"] = true
+	return out
+
+
+## A big roadside billboard, tilted back on struts.
+static func billboard(rng: RandomNumberGenerator) -> Dictionary:
+	var b := PaperKit.Builder.new(rng.randi())
+	var sp: Array = SPONSORS[rng.randi() % SPONSORS.size()]
+	var bg := Color(sp[1])
+	var fg := Color(sp[2])
+	var pitch := -0.7
+	var T := Transform3D(Basis(Vector3.RIGHT, pitch), Vector3(0, 0.3, 0))
+	b.card(PaperKit.rrect(4.4, 2.2, 0.08, 0, 0), T, bg, {"thick": 0.06, "edge": 0.05, "lip": 0.06})
+	b.card(PaperKit.rrect(4.0, 0.12, 0.04, 0, 0.55), T * Transform3D(Basis(), Vector3(0, 0, 0.035)), fg, {"thick": 0.005, "edge": 0.0, "lip": 0.0, "sides": false})
+	for x in [-1.6, 1.6]:
+		var top := T * Vector3(x, 2.1, 0)
+		b.box(Vector3(x, top.y * 0.5, top.z - 0.1), Vector3(0.16, top.y, 0.16), Transform3D(), Color("#6a4a32"))
+	var out := _out(b, 1.0, true, 2.0, 0.55)
+	out["labels"] = [{"text": sp[0], "pos": T * Vector3(0, 1.4, 0.04), "yaw": 0.0, "pitch": pitch, "size": 76, "color": fg},
+		{"text": "RALLY PARTNER", "pos": T * Vector3(0, 0.85, 0.04), "yaw": 0.0, "pitch": pitch, "size": 36, "color": fg}]
+	out["breakable"] = true
+	return out
+
+
+## Warning triangle on a post with a word plate underneath ("{TEXT}": JUMP / WATER / CHICANE ...).
+static func warn_sign(rng: RandomNumberGenerator) -> Dictionary:
+	var b := PaperKit.Builder.new(rng.randi())
+	b.card(PaperKit.rect(0.14, 1.9), Transform3D(), Color("#5a5a5a"), {"thick": 0.05, "edge": 0.0, "lip": 0.0})
+	var tri := PackedVector2Array([Vector2(-0.6, 1.5), Vector2(0.6, 1.5), Vector2(0, 2.5)])
+	b.card(tri, Transform3D(), Color("#c8553d"), {"thick": 0.05, "edge": 0.04, "lip": 0.04})
+	b.card(PaperKit.scaled(tri, 0.68, Vector2(0, 1.82)), Transform3D(Basis(), Vector3(0, 0, 0.035)), PaperKit.CREAM, {"thick": 0.01, "edge": 0.0, "lip": 0.0, "sides": false})
+	b.card(PaperKit.rect(0.08, 0.3, 0, 1.68), Transform3D(Basis(), Vector3(0, 0, 0.045)), Color("#2b2b2b"), {"thick": 0.005, "edge": 0.0, "lip": 0.0, "sides": false})
+	b.card(PaperKit.circle(0.05, 0, 1.6, 6), Transform3D(Basis(), Vector3(0, 0, 0.045)), Color("#2b2b2b"), {"thick": 0.005, "edge": 0.0, "lip": 0.0, "sides": false})
+	b.card(PaperKit.rrect(1.3, 0.42, 0.05, 0, 0.95), Transform3D(), PaperKit.CREAM, {"thick": 0.04, "edge": 0.03, "lip": 0.0})
+	var out := _out(b, 0.3, true, 2.5, 0.35)
+	out["labels"] = [_label("{TEXT}", Vector3(0, 1.16, 0.03), 0.0, 40, Color("#2b2b2b"))]
+	out["breakable"] = true
+	return out
+
+
+## Distance board ("{TEXT}": 1 KM, 2 KM ...).
+static func km_board(rng: RandomNumberGenerator) -> Dictionary:
+	var b := PaperKit.Builder.new(rng.randi())
+	b.card(PaperKit.rect(0.12, 1.2), Transform3D(), Color("#5a5a5a"), {"thick": 0.05, "edge": 0.0, "lip": 0.0})
+	b.card(PaperKit.rrect(1.1, 0.7, 0.06, 0, 1.0), Transform3D(), Color("#f2f2ee"), {"thick": 0.05, "edge": 0.04, "lip": 0.0})
+	b.card(PaperKit.rrect(1.0, 0.08, 0.02, 0, 1.08), Transform3D(Basis(), Vector3(0, 0, 0.03)), Color("#3f6fa8"), {"thick": 0.005, "edge": 0.0, "lip": 0.0, "sides": false})
+	var out := _out(b, 0.3, true, 1.7, 0.3)
+	out["labels"] = [_label("{TEXT}", Vector3(0, 1.4, 0.03), 0.0, 44, Color("#2b2b2b"))]
+	out["breakable"] = true
+	return out
+
+
+## Sponsor feather flag on a bent pole.
+static func feather_flag(rng: RandomNumberGenerator) -> Dictionary:
+	var b := PaperKit.Builder.new(rng.randi())
+	var sp: Array = SPONSORS[rng.randi() % SPONSORS.size()]
+	b.card(PaperKit.rect(0.07, 3.2), Transform3D(), Color("#3a3430"), {"thick": 0.04, "edge": 0.0, "lip": 0.0})
+	var f := PackedVector2Array([Vector2(0.05, 0.6), Vector2(0.75, 0.75), Vector2(0.85, 2.4), Vector2(0.55, 3.1), Vector2(0.05, 3.15)])
+	b.card(f, Transform3D(), Color(sp[1]), {"thick": 0.02, "edge": 0.03, "lip": 0.03})
+	b.card(PaperKit.scaled(f, 0.55, Vector2(0.45, 1.9)), Transform3D(Basis(), Vector3(0, 0, 0.015)), Color(sp[2]), {"thick": 0.005, "edge": 0.0, "lip": 0.0})
+	var out := _out(b, 0.25, false, 3.2, 0.4)
+	out["breakable"] = true
+	return out
+
 
 ## Road-edge marker post: chunky red-and-cream striped card post with a reflector dot.
 static func marker_post(pal: Dictionary, rng: RandomNumberGenerator) -> Dictionary:

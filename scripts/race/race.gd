@@ -195,6 +195,8 @@ func _process(delta: float) -> void:
 		_collide()
 		if state == State.RACING:
 			race_time += FIXED
+	if sim_dt > 0.0 and OS.get_cmdline_user_args().has("--trace") and Engine.get_process_frames() % 10 == 0:
+		print("TRACE s=%.1f lat=%.2f v=%.1f y=%.2f air=%s steer=%.2f slip=%.2f h=%.2f" % [player.s, player.lat, player.v_long, player.y, player.airborne, player.steer, player.slip, player.h])
 	_check_finish()
 	camera.follow(dt)
 	stage.set_bonnet(camera.view_index() == ChaseCamera.BONNET)
@@ -302,9 +304,20 @@ func _collide() -> void:
 	for c in cars:
 		var f := c.fwd()
 		var r := c.right_axis()
-		for o in stage.scenery.solids_near(c.pos):
+		for o in stage.scenery.props_near(c.pos):
 			var op := Vector2(o[0], o[1])
-			var rad := float(o[2])
+			var rad := absf(float(o[2]))
+			if o[4]:
+				# Small props break instead of stopping the car.
+				var dd := op - c.pos
+				if absf(dd.dot(r)) < c.half_wid + rad and absf(dd.dot(f)) < c.half_len + rad and not c.airborne:
+					stage.scenery.break_piece(int(o[3]), c.vel)
+					c.vel *= 0.97
+					_debris(Vector3(op.x, c.y + 0.5, op.y), 8.0)
+					if c == player:
+						Haptics.impulse(0.25, 0.06)
+						Sfx.impact(0.25, true)
+				continue
 			var d := op - c.pos
 			var lx := clampf(d.dot(r), -c.half_wid, c.half_wid)
 			var lz := clampf(d.dot(f), -c.half_len, c.half_len)

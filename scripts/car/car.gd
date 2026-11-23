@@ -58,6 +58,8 @@ var wheel_r := 0.4
 var head_pos := Vector3(0.35, 1.3, 0)
 var lamp_pos := Vector3(0, 0.6, 2.0)
 var model_root: Node3D
+var _prev_gh := 0.0
+var _has_prev_gh := false
 
 var _body: Node3D
 var _wheels: Array = []
@@ -169,6 +171,7 @@ func place_at(s_pos: float, lateral: float) -> void:
 	lat = lateral
 	y = track.surface_height(pos, s_pos, lateral)
 	vy = 0.0
+	_prev_gh = y
 	airborne = false
 	_sync_visual(0.0)
 
@@ -218,27 +221,31 @@ func step(dt: float) -> void:
 		splashed.emit(absf(vel.dot(fwd())))
 	in_water = water
 	# Vertical: follow the road over crests and ramps; leave it when it falls away faster than gravity.
-	var gh = track.surface_height(pos, s, lat)
+	var gh := track.surface_height(pos, s, lat)
+	var ground_vy := (gh - _prev_gh) / dt if _has_prev_gh else 0.0
+	_prev_gh = gh
+	_has_prev_gh = true
 	if airborne:
 		air_time += dt
 		vy -= GRAVITY * dt
 		y += vy * dt
 		if y <= gh:
-			var hit_v := -vy
+			var hit_v := ground_vy - vy
 			y = gh
-			vy = 0.0
+			vy = ground_vy
 			airborne = false
 			if air_time > 0.12:
 				landed.emit(hit_v)
 	else:
-		var vy_ground = (gh - y) / dt
-		if vy_ground < vy - GRAVITY * dt * 1.5 and vy > -3.0:
+		# Ballistic if the ground drops away faster than gravity can pull the car down.
+		var predicted := y + vy * dt - 0.5 * GRAVITY * dt * dt
+		if gh < predicted - 0.02 and vy > ground_vy + 0.5:
 			airborne = true
 			air_time = 0.0
 			vy -= GRAVITY * dt
 			y += vy * dt
 		else:
-			vy = vy_ground
+			vy = ground_vy
 			y = gh
 	var grounded := 0.0 if airborne else 1.0
 	var f := fwd()

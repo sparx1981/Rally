@@ -15,7 +15,10 @@ var stage_def: Dictionary
 var material: Material
 var lib := {}                 # kind -> Array of variant dicts
 var placements: Array = []    # {kind, var, pos(Vector2), yaw, out_yaw, s, delay}
-var obstacles := {}           # Vector2i cell -> Array of [x, z, r]
+var obstacles := {}           # Vector2i cell -> Array of [x, z, r (<0 = not solid), placement index, breakable]
+var broken := {}              # placement index -> true
+const BREAKABLE := ["post", "tape", "bale", "crates", "tuft", "flowers", "bush", "snowbank", "heather", "tent", "cactus",
+	"_chev_l", "_chev_r", "banner", "board", "warn", "km", "flag"]
 var puddles: Array = []       # [Vector2 pos, radius]
 var popups := true
 var draw_distance := 110.0
@@ -47,7 +50,7 @@ func _build_library() -> void:
 	var kinds: Dictionary = stage_def["kinds"]
 	var seed_base: int = stage_def["seed"]
 	var all_kinds := kinds.keys()
-	for extra in ["spectators", "post", "tape", "bale", "rock", "logs"]:
+	for extra in ["spectators", "post", "tape", "bale", "rock", "logs", "banner", "board", "warn", "km", "flag"]:
 		if not extra in all_kinds:
 			all_kinds.append(extra)
 	for k in all_kinds:
@@ -55,6 +58,8 @@ func _build_library() -> void:
 		var nv := 2 if k in ["house", "barn", "cabin", "mesa", "spectators"] else 3
 		if k == "house":
 			nv = 4
+		if k in ["banner", "board", "flag"]:
+			nv = 6
 		for i in nv:
 			vars.append(Pieces.make(k, pal, seed_base * 31 + hash(k) % 1000 + i * 101))
 		lib[k] = vars
@@ -114,6 +119,7 @@ func _place(density: float) -> void:
 				var sp := track.pts[ia] + track.nrm[ia] * (out_lat + signf(out_lat) * 4.0)
 				_try_add("spectators", sp, rng, track.dist[ia], false)
 	_place_hazard_props(rng)
+	_place_signage(rng)
 	# Puddles on wet stages.
 	var wd: Dictionary = Catalog.weather(stage_def["weather"])
 	if wd["kind"] == "rain":
@@ -126,6 +132,15 @@ func _place(density: float) -> void:
 				puddles.append([pos, rng.randf_range(1.1, 1.9)])
 			ps += rng.randf_range(25.0, 70.0)
 	placements.sort_custom(func(a, b): return float(a["s"]) + float(a["delay"]) < float(b["s"]) + float(b["delay"]))
+	# Link obstacle entries to their placement index (after sorting).
+	var by_pos := {}
+	for i in placements.size():
+		var pp: Vector2 = placements[i]["pos"]
+		by_pos[pp] = i
+		placements[i]["_idx"] = i
+	for key in obstacles.keys():
+		for o in obstacles[key]:
+			o[3] = by_pos.get(Vector2(o[0], o[1]), -1)
 
 
 ## Rally-game roadside: marker posts along the edges, rocks / logs / bales on the inside of tight
@@ -200,7 +215,7 @@ func _overlaps(p: Vector2, r: float) -> bool:
 	return false
 
 
-func _add(kind: String, vi: int, p: Vector2, yaw: float, s: float, rng: RandomNumberGenerator, solid: bool) -> void:
+func _add(kind: String, vi: int, p: Vector2, yaw: float, s: float, rng: RandomNumberGenerator, solid: bool, text := "") -> void:
 	var r: float = lib[kind][vi]["r"]
 	# Fold direction: away from the road.
 	var hit: Array = track.project(p, track.index_at(s))
@@ -209,12 +224,152 @@ func _add(kind: String, vi: int, p: Vector2, yaw: float, s: float, rng: RandomNu
 	var away := Vector2(-tg.y, tg.x) * signf(lat if lat != 0.0 else 1.0)
 	var out_yaw := atan2(away.x, away.y)
 	placements.append({"kind": kind, "var": vi, "pos": p, "yaw": yaw, "out_yaw": out_yaw, "s": s,
-		"delay": rng.randf_range(0.0, 14.0)})
-	# Every piece registers for overlap tests; only solid ones collide with cars.
+		"delay": rng.randf_range(0.0, 14.0), "text": text})
+	# Every piece registers for overlap tests; solid ones collide, small ones break.
 	var c := Vector2i(floori(p.x / 8.0), floori(p.y / 8.0))
 	if not obstacles.has(c):
 		obstacles[c] = []
-	obstacles[c].append([p.x, p.y, r if solid else -r])
+	obstacles[c].append([p.x, p.y, r if solid else -r, -1, kind in BREAKABLE])
+
+
+## Rally furniture: sponsor banners and billboards along the stage, warning boards before every
+## hazard, distance boards each kilometre, flags at the start and finish.
+func _place_signage(rng: RandomNumberGenerator) -> void:
+	var w := track.width
+	var s := 60.0
+	var side := 1.0
+	while s < track.length - 60.0:
+		var i := track.index_at(s)
+		if track.feature_at(s, "splash", 10.0).is_empty() and track.heights[i] <= 0.0:
+			var pos := track.pts[i] + track.nrm[i] * side * (w * 0.5 + 3.4)
+			if track.clearance(pos) > w * 0.5 + 2.0:
+				_add("banner", rng.randi() % 6, pos, track.heading_at(i) + PI + side * 0.35, s, rng, false)
+			if rng.randf() < 0.45:
+				var bp := track.pts[i] + track.nrm[i] * -side * (w * 0.5 + 8.0)
+				if track.clearance(bp) > w * 0.5 + 5.0:
+					_add("board", rng.randi() % 6, bp, track.heading_at(i) + PI - side * 0.3, s, rng, true)
+		side = -side
+		s += rng.randf_range(110.0, 170.0)
+	var words := {"jump": "JUMP", "crest": "CREST", "splash": "WATER", "chicane": "CHICANE"}
+	for f in track.features:
+		var ws: float = float(f["s0"]) - 55.0
+		var j := track.index_at(ws)
+		var pos := track.pts[j] + track.nrm[j] * (w * 0.5 + 1.8)
+		if track.clearance(pos) > w * 0.5 + 1.0:
+			_add("warn", 0, pos, track.heading_at(j) + PI + 0.25, ws, rng, true, words.get(f["type"], "CAUTION"))
+	var km := 1
+	while km * 1000.0 < track.finish_s - 50.0:
+		var j := track.index_at(track.start_s + km * 1000.0)
+		var pos := track.pts[j] + track.nrm[j] * (w * 0.5 + 2.2)
+		_add("km", 0, pos, track.heading_at(j) + PI + 0.25, track.dist[j], rng, true, "%d KM" % km)
+		km += 1
+	for at in [track.start_s + 6.0, track.finish_s + 8.0]:
+		for k in 3:
+			var j := track.index_at(at + k * 3.0)
+			for sd in [-1.0, 1.0]:
+				var pos = track.pts[j] + track.nrm[j] * sd * (w * 0.5 + 2.0 + k * 0.6)
+				_add("flag", rng.randi() % 6, pos, track.heading_at(j) + PI * 0.5 * sd, track.dist[j], rng, false)
+	var fj := track.index_at(track.finish_s - 60.0)
+	_add("warn", 0, track.pts[fj] + track.nrm[fj] * (w * 0.5 + 1.8), track.heading_at(fj) + PI + 0.25, track.dist[fj], rng, true, "FINISH")
+
+
+## Labels printed on a piece's cards.
+func _make_labels(parent: Node3D, info: Dictionary, text: String) -> void:
+	if not info.has("labels"):
+		return
+	for lb in info["labels"]:
+		var l := Label3D.new()
+		var t: String = lb["text"]
+		l.text = text if t == "{TEXT}" else t
+		l.font = PaperTheme.font()
+		l.font_size = lb["size"]
+		l.pixel_size = 0.009
+		l.modulate = lb["color"]
+		l.outline_size = 0
+		l.shaded = true
+		l.double_sided = false
+		l.alpha_cut = Label3D.ALPHA_CUT_DISCARD
+		l.position = lb["pos"]
+		l.rotation = Vector3(float(lb.get("pitch", 0.0)), float(lb["yaw"]), 0.0)
+		l.visibility_range_end = draw_distance * 0.7
+		parent.add_child(l)
+
+
+## Props near p that a car can hit: Array of [x, z, r, index, breakable] (broken ones excluded).
+func props_near(p: Vector2) -> Array:
+	var out: Array = []
+	var c := Vector2i(floori(p.x / 8.0), floori(p.y / 8.0))
+	for dx in range(-1, 2):
+		for dy in range(-1, 2):
+			var key := Vector2i(c.x + dx, c.y + dy)
+			if obstacles.has(key):
+				for o in obstacles[key]:
+					if (float(o[2]) > 0.0 or o[4]) and not broken.has(o[3]):
+						out.append(o)
+	return out
+
+
+# --- breaking small props -------------------------------------------------------------------------
+
+var _tumblers: Array = []
+var _mm_map := {}   # placement index -> [MultiMesh, instance]
+
+
+## Knock a small prop over: hide it and send a copy tumbling away from the car.
+func break_piece(idx: int, car_vel: Vector2) -> void:
+	if idx < 0 or broken.has(idx):
+		return
+	broken[idx] = true
+	var pl: Dictionary = placements[idx]
+	var p: Vector2 = pl["pos"]
+	var start := Transform3D(Basis(Vector3.UP, float(pl["yaw"])), Vector3(p.x, _ground(p) + 0.02, p.y))
+	if popups and idx < _pivots.size():
+		start = _pivots[idx].get_child(0).global_transform
+		_pivots[idx].visible = false
+		_up.erase(idx)
+		_active.erase(idx)
+	elif _mm_map.has(idx):
+		var mm: MultiMesh = _mm_map[idx][0]
+		mm.set_instance_transform(_mm_map[idx][1], Transform3D(Basis().scaled(Vector3.ONE * 0.001), Vector3(0, -50, 0)))
+	var mi := MeshInstance3D.new()
+	mi.mesh = _piece_mesh(pl)
+	mi.material_override = material
+	add_child(mi)
+	mi.global_transform = start
+	_make_labels(mi, lib[pl["kind"]][pl["var"]], pl.get("text", ""))
+	var dir := car_vel.normalized() if car_vel.length() > 0.5 else Vector2.UP
+	var spd := clampf(car_vel.length() * 0.6, 3.0, 16.0)
+	var v := Vector3(dir.x * spd + randf_range(-2, 2), randf_range(4.0, 7.0), dir.y * spd + randf_range(-2, 2))
+	var axis := Vector3(randf_range(-1, 1), randf_range(-0.3, 0.3), randf_range(-1, 1)).normalized()
+	_tumblers.append({"node": mi, "vel": v, "axis": axis, "spin": randf_range(5.0, 11.0), "rest": false})
+	if _tumblers.size() > 40:
+		var old: Dictionary = _tumblers.pop_front()
+		(old["node"] as Node3D).queue_free()
+
+
+func _process(delta: float) -> void:
+	for t in _tumblers:
+		if t["rest"]:
+			continue
+		var n: Node3D = t["node"]
+		var v: Vector3 = t["vel"]
+		v.y -= 22.0 * delta
+		n.global_position += v * delta
+		n.rotate(t["axis"], float(t["spin"]) * delta)
+		var g := _ground(Vector2(n.global_position.x, n.global_position.z))
+		if n.global_position.y < g + 0.05 and v.y < 0.0:
+			if absf(v.y) > 4.0:
+				v.y = -v.y * 0.3
+				v.x *= 0.5
+				v.z *= 0.5
+				t["spin"] = float(t["spin"]) * 0.4
+			else:
+				# Comes to rest lying on its side, like a dropped card.
+				n.global_position.y = g + 0.05
+				var yaw := n.global_rotation.y
+				n.global_transform.basis = Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, PI * 0.5)
+				t["rest"] = true
+		t["vel"] = v
 
 
 ## Solid obstacles near p (for car collisions): Array of [x, z, r].
@@ -275,6 +430,7 @@ func rebuild_visuals(use_popups: bool) -> void:
 	add_child(_content)
 	_pivots.clear()
 	_springs.clear()
+	_mm_map.clear()
 	_active.clear()
 	_up.clear()
 	_pgrid.clear()
@@ -308,6 +464,7 @@ func _build_popups() -> void:
 		mi.rotation.y = float(pl["yaw"]) - float(pl["out_yaw"])
 		mi.visibility_range_end = draw_distance
 		pivot.add_child(mi)
+		_make_labels(mi, lib[pl["kind"]][pl["var"]], pl.get("text", ""))
 		pivot.rotation.x = PI * 0.5
 		pivot.visible = false
 		_content.add_child(pivot)
@@ -332,6 +489,7 @@ func _build_static() -> void:
 	var groups := {}
 	for pl in placements:
 		var key := "%d|%s|%d" % [int(float(pl["s"]) / CHUNK), pl["kind"], pl["var"]]
+
 		if not groups.has(key):
 			groups[key] = []
 		groups[key].append(pl)
@@ -350,6 +508,12 @@ func _build_static() -> void:
 			var p: Vector2 = arr[i]["pos"]
 			var t := Transform3D(Basis(Vector3.UP, float(arr[i]["yaw"])), Vector3(p.x, _ground(p) + 0.02, p.y) - center)
 			mm.set_instance_transform(i, t)
+			_mm_map[int(arr[i]["_idx"])] = [mm, i]
+			if lib[arr[i]["kind"]][arr[i]["var"]].has("labels"):
+				var holder := Node3D.new()
+				_content.add_child(holder)
+				holder.transform = Transform3D(t.basis, center + t.origin)
+				_make_labels(holder, lib[arr[i]["kind"]][arr[i]["var"]], arr[i].get("text", ""))
 		var mmi := MultiMeshInstance3D.new()
 		mmi.multimesh = mm
 		mmi.material_override = material
@@ -374,7 +538,7 @@ func update(center: Vector2, radius: float, dt: float) -> void:
 			if not _pgrid.has(key):
 				continue
 			for i in _pgrid[key]:
-				if _up.has(i):
+				if _up.has(i) or broken.has(i):
 					continue
 				if _ppos[i].distance_to(center) < radius - _jitter[i]:
 					_up[i] = true
@@ -391,7 +555,7 @@ func update(center: Vector2, radius: float, dt: float) -> void:
 		var sp: FlapSpring = _springs[i]
 		var p := sp.step(dt)
 		_pivots[i].rotation.x = (1.0 - p) * PI * 0.5
-		_pivots[i].visible = p > 0.01
+		_pivots[i].visible = p > 0.01 and not broken.has(i)
 		if sp.at_rest:
 			_active.erase(i)
 	if rose > 0:

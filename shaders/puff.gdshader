@@ -4,13 +4,13 @@ shader_type spatial;
 render_mode diffuse_lambert, specular_disabled, cull_back;
 
 uniform vec3 leak : source_color = vec3(0.627, 0.376, 0.172);
-uniform float wrap = 0.45;
+uniform float wrap = 0.85;
 uniform vec3 tint : source_color = vec3(1.0);
 
 void fragment() {
 	// Flat facets: crumpled paper, not a smooth sphere.
 	NORMAL = normalize(cross(dFdx(VERTEX), dFdy(VERTEX)));
-	ALBEDO = COLOR.rgb * tint;
+	ALBEDO = min(COLOR.rgb * tint * 1.2, vec3(1.0));
 	ROUGHNESS = 1.0;
 	SPECULAR = 0.0;
 }
