@@ -75,7 +75,7 @@ func _ready() -> void:
 	center_card = PaperTheme.tag("", 72)
 	cc.add_child(center_card)
 	center_card.visible = false
-	hint_tag = PaperTheme.tag("", 22)
+	hint_tag = PaperTheme.tag("", 28)
 	add_child(hint_tag)
 	hint_tag.anchor_left = 0.5
 	hint_tag.anchor_right = 0.5
@@ -149,7 +149,18 @@ func show_hint_timed(text: String, dur: float) -> void:
 
 func show_hint(text: String) -> void:
 	hint_tag.visible = text != ""
+	var l := hint_tag.get_child(0) as Label
+	if l.text == text:
+		return
 	_txt(hint_tag, text)
+	l.add_theme_color_override("font_color", Color("#a8321e") if text == "WRONG WAY" else PaperTheme.INK)
+	# Re-fit the card around the new text and keep it centred.
+	hint_tag.reset_size()
+	var w := hint_tag.get_combined_minimum_size()
+	hint_tag.offset_left = -w.x * 0.5
+	hint_tag.offset_right = w.x * 0.5
+	hint_tag.offset_top = -w.y * 0.5
+	hint_tag.offset_bottom = w.y * 0.5
 
 
 func _process(delta: float) -> void:

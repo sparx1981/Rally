@@ -7,13 +7,14 @@ extends Camera3D
 
 const VIEWS := [
 	{"name": "Chase", "dist": 50.0, "pitch": 44.0, "fov": 30.0, "lead": 5.0},
-	{"name": "Close chase", "dist": 37.0, "pitch": 40.0, "fov": 30.0, "lead": 4.0},
+	{"name": "Low chase", "dist": 7.2, "pitch": 10.0, "fov": 62.0, "lead": 2.5, "low": true},
 	{"name": "Far chase", "dist": 66.0, "pitch": 47.0, "fov": 30.0, "lead": 7.0},
 	{"name": "Bonnet", "dist": 0.0, "pitch": 0.0, "fov": 64.0, "lead": 0.0},
 	{"name": "Cockpit", "dist": 0.0, "pitch": 0.0, "fov": 70.0, "lead": 0.0},
 ]
 const BONNET := 3
 const COCKPIT := 4
+const LOW := 1
 
 var target: Car
 var force_view := -1
@@ -25,7 +26,13 @@ var _init_done := false
 var _last_view := -1
 
 
+## Views at road level that see the horizon (sky, fog and headlight set-up like the bonnet view).
 static func is_ground_level(v: int) -> bool:
+	return v == BONNET or v == COCKPIT or v == LOW
+
+
+## The rigid views mounted on the car itself.
+static func is_mounted(v: int) -> bool:
 	return v == BONNET or v == COCKPIT
 
 
@@ -60,7 +67,7 @@ func view_focus() -> Array:
 	var fw := Vector3(sin(_yaw), 0, cos(_yaw))
 	match v:
 		BONNET, COCKPIT: return [target.position + fw * 34.0, 46.0]
-		1: return [target.position + fw * 9.0, 25.0]
+		LOW: return [target.position + fw * 30.0, 44.0]
 		2: return [target.position + fw * 14.0, 40.0]
 	return [target.position + fw * 11.0, 31.0]
 
@@ -78,13 +85,16 @@ func follow(dt: float) -> void:
 	if _shake > 0.001:
 		sh = Vector3(randf_range(-1, 1), randf_range(-1, 1), randf_range(-1, 1)) * _shake
 		_shake = move_toward(_shake, 0.0, dt * 3.0)
-	if is_ground_level(vi):
+	if is_mounted(vi):
 		var t := target.eye_transform() if vi == COCKPIT else target.bonnet_transform()
 		global_transform = Transform3D(t.basis, t.origin + sh * 0.04)
 		near = 0.05
 		_yaw = target.h
 		return
 	near = 0.3
+	if v.get("low", false):
+		_follow_low(dt, v, sh)
+		return
 	var car_yaw := target.h
 	if target.vel.length() > 4.0 and target.v_long > 0.0:
 		# Follow the direction of travel when sliding, so drifts read clearly.
@@ -107,3 +117,43 @@ func follow(dt: float) -> void:
 	_look = _look.lerp(look, clampf(dt * 8.0, 0.0, 1.0))
 	global_position = _pos + sh * 0.25
 	look_at(_look + sh * 0.12, Vector3.UP)
+
+
+## Forza Horizon style: low and close behind the car, looking past it down the road. Trails the
+## car's heading with a little lag so slides swing into view, rides over crests with the car, and
+## never dips into the ground.
+var _low_h := 0.0
+func _follow_low(dt: float, v: Dictionary, sh: Vector3) -> void:
+	near = 0.15
+	var car_yaw := target.h
+	if target.vel.length() > 4.0 and target.v_long > 0.0:
+		car_yaw = lerp_angle(car_yaw, atan2(target.vel.x, target.vel.y), 0.35)
+	if not _init_done:
+		_yaw = car_yaw
+	_yaw = lerp_angle(_yaw, car_yaw, clampf(dt * 4.0, 0.0, 1.0))
+	var fw := Vector3(sin(_yaw), 0, cos(_yaw))
+	var car_p := target.position
+	var spd := clampf(target.v_long, 0.0, 40.0)
+	var d: float = float(v["dist"]) + spd * 0.04
+	var hgt := 2.05 + spd * 0.006
+	var want := car_p - fw * d + Vector3.UP * hgt
+	# Keep clear of the ground behind the car (crests, banks, the far side of a dip).
+	var gp := Vector2(want.x, want.z)
+	var gh := target.track.terrain.height(gp) if target.track.terrain else -INF
+	gh = maxf(gh, target.track.surface_height(gp, target.s - d, target.lat))
+	want.y = maxf(want.y, gh + 1.3)
+	var look := car_p + fw * (float(v["lead"]) + spd * 0.12) + Vector3.UP * 1.15
+	if not _init_done:
+		_pos = want
+		_look = look
+		_low_h = want.y
+		_init_done = true
+	# Tight horizontally, softer vertically so jumps and landings read without jolting.
+	var p2 := Vector2(_pos.x, _pos.z).lerp(Vector2(want.x, want.z), clampf(dt * 9.0, 0.0, 1.0))
+	_low_h = lerpf(_low_h, want.y, clampf(dt * 5.0, 0.0, 1.0))
+	_low_h = maxf(_low_h, gh + 1.1)
+	_pos = Vector3(p2.x, _low_h, p2.y)
+	_look = _look.lerp(look, clampf(dt * 10.0, 0.0, 1.0))
+	fov = float(v["fov"]) + spd * 0.25
+	global_position = _pos + sh * 0.08
+	look_at(_look + sh * 0.05, Vector3.UP)

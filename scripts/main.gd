@@ -1140,6 +1140,11 @@ func _run_shot() -> void:
 		await get_tree().process_frame
 		frames += 1
 	print("SHOT fps_avg=%.1f frames=%d" % [frames / t, frames])
+	if race and OS.get_cmdline_user_args().has("--kinds"):
+		var cnt := {}
+		for pl in race.stage.scenery.placements:
+			cnt[pl["kind"]] = cnt.get(pl["kind"], 0) + 1
+		print("SHOT kinds ", cnt)
 	if race and race.skids:
 		print("SHOT skid marks: %d" % race.skids.multimesh.visible_instance_count)
 	if race and race.player:

@@ -126,6 +126,22 @@ func _make_contact(mat: Material) -> void:
 	_contact = mi
 
 
+## Low chase view sits right behind the car: keep the player's own dust and spray low and small
+## so the car stays visible through it.
+var _low_view := false
+func set_low_view(on: bool) -> void:
+	if on == _low_view:
+		return
+	_low_view = on
+	for p in [_dust, _spray]:
+		if p == null:
+			continue
+		var k := 0.45 if on else 1.0 / 0.45
+		p.scale_amount_min *= k
+		p.scale_amount_max *= k
+		p.amount = maxi(4, int(p.amount * (0.6 if on else 1.0 / 0.6)))
+
+
 func _make_dust() -> void:
 	var kind := stage.kind()
 	var pal: Dictionary = stage.def["pal"]

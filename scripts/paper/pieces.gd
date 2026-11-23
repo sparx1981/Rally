@@ -485,13 +485,24 @@ static func _label(text: String, pos: Vector3, yaw: float, size: int, col: Color
 	return {"text": text, "pos": pos, "yaw": yaw, "size": size, "color": col}
 
 
-## Sponsor A-frame banner leaning back so its print faces the sky and the camera.
+static var _font: Font
+
+
+## Printed width in metres of a sign label (Label3D pixel_size 0.009), so boards can be cut to fit.
+static func text_width(text: String, size: int) -> float:
+	if _font == null:
+		_font = PaperTheme.font()
+	return _font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x * 0.009
+
+
+## Sponsor A-frame banner leaning back so its print faces the sky and the camera. Long names get
+## a longer banner.
 static func banner(rng: RandomNumberGenerator) -> Dictionary:
 	var b := PaperKit.Builder.new(rng.randi())
 	var sp: Array = SPONSORS[rng.randi() % SPONSORS.size()]
 	var bg := Color(sp[1])
 	var fg := Color(sp[2])
-	var w := 5.6
+	var w := maxf(5.6, text_width(sp[0], 60) + 0.9)
 	var pitch := -0.42
 	var T := Transform3D(Basis(Vector3.RIGHT, pitch), Vector3(0, 0.12, 0))
 	b.card(PaperKit.rect(w, 1.3, 0, 0), T, bg, {"thick": 0.05, "edge": 0.05, "lip": 0.05})
@@ -512,13 +523,14 @@ static func billboard(rng: RandomNumberGenerator) -> Dictionary:
 	var bg := Color(sp[1])
 	var fg := Color(sp[2])
 	var pitch := -0.28
+	var bw := maxf(4.4, text_width(sp[0], 76) + 0.8)
 	var T := Transform3D(Basis(Vector3.RIGHT, pitch), Vector3(0, 0.3, 0))
-	b.card(PaperKit.rrect(4.4, 2.2, 0.08, 0, 0), T, bg, {"thick": 0.06, "edge": 0.05, "lip": 0.06})
-	b.card(PaperKit.rrect(4.0, 0.12, 0.04, 0, 0.55), T * Transform3D(Basis(), Vector3(0, 0, 0.035)), fg, {"thick": 0.005, "edge": 0.0, "lip": 0.0, "sides": false})
-	for x in [-1.6, 1.6]:
+	b.card(PaperKit.rrect(bw, 2.2, 0.08, 0, 0), T, bg, {"thick": 0.06, "edge": 0.05, "lip": 0.06})
+	b.card(PaperKit.rrect(bw - 0.4, 0.12, 0.04, 0, 0.55), T * Transform3D(Basis(), Vector3(0, 0, 0.035)), fg, {"thick": 0.005, "edge": 0.0, "lip": 0.0, "sides": false})
+	for x in [-bw * 0.36, bw * 0.36]:
 		var top := T * Vector3(x, 2.1, 0)
 		b.box(Vector3(x, top.y * 0.5, top.z - 0.1), Vector3(0.16, top.y, 0.16), Transform3D(), Color("#6a4a32"))
-	var out := _out(b, 1.0, true, 2.0, 0.55)
+	var out := _out(b, bw * 0.23, true, 2.0, 0.55)
 	out["labels"] = [{"text": sp[0], "pos": T * Vector3(0, 1.4, 0.04), "yaw": 0.0, "pitch": pitch, "size": 76, "color": fg},
 		{"text": "RALLY PARTNER", "pos": T * Vector3(0, 0.85, 0.04), "yaw": 0.0, "pitch": pitch, "size": 36, "color": fg}]
 	out["breakable"] = true

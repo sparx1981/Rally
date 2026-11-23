@@ -248,6 +248,7 @@ func _process(delta: float) -> void:
 	if vi != _last_view:
 		_last_view = vi
 		player.cockpit(vi == ChaseCamera.COCKPIT)
+		player.set_low_view(vi == ChaseCamera.LOW)
 	var vf: Array = camera.view_focus()
 	stage.update(dt, vf[0], float(vf[1]), player.s, camera)
 	var threats: Array = []

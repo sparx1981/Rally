@@ -120,6 +120,8 @@ func _place(density: float) -> void:
 				_try_add("spectators", sp, rng, track.dist[ia], false)
 	_place_hazard_props(rng)
 	_place_signage(rng)
+	if stage_def.has("forest"):
+		_place_forest(rng, density)
 	# Puddles on wet stages.
 	var wd: Dictionary = Catalog.weather(stage_def["weather"])
 	if wd["kind"] == "rain":
@@ -145,6 +147,39 @@ func _place(density: float) -> void:
 
 ## Rally-game roadside: marker posts along the edges, rocks / logs / bales on the inside of tight
 ## bends (punishing cut corners), hay-bale chicanes, and taped-off crowds at jumps and splashes.
+## Forest locations: a thick wall of trees on both sides of the road, in bands that thin out with
+## distance, broken by the odd clearing so the woods don't look stamped out.
+func _place_forest(rng: RandomNumberGenerator, density: float) -> void:
+	var f: Dictionary = stage_def["forest"]
+	var trees: Array = []
+	for k in f["trees"].keys():
+		if not lib.has(k):
+			continue
+		for i in int(f["trees"][k]):
+			trees.append(k)
+	if trees.is_empty():
+		return
+	var clear := FastNoiseLite.new()
+	clear.seed = int(stage_def["seed"]) + 31
+	clear.frequency = 1.0 / 140.0
+	var hw := track.width * 0.5
+	var bands := [[3.2, 8.0, 0.75], [8.0, 15.0, 0.95], [15.0, 24.0, 0.95], [24.0, 36.0, 0.9], [36.0, 52.0, 0.5]]
+	var step := 2.5 / clampf(density * float(f.get("thick", 1.0)), 0.35, 1.5)
+	var s := 6.0
+	while s < track.length - 10.0:
+		var i := track.index_at(s)
+		for side in [-1.0, 1.0]:
+			for band in bands:
+				if rng.randf() > float(band[2]):
+					continue
+				var lat: float = side * (hw + rng.randf_range(band[0], band[1]))
+				var p := track.pts[i] + track.nrm[i] * lat + track.tang[i] * rng.randf_range(-1.8, 1.8)
+				if clear.get_noise_2d(p.x, p.y) < -0.5:
+					continue
+				_try_add(trees[rng.randi() % trees.size()], p, rng, s, false)
+		s += step * rng.randf_range(0.8, 1.2)
+
+
 func _place_hazard_props(rng: RandomNumberGenerator) -> void:
 	var w := track.width
 	var ps := 20.0
