@@ -139,13 +139,13 @@ func _make_lights() -> void:
 	env.background_color = def["pal"]["ground"]
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = wx["amb"]
-	env.ambient_light_energy = float(wx["amb_e"]) * 0.85
+	env.ambient_light_energy = float(wx["amb_e"]) * 0.95
 	env.tonemap_mode = Environment.TONE_MAPPER_LINEAR
 	we.environment = env
 	add_child(we)
 	key_light = DirectionalLight3D.new()
 	key_light.light_color = wx["key"]
-	key_light.light_energy = float(wx["key_e"]) * 0.68
+	key_light.light_energy = float(wx["key_e"]) * 0.6
 	var el := deg_to_rad(float(wx["elev"]))
 	var az := deg_to_rad(float(wx["azim"]))
 	var sun := Vector3(cos(el) * sin(az), sin(el), cos(el) * cos(az))
@@ -159,7 +159,7 @@ func _make_lights() -> void:
 	add_child(key_light)
 	fill_light = DirectionalLight3D.new()
 	fill_light.light_color = wx["fill"]
-	fill_light.light_energy = float(wx["fill_e"]) * 1.35
+	fill_light.light_energy = float(wx["fill_e"]) * 1.7
 	fill_light.shadow_enabled = false
 	add_child(fill_light)
 

@@ -68,7 +68,7 @@ static func weather(id: String) -> Dictionary:
 				"wrap": 0.3, "grip": 0.49, "exposure": 0.86, "contrast": 1.08, "sat": 1.0, "tint": Vector3(1.0, 1.0, 1.02),
 				"vig": 0.08, "vig_col": Color("#283048"), "green_pull": 0.1, "glow": 0.0, "particles": "snow"},
 			"snow_dusk": {"label": "Snow", "kind": "snow", "key": Color("#ffb38a"), "key_e": 0.7, "elev": 28.0, "azim": 45.0,
-				"fill": Color("#6f63a8"), "fill_e": 0.3, "amb": Color("#a898d0"), "amb_e": 0.36, "leak": Color("#5e5c98"),
+				"fill": Color("#6f63a8"), "fill_e": 0.3, "amb": Color("#c6bfd9"), "amb_e": 0.34, "leak": Color("#5e5c98"),
 				"wrap": 0.36, "grip": 0.55, "exposure": 0.95, "contrast": 1.06, "sat": 0.98, "tint": Vector3(1.01, 0.98, 1.01),
 				"vig": 0.14, "vig_col": Color("#1a1430"), "green_pull": 0.1, "glow": 1.1, "particles": "snow"},
 		}

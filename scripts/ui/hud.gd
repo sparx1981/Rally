@@ -167,7 +167,7 @@ class PaceNote:
 		var r := Rect2(Vector2.ZERO, size)
 		var sb := PaperTheme.box(PaperTheme.CREAM, PaperTheme.EDGE, 3, 10, 6)
 		draw_style_box(sb, r)
-		var c := Vector2(r.size.x * 0.3, r.size.y * 0.45)
+		var c := Vector2(r.size.x * 0.25, r.size.y * 0.45)
 		var col := PaperTheme.ACCENT if sev <= 2 else PaperTheme.INK
 		# Arrow: a chunky bent shape pointing left or right.
 		var d := dir
@@ -180,7 +180,7 @@ class PaceNote:
 		var txt := "HP" if hairpin else str(sev)
 		var fs := 40 if hairpin else 48
 		var ts := font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs)
-		draw_string(font, Vector2(r.size.x * 0.7 - ts.x * 0.5, r.size.y * 0.45 + fs * 0.35), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
+		draw_string(font, Vector2(r.size.x * 0.73 - ts.x * 0.5, r.size.y * 0.45 + fs * 0.35), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
 		var dt := "%dm" % int(dist)
 		draw_string(font, Vector2(r.size.x * 0.5 - 22, r.size.y - 8), dt, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, PaperTheme.INK)
 

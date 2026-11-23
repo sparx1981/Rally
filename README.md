@@ -11,6 +11,16 @@ stages look like a miniature diorama. The look follows the
 The skill's own `engines.md` notes call the Godot port untested, so it was tuned here from rendered
 screenshots.
 
+## Screenshots
+
+| Dry: Meadow Run | Rain: Harbour Lanes (Race vs AI) |
+|---|---|
+| ![](docs/screenshots/race_dry.png) | ![](docs/screenshots/race_harbour.png) |
+| **Snow: Alpine Pass** | **Snow at dusk: Twilight Taiga** |
+| ![](docs/screenshots/race_snow.png) | ![](docs/screenshots/race_taiga.png) |
+| **Title (live diorama behind the menu)** | **Settings: presets, individual options, pop-up toggle** |
+| ![](docs/screenshots/title.png) | ![](docs/screenshots/settings.png) |
+
 ## Features
 
 | | |

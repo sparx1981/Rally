@@ -83,7 +83,7 @@ func setup(stage_i: int, mode_v: int, entrants: Array, attract_v := false) -> vo
 	var st: Dictionary = player.stats
 	var mu := Car.BASE_MU * float(st["grip"]) * stage.grip()
 	var ideal := tr.ideal_time(mu * 0.95, Car.BRAKE * stage.grip() * 0.85, Car.BASE_ACC * float(st["accel"]) * 0.75, player.top_speed())
-	medals = [ideal * 1.12, ideal * 1.24, ideal * 1.38]
+	medals = [ideal * 1.15, ideal * 1.3, ideal * 1.48]
 	if attract:
 		for c in cars:
 			c.frozen = false

@@ -389,20 +389,20 @@ class CarPreview:
 		var env := Environment.new()
 		env.background_mode = Environment.BG_CLEAR_COLOR
 		env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-		env.ambient_light_color = Color("#fff0da")
-		env.ambient_light_energy = 0.3
+		env.ambient_light_color = Color("#f4eee4")
+		env.ambient_light_energy = 0.22
 		var we := WorldEnvironment.new()
 		we.environment = env
 		vp.add_child(we)
 		var key := DirectionalLight3D.new()
-		key.light_color = Color("#ffdcb2")
-		key.light_energy = 0.75
+		key.light_color = Color("#fbeedd")
+		key.light_energy = 0.5
 		key.rotation = Vector3(deg_to_rad(-50), deg_to_rad(35), 0)
 		key.shadow_enabled = true
 		vp.add_child(key)
 		var fill := DirectionalLight3D.new()
 		fill.light_color = Color("#f2dcc2")
-		fill.light_energy = 0.35
+		fill.light_energy = 0.3
 		fill.rotation = Vector3(deg_to_rad(-30), 0, 0)
 		vp.add_child(fill)
 		var cam := Camera3D.new()
@@ -879,6 +879,8 @@ func _parse_args() -> void:
 
 func _run_bench() -> void:
 	# Headless logic check: every stage, autopilot to the finish, in each mode.
+	_shot["autopilot"] = true
+	Engine.max_fps = 0
 	for si in Catalog.stages().size():
 		for m in [Game.Mode.TIME_TRIAL, Game.Mode.RACE]:
 			Game.mode = m

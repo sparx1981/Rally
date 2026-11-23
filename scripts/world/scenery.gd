@@ -72,7 +72,7 @@ func _place(density: float) -> void:
 	var pool := _weighted_kinds()
 	var w := track.width
 	var big := ["house", "barn", "cabin", "mesa", "tent"]
-	var spacing := 7.5 / clampf(density, 0.2, 1.0)
+	var spacing := 5.5 / clampf(density, 0.2, 1.0)
 	var s := 4.0
 	while s < track.length - 4.0:
 		for side in [-1.0, 1.0]:
