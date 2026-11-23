@@ -1,0 +1,65 @@
+// One post pass (papercraft skill look.md 6-7): a tilt-shift macro-lens blur band driven by screen
+// height, then a mild grade: white-balance tint, contrast, saturation, a hue-masked pull on
+// video-game yellow-greens, shadow lift toward the world's tint, a warm vignette and light grain.
+shader_type canvas_item;
+
+uniform sampler2D screen : hint_screen_texture, filter_linear;
+uniform int taps = 12;
+uniform float focus_y = 0.56;
+uniform float band = 0.36;
+uniform float ramp = 0.3;
+uniform float max_blur_px = 9.0;
+uniform float near_gain = 1.5;
+uniform float exposure = 1.0;
+uniform float contrast = 1.1;
+uniform float saturation = 0.97;
+uniform vec3 tint = vec3(1.03, 0.985, 0.97);
+uniform float green_pull = 0.3;
+uniform vec3 shadow_tint : source_color = vec3(0.23, 0.13, 0.05);
+uniform float vignette = 0.08;
+uniform vec3 vig_color : source_color = vec3(0.23, 0.13, 0.05);
+uniform float grain = 0.01;
+
+float hash(vec2 p) {
+	return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+}
+
+void fragment() {
+	vec2 uv = SCREEN_UV;
+	vec3 col = texture(screen, uv).rgb;
+	if (taps > 0) {
+		float sy = uv.y - focus_y;
+		float a = clamp((abs(sy) - band * 0.5) / ramp, 0.0, 1.0);
+		a = a * a * (3.0 - 2.0 * a) * 0.35 + a * 0.65;
+		float coc = min(a * (sy > 0.0 ? near_gain : 1.0), 1.0) * max_blur_px;
+		if (coc > 0.5) {
+			vec3 acc = col;
+			float wsum = 1.0;
+			for (int i = 0; i < 24; i++) {
+				if (i >= taps) break;
+				float fi = float(i);
+				float r = pow((fi + 0.5) / float(taps), 0.75) * coc;
+				float ang = fi * 2.39996 + hash(uv * 311.0) * 0.6;
+				vec2 o = vec2(cos(ang), sin(ang)) * r * SCREEN_PIXEL_SIZE;
+				vec3 s = texture(screen, uv + o).rgb;
+				float w = pow(max(r, 0.5), 0.667) * (1.0 + dot(s, vec3(0.3)) * 0.4);
+				acc += s * w;
+				wsum += w;
+			}
+			col = acc / wsum;
+		}
+	}
+	col *= exposure * tint;
+	float l = dot(col, vec3(0.299, 0.587, 0.114));
+	col = mix(vec3(l), col, saturation);
+	col = (col - 0.42) * contrast + 0.42;
+	// Pull saturated yellow-green toward a muted paper green.
+	float gm = smoothstep(0.1, 0.3, col.g - col.b) * smoothstep(-0.2, -0.05, col.g - col.r) * green_pull;
+	col = mix(col, mix(vec3(l), col, 0.45) * vec3(0.97, 1.0, 1.03), gm);
+	col += shadow_tint * 0.03 * (1.0 - smoothstep(0.0, 0.45, l));
+	vec2 d = uv - 0.5;
+	float v = smoothstep(0.35, 0.95, length(d * vec2(1.25, 1.0)));
+	col = mix(col, vig_color, v * vignette);
+	col += (hash(uv * 977.0 + fract(TIME)) - 0.5) * grain * (1.0 - l * 0.5);
+	COLOR = vec4(clamp(col, 0.0, 1.0), 1.0);
+}
