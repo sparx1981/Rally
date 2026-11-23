@@ -108,7 +108,7 @@ func setup(stage_i: int, mode_v: int, entrants: Array, attract_v := false, tod :
 		state = State.RACING
 	else:
 		_make_hud()
-		Sfx.engine_start()
+		Sfx.engine_start(player.stats["style"])
 
 
 ## Test helper: start the cars just before the first hazard of a type, countdown skipped.
@@ -167,6 +167,7 @@ func _make_hud() -> void:
 	touch.visible = touch.should_show()
 	touch.pause_pressed.connect(func(): pause_requested.emit())
 	hud.camera_pressed.connect(cycle_camera)
+	hud.reset_requested.connect(_reset_player)
 	input.touch = touch
 	hud.pos_tag.visible = mode != Game.Mode.TIME_TRIAL
 	if mode == Game.Mode.TIME_TRIAL:
@@ -192,17 +193,24 @@ func _exit_tree() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if attract:
+	if attract or state == State.DONE:
 		return
 	if event.is_action_pressed("pause"):
 		pause_requested.emit()
 		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed("camera"):
 		cycle_camera()
-	elif event.is_action_pressed("reset_car") and state == State.RACING and _reset_cd <= 0.0:
-		player.reset_to_track()
-		_reset_cd = 1.5
-		camera.snap()
+	elif event.is_action_pressed("reset_car"):
+		_reset_player()
+
+
+func _reset_player() -> void:
+	if state != State.RACING or _reset_cd > 0.0 or get_tree().paused:
+		return
+	player.reset_to_track()
+	_reset_cd = 1.5
+	camera.snap()
+	hud.show_reset(false)
 
 
 func _process(delta: float) -> void:
@@ -317,7 +325,7 @@ func _check_finish() -> void:
 					if best < 0.0 or race_time < best:
 						ghost.save(Catalog.stages()[stage_index]["id"])
 				hud.show_center("FINISH", 2.6, 84)
-				Sfx.play("go", -2.0, 0.8)
+				Sfx.play("finish", -6.0)
 
 
 ## Collisions use each car's oriented box (its real paper body), not a circle: props are circles,
@@ -623,9 +631,13 @@ func _update_hud() -> void:
 		var pos := _positions().find(player) + 1
 		hud.set_position_text("P%d/%d" % [pos, cars.size()])
 	var wrong := player.vel.length() > 3.0 and player.vel.normalized().dot(tr.tang[player.track_i]) < -0.4
-	if wrong:
+	var lost := absf(player.lat) > tr.width * 1.6 and state == State.RACING
+	hud.show_reset(lost and touch.visible)
+	if lost and touch.visible:
+		hud.show_hint("")
+	elif wrong:
 		hud.show_hint("WRONG WAY")
-	elif absf(player.lat) > tr.width * 1.6 and state == State.RACING:
+	elif lost:
 		hud.show_hint("Lost? Press RESET (Y / R)")
 	else:
 		hud.show_hint("")

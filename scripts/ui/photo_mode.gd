@@ -93,6 +93,7 @@ func _save() -> void:
 		if img.save_png(pics + "/Paper Rally/" + name) == OK:
 			shown = pics + "/Paper Rally/" + name
 	_bar.visible = true
+	(_bar.get_child(-1) as Button).grab_focus()
 	(_toast.get_child(0) as Label).text = "Saved: " + shown
 	_toast.visible = true
 	Sfx.click()
@@ -103,9 +104,13 @@ func _close() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("ui_cancel") or event.is_action_pressed("pause"):
-		_close()
+	if not _bar.visible and event.is_action_pressed("ui_accept"):
+		_bar.show()
+		(_bar.get_child(1) as Button).grab_focus()
 		get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("ui_cancel") or event.is_action_pressed("pause"):
+		get_viewport().set_input_as_handled()
+		_close()
 
 
 func _gui_input(event: InputEvent) -> void:
@@ -136,13 +141,15 @@ func _gui_input(event: InputEvent) -> void:
 func _process(delta: float) -> void:
 	if cam == null or target == null:
 		return
-	var rx := Input.get_joy_axis(0, JOY_AXIS_RIGHT_X) + Input.get_joy_axis(0, JOY_AXIS_LEFT_X)
-	var ry := Input.get_joy_axis(0, JOY_AXIS_RIGHT_Y)
+	var pads := Input.get_connected_joypads()
+	var pad := int(pads[0]) if not pads.is_empty() else 0
+	var rx := Input.get_joy_axis(pad, JOY_AXIS_RIGHT_X)
+	var ry := Input.get_joy_axis(pad, JOY_AXIS_RIGHT_Y)
 	if absf(rx) > 0.15:
 		_yaw -= rx * delta * 1.8
 	if absf(ry) > 0.15:
 		_pitch = clampf(_pitch + ry * delta * 1.2, 0.05, 1.45)
-	var zoom := Input.get_joy_axis(0, JOY_AXIS_TRIGGER_RIGHT) - Input.get_joy_axis(0, JOY_AXIS_TRIGGER_LEFT)
+	var zoom := Input.get_joy_axis(pad, JOY_AXIS_TRIGGER_RIGHT) - Input.get_joy_axis(pad, JOY_AXIS_TRIGGER_LEFT)
 	if absf(zoom) > 0.1:
 		_dist = clampf(_dist * (1.0 - zoom * delta), 4.0, 90.0)
 	var c := target.global_position + Vector3.UP * 0.8

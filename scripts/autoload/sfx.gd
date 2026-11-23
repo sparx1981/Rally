@@ -27,6 +27,8 @@ var _roll: AudioStreamPlayer
 var _amb: AudioStreamPlayer
 var _amb2: AudioStreamPlayer
 
+var _pulses_per_rev := 2.0
+var _subharmonic := 0.45
 var _rpm := 900.0
 var _thr := 0.0
 var _prev_thr := 0.0
@@ -91,6 +93,9 @@ func _synth_all() -> void:
 	out["splash_big"] = _wav(_make_splash(1.1, 1.6), false)
 	out["tock"] = _wav(_make_tone(620.0, 0.12, 30.0), false)
 	out["go"] = _wav(_make_tone(930.0, 0.4, 8.0), false)
+	var finish := _make_tone(660.0, 0.12, 19.0)
+	finish.append_array(_make_tone(880.0, 0.28, 10.0))
+	out["finish"] = _wav(finish, false)
 	out["gear"] = _wav(_make_gear(), false)
 	out["pop"] = _wav(_make_pop(), false)
 	out["pebble"] = _wav(_make_pebble(), false)
@@ -197,7 +202,9 @@ func cheer() -> void:
 	play("cheer", -9.0, _rng.randf_range(0.95, 1.05))
 
 
-func engine_start() -> void:
+func engine_start(style: String) -> void:
+	_pulses_per_rev = 2.5 if style == "quattro" else (4.0 if style == "truck" else (3.0 if style == "stratos" else 2.0))
+	_subharmonic = 0.72 if style in ["impreza", "truck", "buggy"] else 0.36
 	_engine_on = true
 	_engine.volume_db = -12.0
 	if not _engine.playing:
@@ -307,14 +314,14 @@ func _fill_growl() -> void:
 		return
 	var buf := PackedVector2Array()
 	buf.resize(n)
-	var f := 18.0 + _rpm / 60.0 * 2.0
+	var f := 18.0 + _rpm / 60.0 * _pulses_per_rev
 	var amp := 0.06 + 0.16 * _thr
 	var alpha := clampf((260.0 + _rpm * 0.05) / RATE * TAU, 0.02, 0.9)
 	var inc := f / RATE
 	for i in n:
 		_phase = fmod(_phase + inc, 1.0)
 		_phase2 = fmod(_phase2 + inc * 0.5, 1.0)
-		var x := sin(_phase * TAU) * 0.5 + sin(_phase2 * TAU) * 0.45 + (_phase * 2.0 - 1.0) * 0.2
+		var x := sin(_phase * TAU) * 0.5 + sin(_phase2 * TAU) * _subharmonic + (_phase * 2.0 - 1.0) * 0.2
 		x += (_rng.randf() * 2.0 - 1.0) * (0.05 + _thr * 0.12)
 		_lp += (x - _lp) * alpha
 		_lp2 += (_lp - _lp2) * alpha

@@ -47,17 +47,31 @@ static func cars() -> Array:
 const LIVERY_NAMES := ["Works", "Privateer", "Heritage"]
 
 
-## A car with one of three liveries: the works colours, a swapped privateer scheme, a cream heritage one.
+## Heritage paint takes its palette and panel placement from period event programmes.
+## The fictional cars keep their own race numbers and sponsor marks.
 static func livery(car: Dictionary, i: int) -> Dictionary:
 	var c := car.duplicate()
+	var style: String = car["style"]
+	c["paint"] = "sweep"
 	match i % 3:
 		1:
 			c["body"] = car["accent"]
 			c["accent"] = car["body"]
+			c["stripe"] = Color("#f3e8cf") if Color(c["body"]).v < 0.7 else Color("#353330")
+			c["paint"] = "twins"
 		2:
-			c["body"] = Color("#efe3c8") if Color(car["body"]).v < 0.85 else Color("#35302c")
-			c["accent"] = car["body"]
-			c["stripe"] = car["accent"]
+			if style in ["mini", "classic", "escort"]:
+				# Monte Carlo: red and ivory, narrow offset bonnet stripes.
+				c.merge({"body": Color("#b63c32"), "accent": Color("#f5e8cf"), "stripe": Color("#e6d3ab"), "paint": "twins"}, true)
+			elif style in ["stratos", "integrale", "groupb_rwd", "t16"]:
+				# Sanremo: cream stock, a green flank and a red pinstripe.
+				c.merge({"body": Color("#ece4ce"), "accent": Color("#bb4137"), "stripe": Color("#387650")}, true)
+			elif style in ["impreza", "wrc", "rally1", "rally2"]:
+				# British forest stages: blue and gold, rising over the rear quarter.
+				c.merge({"body": Color("#31509a"), "accent": Color("#f4d16b"), "stripe": Color("#dda93f")}, true)
+			else:
+				# Safari: a low-glare bonnet over warm red bodywork.
+				c.merge({"body": Color("#b44834"), "accent": Color("#393735"), "stripe": Color("#eee2c4"), "paint": "safari"}, true)
 	return c
 
 
@@ -180,13 +194,30 @@ const VARIANTS := [["Sprint", 4000.0], ["Classic", 8000.0], ["Long", 10000.0], [
 const TOD_NAMES := ["Day", "Dusk", "Night"]
 
 
+# The four routes pass through different parts of each location. Double one
+# existing scenery weight per route without increasing the placement budget.
+const ROUTE_SCENERY := {
+	"meadow": ["flowers", "barn", "bale", "tree"],
+	"canyon": ["cactus", "mesa", "tent", "rock"],
+	"autumn": ["tree", "cabin", "logs", "pine"],
+	"moor": ["heather", "house", "rock", "pine"],
+	"pinewood": ["bush", "cabin", "logs", "pine"],
+	"harbour": ["crates", "house", "lamp", "rock"],
+	"alpine": ["cabin", "snowbank", "rock", "pine_snow"],
+	"lakes": ["birch", "cabin", "snowbank", "rock"],
+	"taiga": ["lamp", "cabin", "logs", "pine_snow"],
+	"cliffs": ["flowers", "house", "bush", "rock"]
+}
+
 ## 40 stages: every location as a Sprint (4 km), Classic (8 km), Long (10 km) and Marathon (15 km).
 static func stages() -> Array:
 	if _stages.is_empty():
 		for li in locations().size():
 			var loc: Dictionary = locations()[li]
 			for v in VARIANTS.size():
-				var st := loc.duplicate()
+				var st := loc.duplicate(true)
+				var signature: String = ROUTE_SCENERY[loc["id"]][v]
+				st["kinds"][signature] = int(st["kinds"][signature]) * 2 + 1
 				st["loc"] = li
 				st["variant"] = v
 				st["id"] = "%s_%s" % [loc["id"], VARIANTS[v][0].to_lower()]

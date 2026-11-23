@@ -207,7 +207,11 @@ func _apply_post() -> void:
 # --- menu helpers -------------------------------------------------------------------------------
 
 func _clear_menu() -> void:
+	_back = Callable()
+	if menu.has_meta("tabs"):
+		menu.remove_meta("tabs")
 	for c in menu.get_children():
+		menu.remove_child(c)
 		c.queue_free()
 
 
@@ -251,7 +255,6 @@ func _center_box() -> VBoxContainer:
 ## A full-screen menu page: title tag, a content area and a bottom bar.
 func _page(title: String, back: Callable) -> Dictionary:
 	_clear_menu()
-	menu.remove_meta("tabs")
 	_back = back
 	var shade := ColorRect.new()
 	shade.color = Color(0.23, 0.13, 0.05, 0.18)
@@ -301,6 +304,8 @@ func _button(text: String, cb: Callable, min_w := 0.0) -> Button:
 
 func _focus_first(root: Node) -> void:
 	await get_tree().process_frame
+	if not is_instance_valid(root) or not root.is_inside_tree():
+		return
 	var f := _find_focusable(root)
 	if f:
 		f.grab_focus()
@@ -323,8 +328,7 @@ func _title() -> void:
 	get_tree().paused = false
 	_paused = false
 	_clear_menu()
-	menu.remove_meta("tabs")
-	_back = Callable()
+	_back = _quit_prompt if not OS.has_feature("web") else Callable()
 	var mc := MarginContainer.new()
 	mc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mc.add_theme_constant_override("margin_left", 48)
@@ -350,12 +354,22 @@ func _title() -> void:
 		_settings_return = _title
 		_settings(), 360))
 	if not OS.has_feature("web"):
-		v.add_child(_button("Quit", func(): get_tree().quit(), 360))
+		v.add_child(_button("Quit", _quit_prompt, 360))
 	var pads := Input.get_connected_joypads()
 	var hint := "Controller connected: %s" % Input.get_joy_name(pads[0]) if pads.size() > 0 else "Tip: pair a Bluetooth or USB-C controller any time"
 	var ht := PaperTheme.tag(hint, 18)
 	ht.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	v.add_child(ht)
+	_focus_first(v)
+
+
+func _quit_prompt() -> void:
+	_clear_menu()
+	_back = _title
+	var v := _center_box()
+	v.add_child(PaperTheme.tag("Quit Paper Rally?", 36))
+	v.add_child(_button("Keep playing", _title, 300))
+	v.add_child(_button("Quit", func(): get_tree().quit(), 300))
 	_focus_first(v)
 
 
@@ -522,7 +536,7 @@ func _weather_style(kind: String) -> StyleBoxFlat:
 	return PaperTheme.box(col)
 
 
-func _stage_select() -> void:
+func _stage_select(keep_variant_focus := false) -> void:
 	var pg := _page("Choose a stage  -  %s" % Game.mode_name(), _car_select)
 	var content: VBoxContainer = pg["content"]
 	var cur_loc: int = Catalog.stages()[Game.stage_index]["loc"]
@@ -531,7 +545,7 @@ func _stage_select() -> void:
 	content.add_child(opts)
 	opts.add_child(_choice_inline(["Sprint (4 km)", "Classic (8 km)", "Long (10 km)", "Marathon (15 km)"], int(Catalog.stages()[Game.stage_index]["variant"]), func(i):
 		Game.stage_index = cur_loc * 4 + i
-		_stage_select()))
+		_stage_select(true)))
 	opts.add_child(_choice_inline(["Time: stage default", "Time: Day", "Time: Dusk", "Time: Night"], Game.time_of_day + 1, func(i):
 		Game.time_of_day = i - 1))
 	var grid := GridContainer.new()
@@ -574,7 +588,9 @@ func _stage_select() -> void:
 	_stage_info.custom_minimum_size.x = 900
 	content.add_child(_stage_info)
 	await get_tree().process_frame
-	if first:
+	if keep_variant_focus:
+		(opts.get_child(0) as Button).grab_focus()
+	elif first:
 		first.grab_focus()
 
 
@@ -594,13 +610,6 @@ func _choice_inline(options: Array, current: int, on_change: Callable) -> Button
 		Sfx.toggle()
 		on_change.call(state["i"])
 	b.pressed.connect(func(): change.call(1))
-	b.gui_input.connect(func(ev: InputEvent):
-		if ev.is_action_pressed("ui_left"):
-			change.call(-1)
-			b.accept_event()
-		elif ev.is_action_pressed("ui_right"):
-			change.call(1)
-			b.accept_event())
 	return b
 
 
@@ -684,7 +693,6 @@ func _pause() -> void:
 
 func _pause_menu() -> void:
 	_clear_menu()
-	menu.remove_meta("tabs")
 	_back = _resume
 	var v := _center_box()
 	v.add_child(PaperTheme.tag("Paused", 44))
@@ -747,6 +755,7 @@ func _settings() -> void:
 		tab_btns.append(b)
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.follow_focus = true
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	(pg["content"] as VBoxContainer).add_child(scroll)
 	var list := VBoxContainer.new()
@@ -793,7 +802,7 @@ func _settings() -> void:
 			list.add_child(_choice("Opponents (Race / Championship)", ["3", "5"], 1 if int(Settings.g("opponents")) == 5 else 0, func(i): Settings.set_value("opponents", 5 if i == 1 else 3)))
 			var pads := Input.get_connected_joypads()
 			var pad_txt := "No controller connected." if pads.is_empty() else "Connected: " + ", ".join(pads.map(func(d): return Input.get_joy_name(d)))
-			list.add_child(_note(pad_txt + "  Controller: RT/A accelerate, LT/X brake, B/RB handbrake, Y reset, Start pause, Back/LB or the camera icon cycles camera views."))
+			list.add_child(_note(pad_txt + "  Menus: D-pad or left stick to move, A to select, B to go back. Driving: RT/A accelerate, LT/X brake, B/RB handbrake, Y reset, Start pause, Back/LB or the camera icon cycles camera views."))
 			list.add_child(_note("Keyboard: W/S or arrows, Space handbrake, R reset, C camera, Esc pause."))
 		2:
 			list.add_child(_choice("Haptics", ["Off", "On"], 1 if Settings.g("haptics") else 0, func(i): Settings.set_value("haptics", i == 1)))
@@ -901,9 +910,18 @@ func _on_race_finished(result: Dictionary) -> void:
 			_champ_results(result)
 
 
+func _results_back() -> void:
+	await _start_attract(Game.stage_index)
+	if Game.mode == Game.Mode.CHAMPIONSHIP:
+		_title()
+	else:
+		_stage_select()
+
+
 func _tt_results(r: Dictionary) -> void:
 	var record := Game.submit_time(int(r["stage"]), float(r["player_time"]))
 	var pg := _page("Stage complete", Callable())
+	_back = _results_back
 	var content: VBoxContainer = pg["content"]
 	var sd: Dictionary = Catalog.stages()[int(r["stage"])]
 	content.add_child(PaperTheme.tag(Catalog.stage_title(int(r["stage"])), 30))
@@ -958,6 +976,7 @@ func _results_table(parent: Control, rows: Array, with_points: bool) -> void:
 
 func _race_results(r: Dictionary) -> void:
 	var pg := _page("Race result", Callable())
+	_back = _results_back
 	var content: VBoxContainer = pg["content"]
 	var rows: Array = r["rows"]
 	var pos := 1
@@ -982,6 +1001,7 @@ func _race_results(r: Dictionary) -> void:
 func _champ_results(r: Dictionary) -> void:
 	var se := Game.current_series()
 	var pg := _page("%s  -  Round %d of %d" % [se["name"], Game.champ_round, Game.champ_total_rounds()], Callable())
+	_back = _results_back
 	var content: VBoxContainer = pg["content"]
 	var cols := HBoxContainer.new()
 	cols.add_theme_constant_override("separation", 24)

@@ -153,6 +153,22 @@ func _setup_input() -> void:
 	_action("camera", 0.5)
 	_key("camera", KEY_C); _joy_btn("camera", JOY_BUTTON_BACK); _joy_btn("camera", JOY_BUTTON_LEFT_SHOULDER)
 
+	# Bind the standard Android gamepad layout for every device ID, including hot-plugged pads.
+	for action in ["ui_accept", "ui_cancel", "ui_left", "ui_right", "ui_up", "ui_down"]:
+		for event in InputMap.action_get_events(action):
+			if event is InputEventJoypadButton or event is InputEventJoypadMotion:
+				InputMap.action_erase_event(action, event)
+	_joy_btn("ui_accept", JOY_BUTTON_A)
+	_joy_btn("ui_cancel", JOY_BUTTON_B)
+	_joy_btn("ui_left", JOY_BUTTON_DPAD_LEFT)
+	_joy_btn("ui_right", JOY_BUTTON_DPAD_RIGHT)
+	_joy_btn("ui_up", JOY_BUTTON_DPAD_UP)
+	_joy_btn("ui_down", JOY_BUTTON_DPAD_DOWN)
+	_joy_axis("ui_left", JOY_AXIS_LEFT_X, -1.0)
+	_joy_axis("ui_right", JOY_AXIS_LEFT_X, 1.0)
+	_joy_axis("ui_up", JOY_AXIS_LEFT_Y, -1.0)
+	_joy_axis("ui_down", JOY_AXIS_LEFT_Y, 1.0)
+
 	# Menus: shoulder buttons page through tabs.
 	_action("ui_tab_prev", 0.5)
 	_key("ui_tab_prev", KEY_Q); _joy_btn("ui_tab_prev", JOY_BUTTON_LEFT_SHOULDER)

@@ -49,7 +49,7 @@ func _layout() -> void:
 
 
 func _input(event: InputEvent) -> void:
-	if not visible:
+	if not is_visible_in_tree():
 		return
 	if event is InputEventScreenTouch:
 		if event.pressed:

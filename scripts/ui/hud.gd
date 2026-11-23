@@ -1,6 +1,7 @@
 class_name Hud
 extends Control
 
+signal reset_requested
 signal camera_pressed
 ## In-race overlay drawn as small paper tags: stage time, position, speed and gear, a co-driver
 ## pace-note card for the next bend, a stage progress strip and big countdown / finish cards.
@@ -11,6 +12,7 @@ var speed_tag: PanelContainer
 var pos_tag: PanelContainer
 var fps_label: Label
 var center_card: PanelContainer
+var reset_button := Button.new()
 var hint_tag: PanelContainer
 var pace: PaceNote
 var strip: ProgressStrip
@@ -83,6 +85,19 @@ func _ready() -> void:
 	hint_tag.anchor_bottom = 0.62
 	hint_tag.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	hint_tag.visible = false
+	reset_button.text = "Reset to road"
+	reset_button.focus_mode = Control.FOCUS_NONE
+	reset_button.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS
+	add_child(reset_button)
+	reset_button.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	reset_button.anchor_top = 0.62
+	reset_button.anchor_bottom = 0.62
+	reset_button.offset_left = -130
+	reset_button.offset_right = 130
+	reset_button.offset_top = -34
+	reset_button.offset_bottom = 34
+	reset_button.hide()
+	reset_button.pressed.connect(func(): reset_requested.emit())
 	fps_label = Label.new()
 	fps_label.position = Vector2(24, 140)
 	fps_label.add_theme_font_size_override("font_size", 18)
@@ -135,6 +150,19 @@ func show_center(text: String, dur := 1.0, size := 72) -> void:
 
 var _hint_t := 0.0
 var _cam_btn: Control
+
+
+# A second finger can reset while the first is still holding a pedal. Mouse
+# emulation on Android only forwards the primary finger to regular buttons.
+func _input(event: InputEvent) -> void:
+	if event is InputEventScreenTouch and event.pressed and reset_button.is_visible_in_tree():
+		if reset_button.get_global_rect().has_point(event.position):
+			get_viewport().set_input_as_handled()
+			reset_requested.emit()
+
+
+func show_reset(active: bool) -> void:
+	reset_button.visible = active
 
 
 func set_controls_visible(v: bool) -> void:

@@ -52,6 +52,7 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 	var style: String = car.get("style", "evo")
 	var P := shape(style)
 	var body_c: Color = car["body"]
+	var paint: String = car.get("paint", "sweep")
 	var acc: Color = car["accent"]
 	var stripe: Color = car["stripe"]
 	var L: float = P["L"]
@@ -127,7 +128,14 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 				b.card(PaperKit.rect(0.09, cab_h * 0.75, -bz * xs, top_y + 0.04), side * Transform3D(Basis(), Vector3(0, 0, 0.02)), cab_col, {"thick": 0.01, "edge": 0.0, "lip": 0.0, "sides": false})
 			var body_side := Transform3D(Basis(Vector3.UP, xs * PI * 0.5), Vector3(xs * (W * 0.5 + 0.012), 0, 0))
 			# Livery stripe, door line, roundel with the number, sponsor patches.
-			b.card(PaperKit.rrect(L * 0.9, low * 0.16, 0.04, 0, y0 + low * 0.38), body_side, stripe, {"thick": 0.012, "edge": 0.02, "lip": 0.0})
+			var span := wzf - arch_r
+			var rise := low * 0.30 if paint == "sweep" else 0.0
+			var flank := PackedVector2Array([Vector2(-span * xs, y0 + low * 0.28), Vector2(span * xs, y0 + low * 0.28 + rise),
+				Vector2(span * xs, y0 + low * 0.48 + rise), Vector2(-span * xs, y0 + low * 0.43)])
+			b.card(flank, body_side, stripe, {"thick": 0.008, "edge": 0.0, "lip": 0.0})
+			if paint == "sweep":
+				var upper := PackedVector2Array([flank[3], flank[2], flank[2] + Vector2(0, low * 0.05), flank[3] + Vector2(0, low * 0.05)])
+				b.card(upper, body_side.translated_local(Vector3(0, 0, 0.006)), acc, {"thick": 0.005, "edge": 0.0, "lip": 0.0})
 			var dz := (cab_r + cab_f) * 0.5
 			b.card(PaperKit.rect(0.025, low * 0.7, -dz * xs + 0.6, y0 + 0.12), body_side * Transform3D(Basis(), Vector3(0, 0, 0.015)), body_c.darkened(0.35), {"thick": 0.005, "edge": 0.0, "lip": 0.0, "sides": false})
 			b.card(PaperKit.circle(low * 0.25, -dz * xs, y0 + low * 0.62, 14), body_side * Transform3D(Basis(), Vector3(0, 0, 0.02)), PaperKit.CREAM, {"thick": 0.012, "edge": 0.02, "lip": 0.0})
@@ -175,8 +183,11 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 		# Bonnet details: a centre stripe, a scoop, louvres.
 		var bon_mid := (L * 0.5 + bon_end) * 0.5
 		var lay := Basis(Vector3.RIGHT, -PI * 0.5)
-		if float(P["bon"]) > 0.6:
-			b.card(PaperKit.rect(W * 0.2, float(P["bon"]) * 0.8, 0, -bon_mid - float(P["bon"]) * 0.4), Transform3D(lay, Vector3(0, top_y + 0.012, 0)), acc, {"thick": 0.012, "edge": 0.02, "lip": 0.0})
+		# Lay the print against the folded bonnet, including the short Mini bonnet.
+		var rear_z := maxf(bon_end, cab_f)
+		var tip_z := L * 0.5 - 0.25
+		var rear_y := lerpf(top_y, top_y - 0.04, (rear_z - bon_end) / (tip_z - bon_end)) + 0.006
+		_bonnet_print(b, paint, acc, W, rear_z, tip_z, rear_y, top_y - 0.034)
 		if P.get("scoop", false):
 			b.slab(Vector3(-0.28, top_y + 0.02, bon_mid + 0.25), Vector3(0.28, top_y + 0.02, bon_mid + 0.25), Vector3(0.24, top_y + 0.13, bon_mid - 0.2), Vector3(-0.24, top_y + 0.13, bon_mid - 0.2), 0.05, body_c.darkened(0.08))
 			b.card(PaperKit.rrect(0.4, 0.08, 0.03, 0, 0), Transform3D(Basis(), Vector3(0, top_y + 0.03, bon_mid + 0.26)), ink, {"thick": 0.01, "edge": 0.0, "lip": 0.0})
@@ -256,6 +267,15 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 		head = Vector3(0.0, y0 + 1.0, 0.0)
 	return {"root": root, "body": body, "wheels": wheels, "length": L, "width": W, "wheel_r": wr, "head": head,
 		"lamp": Vector3(0, y0 + float(P["nose"]) * 0.7, L * 0.5 + 0.1), "style": style}
+
+
+static func _bonnet_print(b: PaperKit.Builder, paint: String, acc: Color, width: float, rear_z: float, tip_z: float, rear_y: float, tip_y: float) -> void:
+	var bands := [Vector2(-0.42, 0.42)] if paint == "safari" else [Vector2(-0.10, 0.10)]
+	if paint == "twins":
+		bands = [Vector2(0.13, 0.20), Vector2(0.225, 0.265)]
+	for band: Vector2 in bands:
+		b.quad(Vector3(width * band.x, rear_y, rear_z), Vector3(width * band.y, rear_y, rear_z),
+			Vector3(width * band.y, tip_y, tip_z), Vector3(width * band.x, tip_y, tip_z), Vector3.UP, PaperKit.lin(acc))
 
 
 ## Cut-stencil numerals printed directly into the body mesh.
@@ -339,7 +359,8 @@ static func _buggy(b: PaperKit.Builder, P: Dictionary, body_c: Color, acc: Color
 	b.box(Vector3(0, y0 + 0.45, -0.2), Vector3(0.6, 0.5, 0.5), I, ink)
 	b.box(Vector3(0, y0 + 0.4, -1.15), Vector3(0.8, 0.5, 0.7), I, Color("#8a8a8a"), Color("#6a6a6a"))
 	b.slab(Vector3(-W * 0.3, top + 0.04, 0.2), Vector3(W * 0.3, top + 0.04, 0.2), Vector3(W * 0.3, top + 0.04, -0.6), Vector3(-W * 0.3, top + 0.04, -0.6), 0.04, stripe)
-	b.box(Vector3(0, y0 + 0.7, -1.55), Vector3(0.7, 0.7, 0.18), I, ink)
+	var spare := Transform3D(Basis(Vector3.UP, PI), Vector3(0, y0 + 0.72, -1.49))
+	_spare_wheel(b, spare, float(P["wr"]) * 0.88, acc)
 	# Webbing over the open seat and cooling fins on the exposed engine.
 	for sx: float in [-0.14, 0.14]:
 		b.box(Vector3(sx, y0 + 0.45, 0.06), Vector3(0.07, 0.46, 0.025), I, stripe)
@@ -364,8 +385,16 @@ static func _truck_bed(b: PaperKit.Builder, P: Dictionary, body_c: Color, acc: C
 	for xs in [1.0, -1.0]:
 		b.box(Vector3(xs * W * 0.45, top_y + 0.2, bed_front - bed_len * 0.5), Vector3(0.1, 0.4, bed_len), Transform3D(), body_c.darkened(0.08))
 	b.box(Vector3(0, top_y + 0.2, -L * 0.5 + 0.05), Vector3(W * 0.9, 0.4, 0.1), Transform3D(), body_c.darkened(0.08))
-	b.box(Vector3(0, top_y + 0.32, bed_front - bed_len * 0.5), Vector3(1.1, 0.4, 1.1), Transform3D(), Color("#2b2420"))
-	b.card(PaperKit.circle(0.28, 0, 0, 10), Transform3D(Basis(Vector3.RIGHT, -PI * 0.5), Vector3(0, top_y + 0.53, bed_front - bed_len * 0.5)), acc, {"thick": 0.02, "edge": 0.02, "lip": 0.0})
+	var spare := Transform3D(Basis(Vector3.RIGHT, -PI * 0.5), Vector3(0, top_y + 0.15, bed_front - bed_len * 0.5))
+	_spare_wheel(b, spare, float(P["wr"]), acc)
+
+
+static func _spare_wheel(b: PaperKit.Builder, mount: Transform3D, radius: float, hub: Color) -> void:
+	b.card(PaperKit.circle(radius, 0, 0, 12), mount, Color("#302b28"), {"thick": 0.24, "edge": 0.04, "lip": 0.02})
+	b.card(PaperKit.circle(radius * 0.51, 0, 0, 10), mount.translated_local(Vector3(0, 0, 0.13)), hub, {"thick": 0.015, "edge": 0.02, "lip": 0.02})
+	for tilt: float in [-0.56, 0.56]:
+		var strap := mount * Transform3D(Basis(Vector3.BACK, tilt), Vector3(0, 0, 0.145))
+		b.box(Vector3.ZERO, Vector3(0.05, radius * 1.94, 0.016), strap, PaperKit.KRAFT)
 
 
 static func _wheel_mesh(hub: Color, r: float, width: float) -> ArrayMesh:
@@ -472,6 +501,7 @@ static func build_cockpit(car: Dictionary, model: Dictionary, mat: Material) -> 
 		b.quad(Vector3(-W * 0.47, floor_y, cab_f + 0.35), Vector3(W * 0.47, floor_y, cab_f + 0.35), Vector3(W * 0.47, top_y + 0.02, cab_f + 0.35), Vector3(-W * 0.47, top_y + 0.02, cab_f + 0.35), Vector3.FORWARD, Lt.call(dark))
 		# Bonnet seen through the screen, then the dashboard and cowl.
 		b.box(Vector3(0, top_y - 0.05, (cab_f + L * 0.5) * 0.5), Vector3(W, 0.1, L * 0.5 - cab_f), I, body_c, body_c.lightened(0.05))
+		_bonnet_print(b, car.get("paint", "sweep"), car["accent"], W, maxf(cab_f, L * 0.5 - float(P["bon"])), L * 0.5 - 0.25, top_y + 0.006, top_y + 0.006)
 		b.box(Vector3(0, top_y - 0.05, cab_f - 0.05), Vector3(W * 0.9, 0.18, 0.5), I, Color("#4e4640"), Color("#6a6058"))
 		b.box(Vector3(0, top_y + 0.03, dash_z + 0.05), Vector3(W * 0.86, 0.12, 0.36), I, Color("#4e4640"), Color("#5e564e"))
 		# Rear-view mirror, seats, centre console and a roll cage.

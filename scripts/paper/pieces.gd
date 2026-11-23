@@ -6,12 +6,12 @@ extends RefCounted
 
 const SKIN := [Color("#e8c4a0"), Color("#c99470"), Color("#8f5f42"), Color("#f0d2b4")]
 ## Fictional sponsors (no real brands).
-const SPONSORS := [["FOLDLINE OIL", "#c8553d", "#efe3c8"], ["CARDSTOCK TYRES", "#2b2b2b", "#e8b04a"], ["REPOSHELF.CO.UK", "#3f6fa8", "#efe3c8"],
-	["PULPWORKS", "#2f8a8a", "#efe3c8"], ["MARBLIX", "#e8b04a", "#2b2b2b"], ["ORIGAMI AIR", "#efe3c8", "#c8553d"]]
+const SPONSORS := [["Polyform Studio", "#c8553d", "#efe3c8"], ["Paper Rally", "#2b2b2b", "#e8b04a"], ["REPOSHELF.CO.UK", "#3f6fa8", "#efe3c8"],
+	["Plamora Music Vis", "#2f8a8a", "#efe3c8"], ["MARBLIX", "#e8b04a", "#2b2b2b"], ["ORIGAMI AIR", "#efe3c8", "#c8553d"]]
 const CLOTHES := [Color("#c8553d"), Color("#3f6fa8"), Color("#e8b04a"), Color("#2f8a8a"), Color("#7a3b3b"), Color("#e2763a"), Color("#5f7f4a")]
 
 
-static func make(kind: String, pal: Dictionary, seed_v: int) -> Dictionary:
+static func make(kind: String, pal: Dictionary, seed_v: int, variant := 0, region := "") -> Dictionary:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_v
 	match kind:
@@ -26,9 +26,9 @@ static func make(kind: String, pal: Dictionary, seed_v: int) -> Dictionary:
 		"rock": return rock(pal, rng)
 		"mesa": return mesa(pal, rng)
 		"cactus": return cactus(pal, rng)
-		"house": return house(pal, rng, false)
-		"cabin": return house(pal, rng, true)
-		"barn": return barn(pal, rng)
+		"house": return house(pal, rng, false, variant, region)
+		"cabin": return house(pal, rng, true, variant, region)
+		"barn": return barn(pal, rng, variant)
 		"bale": return bale(pal, rng)
 		"logs": return logs(pal, rng)
 		"tent": return tent(pal, rng)
@@ -286,18 +286,23 @@ static func _window(b: PaperKit.Builder, xf: Transform3D, x: float, y: float, w:
 	b.card(PaperKit.rect(w * 0.08, h * 0.72, x, y + h * 0.14), xf * Transform3D(Basis(), Vector3(0, 0, 0.035)), frame, {"thick": 0.01, "edge": 0.0, "lip": 0.0, "sides": false})
 
 
-static func house(pal: Dictionary, rng: RandomNumberGenerator, cabin: bool) -> Dictionary:
+static func house(pal: Dictionary, rng: RandomNumberGenerator, cabin: bool, variant: int, region: String) -> Dictionary:
 	var b := PaperKit.Builder.new(rng.randi())
 	var w := rng.randf_range(3.6, 4.6) * (0.8 if cabin else 1.0)
 	var d := rng.randf_range(3.0, 3.8) * (0.85 if cabin else 1.0)
 	var h := rng.randf_range(2.2, 2.8) * (0.85 if cabin else 1.0)
+	if region == "harbour":
+		h *= 1.45
+	elif region in ["moor", "cliffs"]:
+		w *= 1.18
+		h *= 0.88
 	var walls := [Color("#d98c6a"), Color("#7fa3b5"), Color("#e2c26a"), Color("#b7c99a"), Color("#efe3c8")]
 	var wall: Color = pal["wood"] if cabin else (pal["wall"] if rng.randf() < 0.4 else walls[rng.randi() % walls.size()])
 	var roof: Color = pal["roof"]
 	var snow_roof := cabin and Color(pal["ground"]).v > 0.85
 	var I := Transform3D()
 	b.box(Vector3(0, h * 0.5, 0), Vector3(w, h, d), I, wall)
-	var rh := h * 0.55
+	var rh := h * (0.78 if region in ["alpine", "taiga"] else (0.32 if region == "harbour" else 0.55))
 	# Gable ends.
 	var gable := PackedVector2Array([Vector2(-w * 0.5, 0), Vector2(w * 0.5, 0), Vector2(0, rh)])
 	for zs in [1.0, -1.0]:
@@ -321,6 +326,19 @@ static func house(pal: Dictionary, rng: RandomNumberGenerator, cabin: bool) -> D
 	for xs in [1.0, -1.0]:
 		var side := Transform3D(Basis(Vector3.UP, xs * PI * 0.5), Vector3(xs * (w * 0.5 + 0.02), 0, 0))
 		_window(b, side, 0, h * 0.35, d * 0.24, h * 0.32, PaperKit.CREAM)
+	match variant % 3:
+		1:
+			# A covered gallery, projected just beyond the gable.
+			for sx: float in [-0.38, 0.38]:
+				b.box(Vector3(sx * w, h * 0.33, d * 0.5 + 0.58), Vector3(0.12, h * 0.66, 0.12), I, pal["wood"])
+			b.slab(Vector3(-w * 0.44, h * 0.74, d * 0.5), Vector3(w * 0.44, h * 0.74, d * 0.5),
+				Vector3(w * 0.44, h * 0.66, d * 0.5 + 0.75), Vector3(-w * 0.44, h * 0.66, d * 0.5 + 0.75), 0.08, rc)
+		2:
+			# Shuttered loft above the door and a contrasting timber belt.
+			_window(b, front, 0, h + rh * 0.12, w * 0.20, rh * 0.38, PaperKit.CREAM)
+			for sx: float in [-0.14, 0.14]:
+				b.box(Vector3(sx * w, h + rh * 0.31, d * 0.5 + 0.05), Vector3(w * 0.07, rh * 0.38, 0.05), I, pal["wood"])
+			b.box(Vector3(0, h * 0.91, 0), Vector3(w + 0.06, 0.10, d + 0.06), I, pal["wood"])
 	# Chimney.
 	b.box(Vector3(w * 0.22, h + rh * 0.8, -d * 0.15), Vector3(0.45, rh * 0.9, 0.45), I, pal["stone"])
 	# Doorstep flower boxes.
@@ -331,11 +349,13 @@ static func house(pal: Dictionary, rng: RandomNumberGenerator, cabin: bool) -> D
 	return out
 
 
-static func barn(pal: Dictionary, rng: RandomNumberGenerator) -> Dictionary:
+static func barn(pal: Dictionary, rng: RandomNumberGenerator, variant: int) -> Dictionary:
 	var b := PaperKit.Builder.new(rng.randi())
 	var w := rng.randf_range(5.0, 6.0)
 	var d := rng.randf_range(4.0, 5.0)
-	var h := 3.0
+	var h := 3.6 if variant == 1 else 3.0
+	if variant == 2:
+		d *= 1.45
 	var red: Color = pal["roof"]
 	var I := Transform3D()
 	b.box(Vector3(0, h * 0.5, 0), Vector3(w, h, d), I, red)
@@ -354,6 +374,11 @@ static func barn(pal: Dictionary, rng: RandomNumberGenerator) -> Dictionary:
 	b.card(PaperKit.rect(w * 0.34, h * 0.72, 0, h * 0.04), front * Transform3D(Basis(), Vector3(0, 0, 0.03)), red.darkened(0.15), {"thick": 0.02, "edge": 0.02, "lip": 0.0})
 	var diag := PackedVector2Array([Vector2(-w * 0.17, h * 0.04), Vector2(-w * 0.12, h * 0.04), Vector2(w * 0.17, h * 0.72), Vector2(w * 0.12, h * 0.76)])
 	b.card(diag, front * Transform3D(Basis(), Vector3(0, 0, 0.05)), PaperKit.CREAM, {"thick": 0.02, "edge": 0.0, "lip": 0.0})
+	if variant == 1:
+		_window(b, front, 0, h + 0.1, w * 0.21, rh * 0.42, PaperKit.CREAM)
+	elif variant == 2:
+		for zs: float in [-0.27, 0.0, 0.27]:
+			b.box(Vector3(0, h * 0.52, zs * d), Vector3(w + 0.09, h, 0.12), I, red.darkened(0.2))
 	return _out(b, maxf(w, d) * 0.55, true, h + rh, 0.7)
 
 

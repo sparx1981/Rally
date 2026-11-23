@@ -56,12 +56,12 @@ func _build_library() -> void:
 	for k in all_kinds:
 		var vars: Array = []
 		var nv := 2 if k in ["house", "barn", "cabin", "mesa", "spectators"] else 3
-		if k == "house":
-			nv = 4
+		if k in ["house", "barn", "cabin"]:
+			nv = 4 if k == "house" else 3
 		if k in ["banner", "board", "flag"]:
 			nv = 6
 		for i in nv:
-			vars.append(Pieces.make(k, pal, seed_base * 31 + hash(k) % 1000 + i * 101))
+			vars.append(Pieces.make(k, pal, seed_base * 31 + hash(k) % 1000 + i * 101, i, stage_def["loc_id"]))
 		lib[k] = vars
 	lib["_chev_l"] = [{"mesh": Pieces.chevron(-1.0), "r": 1.3, "solid": true, "h": 2.0, "size": 0.4}]
 	lib["_chev_r"] = [{"mesh": Pieces.chevron(1.0), "r": 1.3, "solid": true, "h": 2.0, "size": 0.4}]
