@@ -64,6 +64,7 @@ func _build_library() -> void:
 		for i in nv:
 			vars.append(Pieces.make(k, pal, seed_base * 31 + hash(k) % 1000 + i * 101, i, stage_def["loc_id"]))
 		lib[k] = vars
+	lib["gate_fence"] = [Pieces.gate_fence(pal)]
 	lib["_chev_l"] = [{"mesh": Pieces.chevron(-1.0), "r": 1.3, "solid": true, "h": 2.0, "size": 0.4}]
 	lib["_chev_r"] = [{"mesh": Pieces.chevron(1.0), "r": 1.3, "solid": true, "h": 2.0, "size": 0.4}]
 
@@ -88,6 +89,10 @@ func _weighted_kinds() -> Array:
 func _place(density: float) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = int(stage_def["seed"]) * 13 + 5
+	var furniture_rng := RandomNumberGenerator.new()
+	furniture_rng.seed = int(stage_def["seed"]) + 805
+	_place_gates(furniture_rng)
+	_place_signage(furniture_rng)
 	var pool := _weighted_kinds()
 	var w := track.width
 	var big := ["house", "barn", "cabin", "mesa", "tent", "net_shed", "wood_store", "vine_row"]
@@ -142,7 +147,6 @@ func _place(density: float) -> void:
 			_try_add(shrub, pos, rng, br["s"], false)
 			t += rng.randf_range(3.5, 8.0) / clampf(density, 0.4, 1.0)
 	_place_hazard_props(rng)
-	_place_signage(rng)
 	if stage_def.has("forest"):
 		_place_forest(rng, density)
 	# Puddles on wet stages.
@@ -324,6 +328,33 @@ func _add(kind: String, vi: int, p: Vector2, yaw: float, s: float, rng: RandomNu
 
 ## Rally furniture: sponsor banners and billboards along the stage, warning boards before every
 ## hazard, distance boards each kilometre, flags at the start and finish.
+func _place_gates(rng: RandomNumberGenerator) -> void:
+	track.gate_distances.clear()
+	if not stage_def["loc_id"] in ["meadow", "autumn", "moor", "pinewood"]:
+		return
+	var s := 240.0
+	while s < track.finish_s - 120.0:
+		var i := track.index_at(s)
+		var straight := track.tang[i].dot(track.tang[track.index_at(s - 24.0)]) > 0.97
+		var clear := straight and track.barrier_at(s, 1.0).is_empty() and track.barrier_at(s, -1.0).is_empty()
+		clear = clear and track.bridge_at(s, 35.0).is_empty() and not track.overlaps_water(track.pts[i], 12.0)
+		for feature in track.features:
+			if s > feature["s0"] - 40 and s < feature["s1"] + 40:
+				clear = false
+				break
+		if not clear:
+			s += 32.0
+			continue
+		for side: float in [-1.0, 1.0]:
+			var axis := (side * track.nrm[i] + track.tang[i] * 0.38).normalized()
+			var start := track.pts[i] + track.nrm[i] * side * 2.45
+			for rail in 3:
+				var point := start + axis * (rail + 0.5)
+				_add("gate_fence", 0, point, atan2(-axis.y, axis.x), s, rng, true)
+		track.gate_distances.append(s)
+		s += rng.randf_range(850.0, 1400.0)
+
+
 func _place_signage(rng: RandomNumberGenerator) -> void:
 	var w := track.width
 	var s := 60.0
@@ -333,11 +364,13 @@ func _place_signage(rng: RandomNumberGenerator) -> void:
 		if track.feature_at(s, "splash", 10.0).is_empty() and track.heights[i] <= 0.0:
 			var pos := track.pts[i] + track.nrm[i] * side * (w * 0.5 + 3.4)
 			if track.clearance(pos) > w * 0.5 + 2.0:
-				_add("banner", rng.randi() % 6, pos, track.heading_at(i) + PI + side * 0.35, s, rng, false)
+				var behind_barrier := not track.barrier_at(s, side).is_empty()
+				var kind := "board" if behind_barrier else "banner"
+				_add(kind, rng.randi() % 6, pos, _sign_yaw(pos, s - 8.0), s, rng, behind_barrier)
 			if rng.randf() < 0.45:
 				var bp := track.pts[i] + track.nrm[i] * -side * (w * 0.5 + 8.0)
 				if track.clearance(bp) > w * 0.5 + 5.0:
-					_add("board", rng.randi() % 6, bp, track.heading_at(i) + PI - side * 0.3, s, rng, true)
+					_add("board", rng.randi() % 6, bp, _sign_yaw(bp, s - 15.0), s, rng, true)
 		side = -side
 		s += rng.randf_range(110.0, 170.0)
 	var words := {"jump": "JUMP", "crest": "CREST", "splash": "WATER", "chicane": "CHICANE"}
@@ -361,6 +394,12 @@ func _place_signage(rng: RandomNumberGenerator) -> void:
 				_add("flag", rng.randi() % 6, pos, track.heading_at(j) + PI * 0.5 * sd, track.dist[j], rng, false)
 	var fj := track.index_at(track.finish_s - 60.0)
 	_add("warn", 0, track.pts[fj] + track.nrm[fj] * (w * 0.5 + 1.8), track.heading_at(fj) + PI + 0.25, track.dist[fj], rng, true, "FINISH")
+
+
+## Aim the printed (+Z) face at the approaching lane, including through bends.
+func _sign_yaw(position_xz: Vector2, approach_s: float) -> float:
+	var face := track.point_at(approach_s) - position_xz
+	return atan2(face.x, face.y)
 
 
 ## Labels printed on a piece's cards.

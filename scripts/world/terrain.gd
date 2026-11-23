@@ -111,7 +111,7 @@ func is_sea(p: Vector2) -> bool:
 	return sea[z * nx + x] == 1
 
 
-func build(track: Track, hills: float, seed_v: int, roughness := 1.0, bank_height := 0.0) -> void:
+func build(track: Track, hills: float, seed_v: int, roughness := 1.0, bank_height := 0.0, drainage := false) -> void:
 	var b := track.bounds().grow(210.0)
 	# Keep the grid under ~240k cells whatever the stage size.
 	cell = maxf(5.0, sqrt(b.size.x * b.size.y / 240000.0))
@@ -209,11 +209,14 @@ func build(track: Track, hills: float, seed_v: int, roughness := 1.0, bank_heigh
 		var v := road_e[k] + nv * hills * away + absf(nv) * hills * 0.35 * away
 		# Hillside cuttings rise outside the verge. A broad noise mask leaves
 		# flat stretches between banks and avoids a continuous roadside berm.
-		if bank_height > 0.0 and d < hw + 36.0:
+		if (bank_height > 0.0 or drainage) and d < hw + 36.0:
 			var edge := d - hw
-			var sector := smoothstep(-0.20, 0.25, noise.get_noise_2d(wx + 907.0, wz - 671.0))
-			var shoulder := smoothstep(cell + 1.0, cell + 9.0, edge) * (1.0 - smoothstep(17.0, 35.0, edge))
+			var sector := smoothstep(-0.20, 0.25, noise.get_noise_2d(wx * 2.2 + 907.0, wz * 2.2 - 671.0))
+			var shoulder := smoothstep(3.8, 13.0, edge) * (1.0 - smoothstep(17.0, 35.0, edge))
 			v += bank_height * sector * shoulder
+			if drainage:
+				var hollow := smoothstep(2.8, 5.8, edge) * (1.0 - smoothstep(6.2, 11.0, edge))
+				v -= (0.55 + sector * 0.35) * hollow * smoothstep(-0.15, 0.24, noise.get_noise_2d(wx * 2.0 - 630.0, wz * 2.0))
 		if d < hw + 2.5:
 			v = road_e[k] - 0.1
 		h[k] = v
@@ -315,7 +318,7 @@ func carve_river(a: Vector2, b: Vector2, water_y: float) -> void:
 	var x1 := mini(nx - 1, int((hi.x - origin.x) / cell) + 1)
 	var z0 := maxi(0, int((lo.y - origin.y) / cell))
 	var z1 := mini(nz - 1, int((hi.y - origin.y) / cell) + 1)
-	var bed := water_y - 1.1
+	var bed := water_y - 1.65
 	for z in range(z0, z1 + 1):
 		for x in range(x0, x1 + 1):
 			var p := Vector2(origin.x + x * cell, origin.y + z * cell)

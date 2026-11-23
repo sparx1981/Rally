@@ -292,34 +292,66 @@ func sync_now() -> void:
 	rotation.y = h
 
 
-var _damage := 0
+var _pristine_shell: PackedVector3Array
+var _damage_count := 0
 
 
-## Visual damage: a crumpled, torn paper patch where the bodywork took a hit.
+## Press the actual bodywork and its printed detail inward around the contact point.
 func add_damage(at: Vector2, strength: float) -> void:
-	if _damage >= 14 or _body == null:
+	if _body == null or strength <= 4.0 or _damage_count >= 20:
 		return
-	_damage += 1
-	var local := global_transform.affine_inverse() * Vector3(at.x, global_position.y + 0.5, at.y)
-	var top: float = _model["lamp"].y + 0.1
-	var nrm := Vector3.ZERO
-	var p := local
-	if absf(local.x) / half_wid > absf(local.z) / half_len:
-		nrm = Vector3(signf(local.x), 0, 0)
-		p = Vector3(signf(local.x) * (half_wid + 0.025), clampf(local.y, 0.4, top), clampf(local.z, -half_len + 0.3, half_len - 0.3))
+	var shell := _body.get_child(0) as MeshInstance3D
+	var arrays := shell.mesh.surface_get_arrays(0)
+	var before: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var vertices := before.duplicate()
+	if _pristine_shell.is_empty():
+		_pristine_shell = vertices.duplicate()
+	var local := at - pos
+	var x := clampf(local.dot(right_axis()), -half_wid, half_wid)
+	var z := clampf(local.dot(fwd()), -half_len, half_len)
+	var side_hit := absf(x) / half_wid > absf(z) / half_len
+	var outward := Vector3(signf(x), 0, 0) if side_hit else Vector3(0, 0, signf(z))
+	var center := Vector3(x, _model["lamp"].y, z)
+	if side_hit:
+		center.x = outward.x * half_wid
 	else:
-		nrm = Vector3(0, 0, signf(local.z))
-		p = Vector3(clampf(local.x, -half_wid + 0.3, half_wid - 0.3), clampf(local.y, 0.4, top), signf(local.z) * (half_len + 0.025))
-	var b := PaperKit.Builder.new(_damage * 31)
-	var r := clampf(strength / 30.0, 0.12, 0.35)
-	var basis := Basis.looking_at(-nrm, Vector3.UP) if absf(nrm.y) < 0.9 else Basis()
-	b.card(PaperKit.blob(r, 0, 0, 7, 0.35, _damage * 7, 16), Transform3D(basis, p), PaperKit.KRAFT, {"thick": 0.015, "edge": 0.025, "lip": 0.0})
-	b.card(PaperKit.blob(r * 0.5, r * 0.15, -r * 0.1, 5, 0.4, _damage * 9, 12), Transform3D(basis, p + nrm * 0.012), Color("#8a7a68"), {"thick": 0.01, "edge": 0.0, "lip": 0.0})
-	var mi := MeshInstance3D.new()
-	mi.mesh = b.mesh()
-	mi.material_override = _mat
-	mi.rotation.z = randf_range(-0.5, 0.5)
-	_body.add_child(mi)
+		center.z = outward.z * half_len
+	var crush := clampf(strength * 0.012, 0.06, 0.24)
+	var radius := 0.75 + crush * 2.2
+	for i in vertices.size():
+		var original := _pristine_shell[i]
+		vertices[i] = _crush_point(original, vertices[i], center, outward, radius, crush)
+	for light in _brake_lamps + _rev_lamps:
+		if not light.has_meta("undamaged_position"):
+			light.set_meta("undamaged_position", light.position)
+		light.position = _crush_point(light.get_meta("undamaged_position"), light.position, center, outward, radius, crush)
+	arrays[Mesh.ARRAY_VERTEX] = vertices
+	var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+	for i in range(0, vertices.size(), 3):
+		if vertices[i] == before[i] and vertices[i + 1] == before[i + 1] and vertices[i + 2] == before[i + 2]:
+			continue
+		var normal := (vertices[i + 2] - vertices[i]).cross(vertices[i + 1] - vertices[i]).normalized()
+		if normal.length_squared() > 0.5:
+			if normal.dot(normals[i]) < 0.0:
+				normal = -normal
+			normals[i] = normal
+			normals[i + 1] = normal
+			normals[i + 2] = normal
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	var dented := ArrayMesh.new()
+	dented.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	shell.mesh = dented
+	_damage_count += 1
+
+
+func _crush_point(original: Vector3, current: Vector3, center: Vector3, outward: Vector3, radius: float, crush: float) -> Vector3:
+	var offset := original - center
+	offset.y *= 1.55
+	if offset.length_squared() >= radius * radius:
+		return current
+	var falloff := 1.0 - smoothstep(0.0, radius, offset.length())
+	var displacement := current - original + (-outward + Vector3.UP * 0.20) * crush * falloff
+	return original + displacement.limit_length(0.30)
 
 
 ## The in-car view rig (dashboard, wheel, rev needle), shown only in the cockpit camera.

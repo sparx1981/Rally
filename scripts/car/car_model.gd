@@ -16,12 +16,12 @@ const STYLES := {
 	"classic": {"L": 3.9, "W": 1.7, "low": 0.55, "nose": 0.32, "bon": 1.2, "tail": 0.38, "deck": 0.7, "cab": 0.5, "cab_f": 0.35, "cab_r": -1.05, "rake": 0.42, "back": 0.6, "ride": 0.3, "wr": 0.36, "wing": "none", "arches": false, "lamps": "round", "bumpers": true},
 	"mini": {"L": 3.1, "W": 1.6, "low": 0.62, "nose": 0.5, "bon": 0.55, "tail": 0.55, "deck": 0.18, "cab": 0.62, "cab_f": 0.55, "cab_r": -1.25, "rake": 0.22, "back": 0.08, "ride": 0.26, "wr": 0.3, "wing": "none", "arches": true, "lamps": "round", "pod": true, "bumpers": true, "roof2": true},
 	"escort": {"L": 4.0, "W": 1.72, "low": 0.62, "nose": 0.52, "bon": 1.15, "tail": 0.56, "deck": 0.8, "cab": 0.58, "cab_f": 0.55, "cab_r": -1.05, "rake": 0.32, "back": 0.3, "ride": 0.32, "wr": 0.36, "wing": "none", "arches": true, "lamps": "round", "pod": true, "bumpers": true},
-	"stratos": {"L": 3.7, "W": 1.9, "low": 0.5, "nose": 0.22, "bon": 1.2, "tail": 0.55, "deck": 0.7, "cab": 0.5, "cab_f": 0.5, "cab_r": -0.85, "rake": 0.85, "back": 0.3, "ride": 0.28, "wr": 0.4, "wing": "roof", "arches": true, "lamps": "popup", "louvres": true},
-	"groupb_rwd": {"L": 4.0, "W": 2.0, "low": 0.52, "nose": 0.28, "bon": 1.3, "tail": 0.48, "deck": 0.9, "cab": 0.44, "cab_f": 0.45, "cab_r": -0.9, "rake": 0.6, "back": 0.5, "ride": 0.3, "wr": 0.4, "wing": "big", "arches": true, "lamps": "rect", "louvres": true},
+	"stratos": {"L": 3.7, "W": 1.9, "low": 0.5, "nose": 0.22, "bon": 1.2, "tail": 0.55, "deck": 0.7, "cab": 0.5, "cab_f": 0.54, "cab_r": -1.0, "rake": 0.72, "back": 0.3, "ride": 0.28, "wr": 0.4, "wing": "roof", "arches": true, "lamps": "popup", "louvres": true},
+	"groupb_rwd": {"L": 4.0, "W": 2.0, "low": 0.52, "nose": 0.28, "bon": 1.3, "tail": 0.48, "deck": 0.9, "cab": 0.44, "cab_f": 0.50, "cab_r": -1.06, "rake": 0.56, "back": 0.5, "ride": 0.3, "wr": 0.4, "wing": "big", "arches": true, "lamps": "rect", "louvres": true},
 	"quattro": {"L": 4.15, "W": 1.98, "low": 0.62, "nose": 0.5, "bon": 1.2, "tail": 0.58, "deck": 0.6, "cab": 0.56, "cab_f": 0.55, "cab_r": -1.25, "rake": 0.4, "back": 0.25, "ride": 0.33, "wr": 0.41, "wing": "huge", "arches": true, "lamps": "rect", "pod": true},
 	"t16": {"L": 3.7, "W": 1.95, "low": 0.62, "nose": 0.48, "bon": 0.95, "tail": 0.56, "deck": 0.2, "cab": 0.56, "cab_f": 0.5, "cab_r": -1.35, "rake": 0.45, "back": 0.2, "ride": 0.33, "wr": 0.41, "wing": "roof", "arches": true, "lamps": "rect", "pod": true, "louvres": true},
-	"groups": {"L": 4.0, "W": 2.0, "low": 0.46, "nose": 0.22, "bon": 1.3, "tail": 0.5, "deck": 0.9, "cab": 0.42, "cab_f": 0.4, "cab_r": -0.8, "rake": 0.75, "back": 0.55, "ride": 0.28, "wr": 0.4, "wing": "big", "arches": true, "lamps": "rect", "louvres": true},
-	"gt4": {"L": 4.2, "W": 1.9, "low": 0.56, "nose": 0.36, "bon": 1.25, "tail": 0.5, "deck": 0.35, "cab": 0.48, "cab_f": 0.45, "cab_r": -1.15, "rake": 0.6, "back": 0.85, "ride": 0.31, "wr": 0.4, "wing": "boot", "arches": false, "lamps": "quad", "pod": true},
+	"groups": {"L": 4.0, "W": 2.0, "low": 0.46, "nose": 0.22, "bon": 1.3, "tail": 0.5, "deck": 0.9, "cab": 0.42, "cab_f": 0.6, "cab_r": -1.05, "rake": 0.66, "back": 0.48, "ride": 0.28, "wr": 0.4, "wing": "big", "arches": true, "lamps": "rect", "louvres": true},
+	"gt4": {"L": 4.2, "W": 1.9, "low": 0.56, "nose": 0.36, "bon": 1.25, "tail": 0.5, "deck": 0.35, "cab": 0.48, "cab_f": 0.48, "cab_r": -1.26, "rake": 0.57, "back": 0.68, "ride": 0.31, "wr": 0.4, "wing": "boot", "arches": false, "lamps": "quad", "pod": true},
 	"integrale": {"L": 3.9, "W": 1.95, "low": 0.62, "nose": 0.5, "bon": 1.0, "tail": 0.56, "deck": 0.15, "cab": 0.62, "cab_f": 0.55, "cab_r": -1.65, "rake": 0.38, "back": 0.12, "ride": 0.34, "wr": 0.41, "wing": "roof", "arches": true, "lamps": "quad", "pod": true, "louvres": true},
 	"impreza": {"L": 4.35, "W": 1.9, "low": 0.62, "nose": 0.48, "bon": 1.2, "tail": 0.58, "deck": 0.7, "cab": 0.56, "cab_f": 0.5, "cab_r": -1.2, "rake": 0.45, "back": 0.4, "ride": 0.34, "wr": 0.41, "wing": "boot_high", "arches": true, "lamps": "rect", "scoop": true, "pod": true},
 	"evo": {"L": 4.35, "W": 1.9, "low": 0.62, "nose": 0.46, "bon": 1.15, "tail": 0.6, "deck": 0.7, "cab": 0.56, "cab_f": 0.5, "cab_r": -1.25, "rake": 0.45, "back": 0.42, "ride": 0.33, "wr": 0.41, "wing": "big", "arches": true, "lamps": "rect", "scoop": true},
@@ -167,7 +167,12 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 				_:
 					b.card(PaperKit.rrect(W * 0.24, 0.13, 0.04, xs * W * 0.3, lamp_y - 0.04), front, Color("#fff0c8"), {"thick": 0.02, "edge": 0.025, "lip": 0.0, "glow": true})
 			b.card(PaperKit.rrect(W * 0.18, 0.12, 0.04, xs * W * 0.33, y0 + float(P["tail"]) * 0.7), back, Color("#d84a32"), {"thick": 0.02, "edge": 0.025, "lip": 0.0, "glow": true})
-		b.card(PaperKit.rrect(W * 0.3, 0.12, 0.04, 0, y0 + float(P["nose"]) * 0.42), front, Color("#3a3430"), {"thick": 0.02, "edge": 0.0, "lip": 0.0})
+		var grille := Transform3D(Basis(), Vector3(0, y0 + float(P["nose"]) * 0.38, L * 0.5 + 0.022))
+		b.box(Vector3.ZERO, Vector3(W * 0.30, 0.105, 0.022), grille, ink)
+		for slat in 3:
+			b.box(Vector3(0, (slat - 1) * 0.030, 0.015), Vector3(W * 0.28, 0.009, 0.009), grille, Color("#78746d"))
+		for sx: float in [-0.18, 0.18]:
+			b.card(PaperKit.circle(0.024, W * sx, 0, 6), grille, Color("#a8a298"), {"thick": 0.025, "edge": 0.0, "lip": 0.0})
 		# A pressed tail panel and cream rally plate sit between the rear lamps.
 		var plate_y := y0 + float(P["tail"]) * 0.60
 		var plate := Transform3D(back.basis, Vector3(0, plate_y, back.origin.z))
@@ -439,6 +444,8 @@ static func _wheel_mesh(hub: Color, r: float, width: float) -> ArrayMesh:
 	var recess := PaperKit.lin(Color("#403c39"))
 	for k in 5:
 		var angle := TAU * k / 5.0
+		var lug := Vector3(face_x + 0.012, sin(angle) * r * 0.18, cos(angle) * r * 0.18)
+		b.card(PaperKit.circle(r * 0.036, 0, 0, 6), Transform3D(side.basis, lug), Color("#9c9890"), {"thick": 0.015, "edge": 0.0, "lip": 0.0})
 		var pts := PackedVector3Array()
 		for polar: Vector2 in [Vector2(-0.20, 0.25), Vector2(-0.10, 0.44), Vector2(0.36, 0.44), Vector2(0.19, 0.25)]:
 			pts.append(Vector3(face_x, sin(angle + polar.x) * r * polar.y, cos(angle + polar.x) * r * polar.y))
@@ -465,6 +472,9 @@ static func build_cockpit(car: Dictionary, model: Dictionary, mat: Material) -> 
 	var I := Transform3D()
 	var dash_z := head.z + 0.55
 	var trip_display: Label3D
+	# Low roof prototypes need a smaller instrument pack to clear the sightline at 58°.
+	var dial_scale := clampf((cab_h - 0.42) * 1.8 + 0.66, 0.66, 1.0)
+	var dial_y := top_y + 0.15 - (1.0 - dial_scale) * 0.14
 	var speed_pivot: Node3D
 	var speed_mesh: MeshInstance3D
 	var gb := PaperKit.Builder.new(24)   # glass panes (drawn with a tinted see-through material)
@@ -565,8 +575,8 @@ static func build_cockpit(car: Dictionary, model: Dictionary, mat: Material) -> 
 		var dx: float = head.x
 		var cx: float = -head.x
 		# Instrument binnacle over the driver's dials, with a speedo and three small gauges.
-		var tilt := Basis(Vector3.RIGHT, -0.5) * Basis(Vector3.UP, PI)
-		var speed_face := Transform3D(tilt, Vector3(dx + 0.10, top_y + 0.15, dash_z - 0.035))
+		var tilt := (Basis(Vector3.RIGHT, -0.5) * Basis(Vector3.UP, PI)).scaled(Vector3.ONE * dial_scale)
+		var speed_face := Transform3D(tilt, Vector3(dx + 0.10 * dial_scale, dial_y, dash_z - 0.035))
 		b.card(PaperKit.circle(0.07, 0, 0, 14), speed_face, PaperKit.CREAM, {"thick": 0.01, "edge": 0.012, "lip": 0.0})
 		speed_pivot = Node3D.new()
 		speed_pivot.transform = speed_face.translated_local(Vector3(0, 0, 0.010))
@@ -582,16 +592,16 @@ static func build_cockpit(car: Dictionary, model: Dictionary, mat: Material) -> 
 			var tick := speed_face * Transform3D(Basis(Vector3.BACK, angle), Vector3.ZERO)
 			b.box(Vector3(0, 0.05, 0.007), Vector3(0.006, 0.012, 0.003), tick, ink)
 		for k in 3:
-			var gauge := Transform3D(tilt, Vector3(dx - 0.21 - k * 0.065, top_y + 0.13, dash_z - 0.03))
+			var gauge := Transform3D(tilt, Vector3(dx - (0.21 + k * 0.065) * dial_scale, dial_y - 0.02 * dial_scale, dash_z - 0.03))
 			b.card(PaperKit.circle(0.03, 0, 0, 10), gauge, Color("#e8dcc0"), {"thick": 0.008, "edge": 0.008, "lip": 0.0})
 			var pointer := gauge * Transform3D(Basis(Vector3.BACK, -0.65 + k * 0.58), Vector3.ZERO)
 			b.box(Vector3(0, 0.009, 0.006), Vector3(0.005, 0.024, 0.003), pointer, ink)
 		# Gauge pod standing on the dash behind the dials.
-		b.box(Vector3.ZERO, Vector3(0.56, 0.16, 0.05), Transform3D(tilt, Vector3(dx - 0.05, top_y + 0.14, dash_z + 0.04)), Color("#2e2a28"))
+		b.box(Vector3.ZERO, Vector3(0.56, 0.16, 0.05), Transform3D(tilt, Vector3(dx - 0.05 * dial_scale, dial_y - 0.01 * dial_scale, dash_z + 0.04)), Color("#2e2a28"))
 		# Shift light strip along the top of the binnacle.
 		for k in 5:
 			var lc: Color = [Color("#5fa860"), Color("#5fa860"), Color("#e8b04a"), Color("#e8b04a"), Color("#c8553d")][k]
-			b.box(Vector3(dx - 0.08 + k * 0.04, top_y + 0.215, dash_z + 0.0), Vector3(0.022, 0.014, 0.01), I, lc)
+			b.box(Vector3(dx + (k * 0.04 - 0.08) * dial_scale, dial_y + 0.065 * dial_scale, dash_z + 0.0), Vector3(0.022, 0.014, 0.01), I, lc)
 		# Co-driver: tripmaster with a lit display, intercom box and the pace-note book on the dash.
 		b.box(Vector3(cx, top_y + 0.1, dash_z - 0.02), Vector3(0.24, 0.1, 0.08), I, Color("#26282c"))
 		b.box(Vector3(cx, top_y + 0.11, dash_z - 0.065), Vector3(0.18, 0.045, 0.01), I, Color("#b8e0a0"), Color(-1, 0, 0), true)
@@ -645,10 +655,10 @@ static func build_cockpit(car: Dictionary, model: Dictionary, mat: Material) -> 
 	else:
 		b.box(Vector3(0, float(P["ride"]) + 0.55, dash_z), Vector3(W * 0.5, 0.12, 0.25), I, dark)
 	# Rev dial on the dash.
-	var dial_pos := Vector3(head.x - 0.08, top_y + 0.15, dash_z - 0.035)
+	var dial_pos := Vector3(head.x - 0.08 * dial_scale, dial_y, dash_z - 0.035)
 	if style == "buggy":
 		dial_pos = Vector3(head.x, float(P["ride"]) + 0.59, dash_z - 0.15)
-	var dial_face := Transform3D(Basis(Vector3.RIGHT, -0.5) * Basis(Vector3.UP, PI), dial_pos)
+	var dial_face := Transform3D((Basis(Vector3.RIGHT, -0.5) * Basis(Vector3.UP, PI)).scaled(Vector3.ONE * dial_scale), dial_pos)
 	b.card(PaperKit.circle(0.09, 0, 0, 16), dial_face, PaperKit.CREAM, {"thick": 0.01, "edge": 0.012, "lip": 0.0})
 	for k in 9:
 		var angle := lerpf(2.2, -1.8, k / 8.0)
@@ -711,6 +721,7 @@ static func build_cockpit(car: Dictionary, model: Dictionary, mat: Material) -> 
 	var needle := Node3D.new()
 	needle.position = dial_pos + Vector3(0, 0, -0.012)
 	needle.rotation.x = -0.5
+	needle.scale = Vector3.ONE * dial_scale
 	var nb := PaperKit.Builder.new(23)
 	nb.card(PaperKit.rect(0.012, 0.08, 0, 0), Transform3D(Basis(Vector3.UP, PI), Vector3.ZERO), Color("#c8553d"), {"thick": 0.004, "edge": 0.0, "lip": 0.0})
 	var nmi := MeshInstance3D.new()

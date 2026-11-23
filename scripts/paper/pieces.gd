@@ -43,6 +43,7 @@ static func make(kind: String, pal: Dictionary, seed_v: int, variant := 0, regio
 		"post": return marker_post(pal, rng)
 		"banner": return banner(rng)
 		"board": return billboard(rng)
+		"gate_fence": return gate_fence(pal)
 		"warn": return warn_sign(rng)
 		"km": return km_board(rng)
 		"flag": return feather_flag(rng)
@@ -618,6 +619,17 @@ static func banner(rng: RandomNumberGenerator) -> Dictionary:
 	out["labels"] = [{"text": sp[0], "pos": T * Vector3(0, 0.72, 0.035), "yaw": 0.0, "pitch": pitch, "size": 60, "color": fg}]
 	out["breakable"] = true
 	return out
+
+
+## One rail bay on either side of an open farm entrance.
+static func gate_fence(pal: Dictionary) -> Dictionary:
+	var b := PaperKit.Builder.new(31)
+	var wood: Color = pal["wood"]
+	b.box(Vector3(0, 0.62, 0), Vector3(0.15, 1.24, 0.15), Transform3D(), wood)
+	b.box(Vector3(0, 1.19, 0), Vector3(0.16, 0.11, 0.16), Transform3D(), PaperKit.CREAM)
+	for height: float in [0.38, 0.88]:
+		b.box(Vector3(0, height, -0.085), Vector3(1.0, 0.13, 0.08), Transform3D(), wood.lightened(0.13))
+	return _out(b, 0.46, true, 1.24, 0.55)
 
 
 ## A big roadside billboard, tilted back on struts.

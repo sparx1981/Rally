@@ -29,6 +29,7 @@ var features: Array = []             # {type: jump|crest|splash|chicane, s0, s1,
 var patches: Array = []              # {s0, s1, lat0, lat1, kind, grip, drag}
 var notes: Array = []                # pace notes: corners + features, sorted by s0
 var barriers: Array = []             # {s0, s1, side (+1 = +nrm side), kind: armco | fence | parapet}
+var gate_distances := PackedFloat32Array()
 var bridges: Array = []              # {s, kind: stone | covered, half, a, b (river ends), water_y}
 
 
@@ -648,6 +649,9 @@ func feature_at(s: float, type: String, margin := 0.0) -> Dictionary:
 
 ## Lane the AI should take through a chicane, or NAN.
 func forced_lane(s: float) -> float:
+	for gate in gate_distances:
+		if s >= gate - 35.0 and s <= gate + 6.0:
+			return 0.0
 	for f in features:
 		if f["type"] != "chicane":
 			continue
@@ -746,7 +750,7 @@ func build_bridges(seed_v: int, kinds: Array) -> void:
 				var u := absf(dist[i] - sc) / (half + 6.0)
 				if u < 1.0:
 					elev[i] += 0.85 * pow(cos(u * PI * 0.5), 2.0)
-		var water_y := base - (2.5 if kind == "stone" else 2.8)
+		var water_y := base - (3.6 if kind == "stone" else 3.9)
 		# River runs straight across the road; it stops before it meets another stretch of road.
 		var ends: Array = []
 		for side: float in [-1.0, 1.0]:

@@ -72,8 +72,8 @@ func build(stage_def: Dictionary, time_of_day := -1) -> void:
 	track.index_watercourses()
 	track.build_barriers(int(def["seed"]), def.get("barriers", []))
 	track.terrain = Terrain.new()
-	var bank_height: float = {"canyon": 4.8, "alpine": 5.6, "moor": 2.4, "autumn": 3.2}.get(def["loc_id"], 0.0)
-	track.terrain.build(track, float(ep.get("hills", 10.0)), int(def["seed"]) + 5, 1.0, bank_height)
+	var bank_height: float = {"canyon": 6.4, "alpine": 7.2, "moor": 3.2, "autumn": 4.2, "pinewood": 2.6}.get(def["loc_id"], 0.0)
+	track.terrain.build(track, float(ep.get("hills", 10.0)), int(def["seed"]) + 5, 1.0, bank_height, def["loc_id"] in ["meadow", "moor", "pinewood", "autumn"])
 	if def.has("coast"):
 		var cst: Dictionary = def["coast"]
 		var lo := INF
@@ -604,10 +604,10 @@ func _riverbanks(sheet: MeshInstance3D, length: float, width: float, seed_v: int
 				last.clear()
 				continue
 			var edge := _channel_x(z, side, width, seed_v)
-			var outer := Vector3(edge + side * 3.8, 0, z)
+			var outer := Vector3(edge + side * 5.4, 0, z)
 			var world := sheet.transform * outer
 			outer.y = track.terrain.height(Vector2(world.x, world.z)) - sheet.position.y - 0.15
-			var ridge := 0.48 + 0.17 * sin(z * 0.43 + side)
+			var ridge := (1.12 if ford_gap == 0.0 else 0.66) + 0.20 * sin(z * 0.43 + side)
 			# Short gravel bars build up on one bank, tapering back into the flow.
 			var shelf := pow(maxf(0, sin(z * 0.21 + seed_v % 9 + side * 2.0)), 3.0)
 			var toe := edge - side * (0.13 + shelf * 1.35)
@@ -820,11 +820,20 @@ func _make_coast_dressing() -> void:
 		var p: Vector2 = open_sea[rng.randi() % open_sea.size()]
 		b.card(PaperKit.rrect(rng.randf_range(1.5, 3.5), 0.22, 0.1, 0, -0.11), Transform3D(Basis(Vector3.UP, 0.5) * lay, Vector3(p.x + rng.randf_range(-3, 3), tr.sea_y + 0.04, p.y + rng.randf_range(-3, 3))), sea_color().lightened(0.25), {"thick": 0.02, "edge": 0.0, "lip": 0.0, "sides": false})
 	# Boats out on the water.
-	open_sea.shuffle()
-	var nb := mini(open_sea.size(), 6 + int(track.length / 1500.0))
-	for i in nb:
-		var p: Vector2 = open_sea[i]
-		_boat(b, Vector3(p.x, tr.sea_y, p.y), rng.randf() * TAU, rng, rng.randf() < 0.5)
+	var station := 75.0
+	while station < track.finish_s:
+		var i := track.index_at(station)
+		var placed := false
+		for offset: float in [38.0, 50.0, 64.0, 80.0]:
+			for side: float in [-1.0, 1.0]:
+				var p := track.pts[i] + track.nrm[i] * offset * side
+				if _boat_fits(p):
+					_boat(b, Vector3(p.x, tr.sea_y, p.y), rng.randf() * TAU, rng, rng.randf() < 0.56)
+					placed = true
+					break
+			if placed:
+				break
+		station += rng.randf_range(230.0, 410.0) if placed else 45.0
 	# Lighthouses on headlands: land cells beside the sea, well clear of the road.
 	if cst.get("lighthouse", false):
 		var placed: Array = []
@@ -878,13 +887,15 @@ func _make_coast_dressing() -> void:
 			var yaw := atan2(out.x, out.y)
 			var qb := Basis(Vector3.UP, yaw)
 			var qc := Vector3(p.x, tr.sea_y, p.y) + Vector3(out.x, 0, out.y) * 6.0
-			b.box(qc + Vector3(0, 0.4, 0), Vector3(4.0, 2.2, 26.0), Transform3D(qb, Vector3.ZERO), Color("#b8b2a4"), Color("#cfc8b8"))
+			b.box(Vector3(0, 0.4, 0), Vector3(4.0, 2.2, 26.0), Transform3D(qb, qc), Color("#b8b2a4"), Color("#cfc8b8"))
 			for k in 4:
 				var bollard := qc + qb * Vector3(1.6, 1.7, -9.0 + k * 6.0)
 				b.box(bollard, Vector3(0.3, 0.5, 0.3), Transform3D(), Color("#3a3a40"))
 			for side in [-1.0, 1.0]:
 				for k in 2:
 					var bp := qc + qb * Vector3(side * 4.4, 0.0, -6.0 + k * 9.0)
+					if not _boat_fits(Vector2(bp.x, bp.z)):
+						continue
 					_boat(b, bp, yaw + rng.randf_range(-0.1, 0.1), rng, false)
 	var mi := MeshInstance3D.new()
 	mi.mesh = b.mesh()
@@ -893,26 +904,36 @@ func _make_coast_dressing() -> void:
 	add_child(mi)
 
 
+func _boat_fits(p: Vector2) -> bool:
+	for point: Vector2 in [Vector2.ZERO, Vector2(-4, -4), Vector2(-4, 4), Vector2(4, -4), Vector2(4, 4)]:
+		if not track.terrain.is_sea(p + point) or track.terrain.height(p + point) >= track.terrain.sea_y:
+			return false
+	return true
+
+
 ## A little paper fishing boat (or sailing dinghy) sitting on the water.
 func _boat(b: PaperKit.Builder, at: Vector3, yaw: float, rng: RandomNumberGenerator, sail: bool) -> void:
 	var cols := [Color("#c8553d"), Color("#3f6fa8"), Color("#e8b04a"), Color("#2f8a8a"), Color("#ece6d8")]
 	var hull: Color = cols[rng.randi() % cols.size()]
 	var L := rng.randf_range(4.5, 7.0)
 	var bas := Basis(Vector3.UP, yaw)
+	var boat := Transform3D(bas, at)
 	var xf := Transform3D(bas * Basis(Vector3.UP, PI * 0.5), at)
 	# Hull: a side-profile prism (bow raked up), extruded across the beam.
 	var prof := PackedVector2Array([Vector2(-L * 0.5, 0.75), Vector2(-L * 0.42, -0.15), Vector2(L * 0.3, -0.15), Vector2(L * 0.5, 0.95)])
 	b.card(prof, xf, hull, {"thick": 1.9, "edge": 0.06, "lip": 0.1, "back": hull})
-	b.box(at + bas * Vector3(0, 0.8, 0), Vector3(1.6, 0.06, L * 0.85), Transform3D(), Color("#d8c8a8"))
+	b.box(Vector3(0, 0.8, 0), Vector3(1.6, 0.06, L * 0.85), boat, Color("#d8c8a8"))
 	if sail:
-		b.box(at + bas * Vector3(0, 3.0, 0.3), Vector3(0.1, 4.4, 0.1), Transform3D(), Color("#6e5038"))
+		b.box(Vector3(0, 3.0, 0.3), Vector3(0.1, 4.4, 0.1), boat, Color("#6e5038"))
 		var sp := PackedVector2Array([Vector2(0, 1.2), Vector2(0, 5.0), Vector2(-L * 0.4, 1.3)])
 		b.card(sp, Transform3D(bas * Basis(Vector3.UP, PI * 0.5), at + bas * Vector3(0, 0, 0.3)), Color("#f4efe2"), {"thick": 0.02, "edge": 0.03, "lip": 0.0})
+		var jib := PackedVector2Array([Vector2(0.18, 1.25), Vector2(0.18, 4.7), Vector2(L * 0.36, 1.45)])
+		b.card(jib, xf.translated_local(Vector3(0, 0, 0.04)), hull.lightened(0.2), {"thick": 0.02, "edge": 0.025, "lip": 0.0})
 	else:
 		# Wheelhouse and a short mast.
-		b.box(at + bas * Vector3(0, 1.45, -L * 0.1), Vector3(1.3, 1.3, 1.5), Transform3D(bas, Vector3.ZERO), Color("#ece6d8"), Color("#4a5a6a"))
-		b.box(at + bas * Vector3(0, 1.6, -L * 0.1 - 0.76), Vector3(0.9, 0.4, 0.02), Transform3D(bas, Vector3.ZERO), Color("#2a3440"))
-		b.box(at + bas * Vector3(0, 2.6, L * 0.2), Vector3(0.08, 2.6, 0.08), Transform3D(), Color("#6e5038"))
+		b.box(Vector3(0, 1.45, -L * 0.1), Vector3(1.3, 1.3, 1.5), boat, Color("#ece6d8"), Color("#4a5a6a"))
+		b.box(Vector3(0, 1.6, -L * 0.1 - 0.76), Vector3(0.9, 0.4, 0.02), boat, Color("#2a3440"))
+		b.box(Vector3(0, 2.6, L * 0.2), Vector3(0.08, 2.6, 0.08), boat, Color("#6e5038"))
 
 
 ## A striped lighthouse with a lamp room.

@@ -19,6 +19,8 @@ var _bar: HBoxContainer
 var _toast: PanelContainer
 var _touches := {}
 var _pinch := 0.0
+var _restore_tap := Vector2.INF
+var _hidden_by_user := false
 
 
 func setup(c: Camera3D, t: Node3D, p: ShaderMaterial) -> void:
@@ -50,7 +52,7 @@ func _ready() -> void:
 		b.add_theme_font_size_override("font_size", 20)
 		b.pressed.connect(spec[1])
 		_bar.add_child(b)
-	_toast = PaperTheme.tag("Photo mode: drag to orbit, pinch or scroll to zoom", 20)
+	_toast = PaperTheme.tag("Drag to orbit · Pinch or scroll to zoom\nTap the picture or press A to show hidden controls", 20)
 	add_child(_toast)
 	_toast.position = Vector2(20, 20)
 	await get_tree().process_frame
@@ -75,8 +77,17 @@ func _apply() -> void:
 
 
 func _hide_ui() -> void:
-	_bar.visible = not _bar.visible
+	_hidden_by_user = true
+	_restore_tap = Vector2.INF
+	_bar.hide()
 	_toast.visible = false
+
+
+func _restore_ui() -> void:
+	_hidden_by_user = false
+	_restore_tap = Vector2.INF
+	_bar.show()
+	(_bar.get_child(1) as Button).grab_focus()
 
 
 func _save() -> void:
@@ -106,9 +117,8 @@ func _close() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not _bar.visible and event.is_action_pressed("ui_accept"):
-		_bar.show()
-		(_bar.get_child(1) as Button).grab_focus()
+	if _hidden_by_user and event.is_action_pressed("ui_accept"):
+		_restore_ui()
 		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed("ui_cancel") or event.is_action_pressed("pause"):
 		get_viewport().set_input_as_handled()
@@ -116,6 +126,16 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _gui_input(event: InputEvent) -> void:
+	if _hidden_by_user and event.device != InputEvent.DEVICE_ID_EMULATION:
+		if event is InputEventScreenTouch or (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT):
+			if event.pressed:
+				_restore_tap = event.position if _touches.is_empty() else Vector2.INF
+			elif _restore_tap.distance_to(event.position) < 12.0:
+				_restore_ui()
+			else:
+				_restore_tap = Vector2.INF
+		elif (event is InputEventScreenDrag or event is InputEventMouseMotion) and _restore_tap.distance_to(event.position) >= 12.0:
+			_restore_tap = Vector2.INF
 	if event is InputEventMouseMotion and (event.button_mask & MOUSE_BUTTON_MASK_LEFT) and _touches.size() < 2:
 		_yaw -= event.relative.x * 0.008
 		_pitch = clampf(_pitch + event.relative.y * 0.006, 0.05, 1.45)
