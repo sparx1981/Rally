@@ -75,9 +75,23 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 	else:
 		# Body: a folded side profile with a sloped nose and tail.
 		var bon_end := L * 0.5 - float(P["bon"])
-		var prof := PackedVector2Array([Vector2(-L * 0.5, y0 + 0.05), Vector2(L * 0.5, y0 + 0.05), Vector2(L * 0.5, nose_y),
+		# Wheel arches cut into the profile, so the wheels sit in real openings and never pass
+		# through the bodywork (with room for steering and suspension travel).
+		var wzf := L * 0.5 - 0.8
+		var arch_r := minf(wr + 0.12, top_y - 0.08 - wr)
+		var yb := y0 + 0.05
+		var prof := PackedVector2Array([Vector2(-L * 0.5, yb)])
+		for wz in [-wzf, wzf]:
+			prof.append(Vector2(wz - arch_r, yb))
+			prof.append(Vector2(wz - arch_r, maxf(wr, yb)))
+			for k in range(1, 8):
+				var ang := PI - PI * k / 8.0
+				prof.append(Vector2(wz + cos(ang) * arch_r, wr + sin(ang) * arch_r))
+			prof.append(Vector2(wz + arch_r, maxf(wr, yb)))
+			prof.append(Vector2(wz + arch_r, yb))
+		prof.append_array(PackedVector2Array([Vector2(L * 0.5, yb), Vector2(L * 0.5, nose_y),
 			Vector2(L * 0.5 - 0.25, top_y - 0.04), Vector2(bon_end, top_y), Vector2(-L * 0.5 + float(P["deck"]), top_y),
-			Vector2(-L * 0.5 + 0.12, tail_y + 0.04), Vector2(-L * 0.5, tail_y)])
+			Vector2(-L * 0.5 + 0.12, tail_y + 0.04), Vector2(-L * 0.5, tail_y)]))
 		b.prism(prof, -W * 0.5, W * 0.5, I, body_c, {}, 1.05)
 		if style == "truck":
 			_truck_bed(b, P, body_c, acc)
@@ -156,11 +170,24 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 				b.card(PaperKit.rect(W * 0.34, 0.035, 0, 0), Transform3D(lay, Vector3(0, top_y + 0.018, bon_mid + 0.25 - k * 0.12)), ink, {"thick": 0.006, "edge": 0.0, "lip": 0.0, "sides": false})
 		b.card(PaperKit.rect(cw * 0.22, (cab_f - cab_r) * 0.6, 0, 0), Transform3D(lay, Vector3(0, top_y + cab_h + 0.012, (cab_f + cab_r) * 0.5 + (cab_f - cab_r) * 0.3)), acc, {"thick": 0.012, "edge": 0.02, "lip": 0.0})
 		# Box arches over the wheels.
-		if P.get("arches", false):
-			for xs in [1.0, -1.0]:
-				for zs in [1.0, -1.0]:
-					var az = zs * (L * 0.5 - 0.8)
-					b.box(Vector3(xs * (W * 0.5 + 0.05), y0 + low * 0.56, az), Vector3(0.14, low * 0.62, wr * 2.6), I, body_c.darkened(0.05), body_c)
+		# Arch trim: a flared ring round each opening (wider on the box-arch cars).
+		var flare := 0.16 if P.get("arches", false) else 0.07
+		for xs in [1.0, -1.0]:
+			var side_t := Transform3D(Basis(Vector3.UP, xs * PI * 0.5), Vector3(xs * (W * 0.5 + 0.02), 0, 0))
+			for zs in [1.0, -1.0]:
+				var az: float = zs * wzf
+				var ring := PackedVector2Array()
+				for k in 9:
+					var ang := PI - PI * k / 8.0
+					ring.append(Vector2(-(az + cos(ang) * (arch_r + flare)) * xs, wr + sin(ang) * (arch_r + flare)))
+				ring.append(Vector2(-(az + arch_r + flare) * xs, wr - 0.08))
+				ring.append(Vector2(-(az + arch_r) * xs, wr - 0.08))
+				for k in range(8, -1, -1):
+					var ang := PI - PI * k / 8.0
+					ring.append(Vector2(-(az + cos(ang) * arch_r) * xs, wr + sin(ang) * arch_r))
+				ring.append(Vector2(-(az - arch_r) * xs, wr - 0.08))
+				ring.append(Vector2(-(az - arch_r - flare) * xs, wr - 0.08))
+				b.card(ring, side_t, body_c.darkened(0.08), {"thick": 0.1 if flare > 0.1 else 0.05, "edge": 0.02, "lip": 0.0})
 		# Wings and spoilers.
 		_wing(b, P, L, W, top_y, cab_h, cab_r, acc, ink)
 		# Rally lamp pod.
@@ -190,7 +217,7 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 	var gold: bool = car.get("gold_wheels", false)
 	var wheel_mesh := _wheel_mesh(Color("#d9b24a") if gold else acc, wr, 0.42 if style in ["buggy", "truck", "suv"] else 0.3)
 	var wheels: Array = []
-	var wx := W * 0.5 - 0.12 + (0.2 if style == "buggy" else 0.0)
+	var wx := W * 0.5 - 0.1 + (0.2 if style == "buggy" else 0.0)
 	var wz := L * 0.5 - 0.8
 	for p in [Vector3(wx, wr, wz), Vector3(-wx, wr, wz), Vector3(wx, wr, -wz), Vector3(-wx, wr, -wz)]:
 		var steer := Node3D.new()

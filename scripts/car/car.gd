@@ -64,6 +64,10 @@ var _mat: Material
 var _cockpit: Dictionary = {}
 var _lights: Array = []
 var _prev_gh := 0.0
+var _slope := 0.0
+var _comp := 0.0
+var _comp_v := 0.0
+var _wheel_base: Array = []
 var _has_prev_gh := false
 
 var _body: Node3D
@@ -337,6 +341,7 @@ func step(dt: float) -> void:
 			airborne = false
 			if air_time > 0.12:
 				landed.emit(hit_v)
+				_comp_v -= clampf(hit_v * 0.12, 0.0, 1.2)   # body squats onto its springs
 	else:
 		# Ballistic if the ground drops away faster than gravity can pull the car down.
 		var predicted := y + vy * dt - 0.5 * GRAVITY * dt * dt
@@ -460,28 +465,40 @@ func _process(delta: float) -> void:
 
 func _sync_visual(delta: float) -> void:
 	position = Vector3(pos.x, y + (Stage.ROAD_Y if on_road else 0.0), pos.y)
-	rotation.y = h
 	if _contact:
 		# The printed contact shadow stays on the road / ground while the car flies.
 		_contact.position.y = track.surface_height(pos, s, lat) - y
 	if _body == null:
 		return
-	# Paper-toy body roll and pitch.
-	var lat_acc := yaw_rate * v_long
-	_roll = lerpf(_roll, clampf(lat_acc * 0.006, -0.07, 0.07), clampf(delta * 6.0, 0.0, 1.0))
-	var pitch_t := (throttle - brake) * -0.025
+	# The whole car (body and wheels together) follows the slope, so nothing separates on hills.
+	var slope_t := 0.0
 	if airborne:
-		pitch_t = clampf(-vy * 0.03, -0.25, 0.25)
-	elif absf(vy) > 0.5 and absf(v_long) > 1.0:
-		pitch_t = clampf(-vy / maxf(absf(v_long), 1.0), -0.3, 0.3)
-	_pitch = lerpf(_pitch, pitch_t, clampf(delta * 5.0, 0.0, 1.0))
-	_body.rotation = Vector3(_pitch, 0.0, _roll)
+		slope_t = clampf(-vy * 0.03, -0.25, 0.25)
+	else:
+		slope_t = -atan(clampf(track.grade_along(pos, s, lat, fwd()), -0.5, 0.5))
+	_slope = lerpf(_slope, slope_t, clampf(delta * 8.0, 0.0, 1.0))
+	rotation = Vector3(_slope, h, 0.0)
+	# Body on its springs: small roll and pitch about the axle line, plus compression on landings.
+	var lat_acc := yaw_rate * v_long
+	_roll = lerpf(_roll, clampf(lat_acc * 0.004, -0.035, 0.035), clampf(delta * 6.0, 0.0, 1.0))
+	_pitch = lerpf(_pitch, (throttle - brake) * -0.022, clampf(delta * 5.0, 0.0, 1.0))
+	_comp_v += (-_comp * 160.0 - _comp_v * 16.0) * delta
+	_comp = clampf(_comp + _comp_v * delta, -0.07, 0.04)
+	var pivot := Vector3(0, wheel_r, 0)
+	var bb := Basis.from_euler(Vector3(_pitch, 0.0, _roll))
+	_body.transform = Transform3D(bb, pivot - bb * pivot + Vector3(0, _comp, 0))
 	_spin += v_long * delta / wheel_r
 	if not _cockpit.is_empty() and _cockpit["root"].visible:
 		(_cockpit["wheel"] as Node3D).rotation.z = steer * 1.6
 		(_cockpit["needle"] as Node3D).rotation.z = 2.2 - clampf(rpm / 7500.0, 0.0, 1.0) * 4.0
+	# Suspension travel: wheels droop in the air and jiggle over rough ground, within the arches.
+	var rough := 0.0 if on_road else clampf(absf(v_long) / 25.0, 0.0, 1.0) * 0.025
 	for i in _wheels.size():
 		var wnode: Node3D = _wheels[i]
+		if _wheel_base.size() < _wheels.size():
+			_wheel_base.append(wnode.position)
+		var travel := -0.09 if airborne else sin(_spin * 0.7 + i * 1.9) * rough
+		wnode.position.y = lerpf(wnode.position.y, float(_wheel_base[i].y) + travel, clampf(delta * 12.0, 0.0, 1.0))
 		if i < 2:
 			wnode.rotation.y = -steer * 0.45
 		wnode.get_child(0).rotation.x = _spin
