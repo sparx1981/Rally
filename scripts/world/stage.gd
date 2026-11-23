@@ -150,7 +150,7 @@ func _make_lights() -> void:
 	var we := WorldEnvironment.new()
 	env = Environment.new()
 	env.background_mode = Environment.BG_COLOR
-	env.background_color = def["pal"]["ground"]
+	env.background_color = _ground_bg()
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = wx["amb"]
 	env.ambient_light_energy = float(wx["amb_e"]) * 0.95
@@ -506,9 +506,9 @@ func _make_mist() -> void:
 	for e in track.elev:
 		road_min = minf(road_min, e)
 	var b := track.bounds().grow(220.0)
-	var col := Color("#eceae2") if tod < 2 else Color("#7c86a8")
+	var col := Color("#eceae2") if tod < 2 else Color("#2a3150")
 	if wx["kind"] == "snow":
-		col = Color("#f2f3f8") if tod < 2 else Color("#8a94b8")
+		col = Color("#f2f3f8") if tod < 2 else Color("#343c60")
 	var k := 0
 	for off in [0.6, 2.2, 4.2]:
 		var y = road_min - off
@@ -545,15 +545,24 @@ var _bonnet := false
 
 ## Bonnet view looks at the horizon: give it a pale paper sky and a soft fog so the edge of the
 ## printed ground never shows.
+func _ground_bg() -> Color:
+	var g: Color = def["pal"]["ground"]
+	return g if tod < 2 else g.darkened(0.85)
+
+
 func set_bonnet(on: bool) -> void:
 	if on == _bonnet:
 		return
 	_bonnet = on
 	var sky: Color = Color(def["pal"]["ground"]).lerp(Color(wx["fill"]), 0.35).lightened(0.12)
-	env.background_color = sky if on else Color(def["pal"]["ground"])
+	if tod == 1:
+		sky = Color("#8a7fa8")
+	elif tod == 2:
+		sky = Color("#070a1a")
+	env.background_color = sky if on else _ground_bg()
 	env.fog_enabled = on
 	env.fog_light_color = sky
-	env.fog_density = 0.011
+	env.fog_density = 0.011 if tod < 2 else 0.007
 	env.fog_sky_affect = 1.0
 
 

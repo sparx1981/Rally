@@ -213,9 +213,10 @@ static func lighting(weather_id: String, tod: int) -> Dictionary:
 			"wrap": 0.36, "glow": 1.1, "vig": 0.14, "vig_col": Color("#1a1430"), "exposure": 1.0, "contrast": 1.06,
 			"tint": Vector3(1.01, 0.98, 1.01)}, true)
 	elif tod == 2:
-		w.merge({"key": Color("#c8d6ff"), "key_e": 0.3, "elev": 52.0, "fill": Color("#7890d0"), "fill_e": 0.14,
-			"amb": Color("#4a5ea8"), "amb_e": 0.34 if snow else 0.3, "leak": Color("#26368a"), "wrap": 0.4, "glow": 1.4,
-			"vig": 0.18, "vig_col": Color("#0a0c24"), "exposure": 1.08, "contrast": 1.05, "sat": 1.05,
+		# Real night: a faint moon, deep navy shadows; headlights, lamps and windows do the lighting.
+		w.merge({"key": Color("#a9bcef"), "key_e": 0.11, "elev": 52.0, "fill": Color("#4a5a90"), "fill_e": 0.04,
+			"amb": Color("#2a3870"), "amb_e": 0.14 if snow else 0.11, "leak": Color("#141c48"), "wrap": 0.4, "glow": 1.9,
+			"vig": 0.3, "vig_col": Color("#04050e"), "exposure": 1.0, "contrast": 1.08, "sat": 1.0,
 			"tint": Vector3(0.98, 0.98, 1.03), "green_pull": 0.1}, true)
 	return w
 

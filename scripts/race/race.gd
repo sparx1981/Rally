@@ -92,7 +92,7 @@ func setup(stage_i: int, mode_v: int, entrants: Array, attract_v := false, tod :
 		ghost.setup(Catalog.stages()[stage_i]["id"], player.stats)
 	if stage.wx.get("headlights", false):
 		for c in cars:
-			c.enable_lights(c == player and int(Settings.g("shadows")) > 0)
+			c.enable_lights(c == player and int(Settings.g("shadows")) > 0, int(stage.wx.get("tod", 0)) == 2)
 	camera.follow(0.016)
 	var st: Dictionary = player.stats
 	var mu := Car.BASE_MU * float(st["grip"]) * stage.grip()

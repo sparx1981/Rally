@@ -169,22 +169,22 @@ func exhaust_puff(dur := 0.25) -> void:
 
 ## Headlights (and a little red tail glow) for dusk and night. Only the player's beam casts
 ## shadows, to keep phones fast.
-func enable_lights(shadows: bool) -> void:
+func enable_lights(shadows: bool, night := false) -> void:
 	# Two dipped-beam headlamps: a wide, soft-edged spread that lights the road ahead and the verges,
 	# brightest close in and fading with distance (no hard central hot-spot).
 	var lamp: Vector3 = _model["lamp"]
 	for xs in [-0.5, 0.5]:
 		var sl := SpotLight3D.new()
 		sl.light_color = Color("#ffe6c0")
-		sl.light_energy = 2.4
-		sl.spot_range = 38.0
+		sl.light_energy = 7.0 if night else 2.4
+		sl.spot_range = 60.0 if night else 38.0
 		sl.spot_angle = 52.0
 		sl.spot_angle_attenuation = 2.6
-		sl.spot_attenuation = 1.4
+		sl.spot_attenuation = 0.85 if night else 1.4
 		sl.shadow_enabled = shadows and xs > 0.0
 		sl.shadow_bias = 0.08
 		sl.position = lamp + Vector3(xs * half_wid * 1.2, 0.05, 0.1)
-		sl.rotation = Vector3(-0.16, PI + xs * 0.12, 0.0)
+		sl.rotation = Vector3(-0.07, PI + xs * 0.1, 0.0)
 		_body.add_child(sl)
 		_lights.append(sl)
 	var tail := OmniLight3D.new()

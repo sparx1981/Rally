@@ -6,8 +6,8 @@ extends RefCounted
 
 const SKIN := [Color("#e8c4a0"), Color("#c99470"), Color("#8f5f42"), Color("#f0d2b4")]
 ## Fictional sponsors (no real brands).
-const SPONSORS := [["FOLDLINE OIL", "#c8553d", "#efe3c8"], ["CARDSTOCK TYRES", "#2b2b2b", "#e8b04a"], ["CREASE COLA", "#3f6fa8", "#efe3c8"],
-	["PULPWORKS", "#2f8a8a", "#efe3c8"], ["SCISSOR SPEED", "#e8b04a", "#2b2b2b"], ["ORIGAMI AIR", "#efe3c8", "#c8553d"]]
+const SPONSORS := [["FOLDLINE OIL", "#c8553d", "#efe3c8"], ["CARDSTOCK TYRES", "#2b2b2b", "#e8b04a"], ["REPOSHELF.CO.UK", "#3f6fa8", "#efe3c8"],
+	["PULPWORKS", "#2f8a8a", "#efe3c8"], ["MARBLIX", "#e8b04a", "#2b2b2b"], ["ORIGAMI AIR", "#efe3c8", "#c8553d"]]
 const CLOTHES := [Color("#c8553d"), Color("#3f6fa8"), Color("#e8b04a"), Color("#2f8a8a"), Color("#7a3b3b"), Color("#e2763a"), Color("#5f7f4a")]
 
 

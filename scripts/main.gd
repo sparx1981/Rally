@@ -418,11 +418,11 @@ class CarPreview:
 		vp.add_child(fill)
 		var cam := Camera3D.new()
 		cam.fov = 28
-		cam.position = Vector3(0, 5.2, 8.2)
+		cam.position = Vector3(0, 6.2, 9.8)
 		vp.add_child(cam)
 		cam.look_at(Vector3(0, 0.6, 0))
 		var b := PaperKit.Builder.new(9)
-		b.card(PaperKit.blob(4.2, 0, 0, 7, 0.05, 3, 30, 0.85), Transform3D(Basis(Vector3.RIGHT, -PI * 0.5), Vector3(0, -0.04, 0)), Color("#d9d2b4"), {"thick": 0.06, "edge": 0.06})
+		b.card(PaperKit.blob(3.3, 0, 0, 7, 0.05, 3, 30, 0.85), Transform3D(Basis(Vector3.RIGHT, -PI * 0.5), Vector3(0, -0.04, 0)), Color("#d9d2b4"), {"thick": 0.06, "edge": 0.06})
 		var disc := MeshInstance3D.new()
 		disc.mesh = b.mesh()
 		disc.material_override = mat
