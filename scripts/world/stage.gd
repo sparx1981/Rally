@@ -82,6 +82,7 @@ func build(stage_def: Dictionary, time_of_day := -1) -> void:
 	_make_puddles()
 	_make_hazards()
 	_make_weather()
+	_make_mist()
 	_make_birds()
 	apply_settings()
 	Settings.changed.connect(_on_settings_changed)
@@ -356,7 +357,7 @@ func _make_hazards() -> void:
 		var b := PaperKit.Builder.new(rng.randi())
 		var len_s: float = float(pt["s1"]) - float(pt["s0"])
 		var wdt: float = float(pt["lat1"]) - float(pt["lat0"])
-		var col: Color = {"gravel": Color(def["pal"]["road"]).lightened(0.18), "mud": Color("#5e4632"), "ice": Color("#c9dcea"), "deep snow": Color("#f4f5f8")}[pt["kind"]]
+		var col: Color = {"gravel": Color(def["pal"]["road"]).lightened(0.18), "mud": Color("#86694c"), "ice": Color("#c9dcea"), "deep snow": Color("#f4f5f8")}[pt["kind"]]
 		# Built as several overlapping blobs along the patch so it follows the bend.
 		var steps := maxi(2, int(len_s / 6.0))
 		for k in steps:
@@ -441,6 +442,41 @@ func _make_weather() -> void:
 	_particles.preprocess = _particles.lifetime
 	_particles.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	weather_fx.add_child(_particles)
+
+
+## Low paper mist lying in the valleys below the road (rain, dusk, night and the misty locations).
+func _make_mist() -> void:
+	var misty: bool = wx["kind"] == "rain" or tod > 0 or def["id"].begins_with("moor") or def["id"].begins_with("pinewood") or def["id"].begins_with("alpine")
+	if not misty:
+		return
+	var road_min := 1e9
+	for e in track.elev:
+		road_min = minf(road_min, e)
+	var b := track.bounds().grow(220.0)
+	var col := Color("#eceae2") if tod < 2 else Color("#7c86a8")
+	if wx["kind"] == "snow":
+		col = Color("#f2f3f8") if tod < 2 else Color("#8a94b8")
+	var k := 0
+	for off in [0.6, 2.2, 4.2]:
+		var y = road_min - off
+		if y < track.terrain.min_h + 0.3:
+			continue
+		var pm := PlaneMesh.new()
+		pm.size = b.size
+		var m := ShaderMaterial.new()
+		m.shader = preload("res://shaders/mist.gdshader")
+		m.set_shader_parameter("noise", noise_tex())
+		m.set_shader_parameter("col", col.darkened(0.04 * k))
+		m.set_shader_parameter("leak", wx["leak"])
+		m.set_shader_parameter("cut", 0.5 + k * 0.04)
+		m.set_shader_parameter("seed", float(k) * 0.37)
+		var mi := MeshInstance3D.new()
+		mi.mesh = pm
+		mi.material_override = m
+		mi.position = Vector3(b.get_center().x, y, b.get_center().y)
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(mi)
+		k += 1
 
 
 func _make_birds() -> void:

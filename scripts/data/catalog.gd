@@ -10,27 +10,30 @@ static var _weather: Dictionary = {}
 static var _series: Array = []
 
 
+## Original cars in the classes found across rally games (historic RWD, Group 2, Group B, Group A,
+## WRC, Rally1/Rally2, Group S prototypes, off-road buggies and trucks). No real makes or liveries.
+## drive: rwd (throttle oversteer), fwd (understeer), awd (neutral). offroad: 0..1 rough-ground ability.
 static func cars() -> Array:
 	if _cars.is_empty():
+		var C := func(id, name, cls, style, drive, body, acc, stripe, top, accel, grip, steer, offroad, desc):
+			return {"id": id, "name": name, "class": cls, "style": style, "drive": drive, "body": Color(body), "accent": Color(acc),
+				"stripe": Color(stripe), "top": top, "accel": accel, "grip": grip, "steer": steer, "offroad": offroad, "desc": desc}
 		_cars = [
-			{"id": "pip", "name": "Pip 1300", "style": "hatch", "desc": "Tiny, nimble and forgiving. Turns on a coin.",
-				"body": Color("#c8553d"), "accent": Color("#efe3c8"), "stripe": Color("#e8b04a"),
-				"top": 0.88, "accel": 0.95, "grip": 1.02, "steer": 1.18},
-			{"id": "kestrel", "name": "Kestrel GT", "style": "coupe", "desc": "Low, quick coupe that loves long fast bends.",
-				"body": Color("#3f6fa8"), "accent": Color("#e8c05a"), "stripe": Color("#efe3c8"),
-				"top": 1.06, "accel": 1.0, "grip": 0.95, "steer": 0.98},
-			{"id": "badger", "name": "Badger 4x4", "style": "suv", "desc": "Heavy all-wheel-drive brute. Huge grip off the road.",
-				"body": Color("#5f7f4a"), "accent": Color("#e08a3a"), "stripe": Color("#2f3a2a"),
-				"top": 0.92, "accel": 0.86, "grip": 1.14, "steer": 0.9},
-			{"id": "marten", "name": "Marten RS", "style": "saloon", "desc": "The all-rounder. Balanced on every surface.",
-				"body": Color("#ece4d2"), "accent": Color("#2f8a8a"), "stripe": Color("#c8553d"),
-				"top": 1.0, "accel": 1.0, "grip": 1.0, "steer": 1.0},
-			{"id": "lynx", "name": "Lynx Turbo", "style": "turbo", "desc": "Brutal turbo power. Fastest car, slippery tail.",
-				"body": Color("#35302c"), "accent": Color("#e2763a"), "stripe": Color("#e8c05a"),
-				"top": 1.12, "accel": 1.12, "grip": 0.9, "steer": 0.96},
-			{"id": "otter", "name": "Otter Estate", "style": "estate", "desc": "A family estate with a rally heart. Very stable.",
-				"body": Color("#d9a441"), "accent": Color("#7a3b3b"), "stripe": Color("#efe3c8"),
-				"top": 0.95, "accel": 0.93, "grip": 1.06, "steer": 1.02},
+			C.call("ventura", "Ventura 60", "1960s Classic", "classic", "rwd", "#6f9bb0", "#efe3c8", "#c8553d", 0.8, 0.78, 0.9, 1.05, 0.2, "A rounded sixties sports coupe. Light, lively and tail-happy."),
+			C.call("pip", "Pip 1300", "1970s Group 2", "hatch", "fwd", "#c8553d", "#efe3c8", "#e8b04a", 0.86, 0.9, 1.0, 1.18, 0.2, "Tiny front-drive hatch. Forgiving and turns on a coin."),
+			C.call("comet", "Comet 1600", "1970s Group 2", "saloon70", "rwd", "#efe3c8", "#3f6fa8", "#c8553d", 0.88, 0.88, 0.95, 1.05, 0.3, "Boxy rear-drive saloon with a roof full of lamps. Slides for days."),
+			C.call("strega", "Strega B", "1980s Group B", "groupb_rwd", "rwd", "#e8c05a", "#c8553d", "#2b2b2b", 1.04, 1.06, 0.92, 1.0, 0.25, "Mid-engined Group B wedge. Brutal power to the rear wheels."),
+			C.call("tempest", "Tempest S1", "1980s Group B", "groupb", "awd", "#efe3c8", "#c8553d", "#3f6fa8", 1.08, 1.15, 0.97, 0.95, 0.3, "Turbo four-wheel-drive monster with huge arches and a wing to match."),
+			C.call("wraith", "Wraith S", "Group S Prototype", "groups", "awd", "#2f3a4a", "#e2763a", "#efe3c8", 1.12, 1.12, 1.0, 1.0, 0.2, "The prototype class that never raced. Low, light and savage."),
+			C.call("marten", "Marten RS", "1990s Group A", "saloon", "awd", "#ece4d2", "#2f8a8a", "#c8553d", 1.0, 1.0, 1.0, 1.0, 0.35, "The all-rounder turbo saloon. Balanced on every surface."),
+			C.call("kestrel", "Kestrel GT", "1990s Group A", "coupe", "awd", "#3f6fa8", "#e8c05a", "#efe3c8", 1.04, 1.0, 0.97, 0.98, 0.3, "Low four-wheel-drive coupe that loves long fast bends."),
+			C.call("lynx", "Lynx Turbo", "2000s WRC", "turbo", "awd", "#35302c", "#e2763a", "#e8c05a", 1.08, 1.08, 1.03, 1.0, 0.35, "A noughties world rally hatch. Huge grip, fierce turbo."),
+			C.call("fennec", "Fennec R2", "Modern Rally2", "rally2", "awd", "#f0f0ea", "#d9a441", "#2f8a8a", 1.02, 1.02, 1.05, 1.08, 0.35, "A modern privateer's weapon. Precise and easy to trust."),
+			C.call("vortex", "Vortex R1", "Modern Rally1", "rally1", "awd", "#c8553d", "#2b2b2b", "#efe3c8", 1.14, 1.15, 1.08, 1.03, 0.35, "Top-class hybrid hatch with wild aero. The fastest car here."),
+			C.call("otter", "Otter Estate", "Fun / Estate", "estate", "fwd", "#d9a441", "#7a3b3b", "#efe3c8", 0.92, 0.92, 1.04, 1.02, 0.4, "A family estate with a rally heart. Very stable."),
+			C.call("badger", "Badger 4x4", "Off-road 4x4", "suv", "awd", "#5f7f4a", "#e08a3a", "#2f3a2a", 0.9, 0.86, 1.1, 0.9, 0.9, "Heavy cross-country 4x4. Ignores rough ground."),
+			C.call("mule", "Mule Trophy", "Off-road Truck", "truck", "awd", "#e8b04a", "#2b2b2b", "#c8553d", 0.96, 0.9, 1.0, 0.88, 1.0, "Long-travel desert trophy truck. Flies over anything."),
+			C.call("sandhopper", "Sandhopper", "Dune Buggy", "buggy", "rwd", "#e2763a", "#2b2b2b", "#e8c05a", 0.9, 1.1, 1.0, 1.15, 0.95, "Open tube-frame dune buggy. Tiny, twitchy and unstoppable off-road."),
 		]
 	return _cars
 

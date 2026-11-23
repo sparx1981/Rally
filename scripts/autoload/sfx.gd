@@ -1,4 +1,6 @@
 extends Node
+
+signal popped
 ## Game audio. Recorded CC0 sounds (Kenney, see res://audio/kenney/LICENSE.txt) for the engine,
 ## skids, impacts, landings, nature ambience and UI. Everything else is synthesised at start-up:
 ## surface roll loops (gravel crackle, wet hiss, snow crunch, cobbles), stones pinging the underbody,
@@ -288,6 +290,7 @@ func _process(delta: float) -> void:
 	_pop_cd -= delta
 	if _prev_thr > 0.6 and _thr < 0.15 and _rpm > 4200.0 and _pop_cd <= 0.0:
 		_pop_cd = 0.6
+		popped.emit()
 		var n := _rng.randi_range(2, 4)
 		for i in n:
 			get_tree().create_timer(0.05 + i * _rng.randf_range(0.06, 0.13), true).timeout.connect(

@@ -6,7 +6,7 @@ const SAVE_PATH := "user://progress.cfg"
 enum Mode { TIME_TRIAL, CHAMPIONSHIP, RACE }
 
 var mode: int = Mode.TIME_TRIAL
-var car_index := 3
+var car_index := 6
 var stage_index := 0
 var series_index := 0
 var time_of_day := -1        # -1 = the stage's own default, 0 day, 1 dusk, 2 night
@@ -151,4 +151,4 @@ func _load() -> void:
 		return
 	best_times = cf.get_value("progress", "best_times", {})
 	cups = cf.get_value("progress", "cups", {})
-	car_index = int(cf.get_value("progress", "car_index", 3))
+	car_index = clampi(int(cf.get_value("progress", "car_index", 6)), 0, Catalog.cars().size() - 1)

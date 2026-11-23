@@ -925,6 +925,47 @@ func _parse_args() -> void:
 			Game.mode = int(a.substr(7))
 
 
+## Test view: every car on a paper plinth.
+func _lineup() -> void:
+	var w := Node3D.new()
+	add_child(w)
+	var env := Environment.new()
+	env.background_mode = Environment.BG_COLOR
+	env.background_color = Color("#e6dcc4")
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color("#fff0da")
+	env.ambient_light_energy = 0.3
+	var we := WorldEnvironment.new()
+	we.environment = env
+	w.add_child(we)
+	var key := DirectionalLight3D.new()
+	key.light_energy = 0.6
+	key.rotation = Vector3(deg_to_rad(-50), deg_to_rad(30), 0)
+	key.shadow_enabled = true
+	w.add_child(key)
+	var fill := DirectionalLight3D.new()
+	fill.light_energy = 0.3
+	fill.rotation = Vector3(deg_to_rad(-35), deg_to_rad(10), 0)
+	w.add_child(fill)
+	var mat := ShaderMaterial.new()
+	mat.shader = preload("res://shaders/paper.gdshader")
+	mat.set_shader_parameter("fibre", Stage.fibre_tex())
+	var cars := Catalog.cars()
+	for i in cars.size():
+		var m := CarModel.build(cars[i], i + 1, mat)
+		var r: Node3D = m["root"]
+		r.position = Vector3((i % 5) * 6.0 - 12.0, 0, (i / 5) * 7.0 - 7.0)
+		r.rotation.y = 0.6
+		w.add_child(r)
+	var cam := Camera3D.new()
+	cam.fov = 40
+	w.add_child(cam)
+	cam.position = Vector3(0, 22, 26)
+	cam.look_at(Vector3(0, 0, 0))
+	cam.current = true
+	post.visible = false
+
+
 func _run_bench() -> void:
 	# Headless logic check: every stage, autopilot to the finish, in each mode.
 	_shot["autopilot"] = true
@@ -958,6 +999,13 @@ func _run_shot() -> void:
 	var view: String = _shot.get("view", "race")
 	if view == "bench":
 		_run_bench()
+		return
+	if view == "lineup":
+		_lineup()
+		await get_tree().create_timer(1.0).timeout
+		await RenderingServer.frame_post_draw
+		get_viewport().get_texture().get_image().save_png(_shot["path"])
+		get_tree().quit()
 		return
 	var stage_i: int = _shot.get("stage", 0)
 	Game.stage_index = stage_i

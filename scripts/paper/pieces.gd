@@ -318,7 +318,9 @@ static func house(pal: Dictionary, rng: RandomNumberGenerator, cabin: bool) -> D
 	# Doorstep flower boxes.
 	for xs in [-0.3, 0.3]:
 		b.card(PaperKit.blob(0.22, xs * w, h * 0.3, 4, 0.2, rng.randi(), 12, 0.7), front * Transform3D(Basis(), Vector3(0, 0, 0.05)), pal["accent"], {"thick": 0.03, "edge": 0.02, "lip": 0.0})
-	return _out(b, maxf(w, d) * 0.55, true, h + rh, 0.7)
+	var out := _out(b, maxf(w, d) * 0.55, true, h + rh, 0.7)
+	out["chimney"] = Vector3(w * 0.22, h + rh * 1.28, -d * 0.15)
+	return out
 
 
 static func barn(pal: Dictionary, rng: RandomNumberGenerator) -> Dictionary:

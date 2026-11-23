@@ -231,6 +231,41 @@ func solids_near(p: Vector2) -> Array:
 	return out
 
 
+var _chimneys: Array = []   # [CPUParticles3D, world position, piece index or -1]
+
+
+func _add_chimneys() -> void:
+	_chimneys.clear()
+	var leak: Color = Catalog.weather(stage_def["weather"])["leak"]
+	for i in placements.size():
+		var pl: Dictionary = placements[i]
+		var info: Dictionary = lib[pl["kind"]][pl["var"]]
+		if not info.has("chimney"):
+			continue
+		var p: Vector2 = pl["pos"]
+		var local: Vector3 = info["chimney"]
+		var em := Puffs.make("chimney", Color("#d8d6d2"), leak)
+		em.emitting = false
+		var world := Transform3D(Basis(Vector3.UP, float(pl["yaw"])), Vector3(p.x, _ground(p), p.y)) * local
+		if popups:
+			var mi: Node3D = _pivots[i].get_child(0)
+			mi.add_child(em)
+			em.position = local
+		else:
+			_content.add_child(em)
+			em.position = world
+		_chimneys.append([em, world, i if popups else -1])
+
+
+## Chimneys only smoke near the camera (and only once their house has unfolded).
+func update_chimneys(center: Vector2, radius: float) -> void:
+	for c in _chimneys:
+		var wp: Vector3 = c[1]
+		var near := Vector2(wp.x, wp.z).distance_to(center) < radius + 50.0
+		var up = c[2] < 0 or _springs[c[2]].p > 0.9
+		(c[0] as CPUParticles3D).emitting = near and up
+
+
 func rebuild_visuals(use_popups: bool) -> void:
 	popups = use_popups
 	if _content:
@@ -249,6 +284,7 @@ func rebuild_visuals(use_popups: bool) -> void:
 		_build_popups()
 	else:
 		_build_static()
+	_add_chimneys()
 
 
 ## Ground height under a piece (pieces beside the road stand on the landscape).
@@ -326,6 +362,7 @@ func _build_static() -> void:
 ## (staggered by a per-piece jitter so they rise in waves as they come into view) and folds
 ## back down once it is well out of view.
 func update(center: Vector2, radius: float, dt: float) -> void:
+	update_chimneys(center, radius)
 	if not popups or _springs.is_empty():
 		return
 	var rose := 0

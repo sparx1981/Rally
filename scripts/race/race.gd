@@ -142,9 +142,17 @@ func _make_hud() -> void:
 		hud.set_sub("Best %s   Gold %s" % [Game.fmt_time(best), Game.fmt_time(medals[0])])
 	else:
 		hud.set_sub(Catalog.stage_title(stage_index))
+	Sfx.popped.connect(_on_popped)
+
+
+func _on_popped() -> void:
+	if player:
+		player.exhaust_puff(0.45)
 
 
 func _exit_tree() -> void:
+	if Sfx.popped.is_connected(_on_popped):
+		Sfx.popped.disconnect(_on_popped)
 	if not attract:
 		Sfx.engine_stop()
 		Sfx.set_skid(0.0)

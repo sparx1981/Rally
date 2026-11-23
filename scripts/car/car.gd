@@ -54,6 +54,10 @@ var airborne := false
 var air_time := 0.0
 var half_len := 2.0
 var half_wid := 0.95
+var wheel_r := 0.4
+var head_pos := Vector3(0.35, 1.3, 0)
+var lamp_pos := Vector3(0, 0.6, 2.0)
+var model_root: Node3D
 
 var _body: Node3D
 var _wheels: Array = []
@@ -77,6 +81,10 @@ func setup(car_stats: Dictionary, num: int, stg: Stage, mat: Material) -> void:
 	_wheels = m["wheels"]
 	half_len = float(m["length"]) * 0.5
 	half_wid = float(m["width"]) * 0.5
+	wheel_r = float(m["wheel_r"])
+	head_pos = m["head"]
+	lamp_pos = m["lamp"]
+	model_root = m["root"]
 	_make_contact(mat)
 	_make_dust()
 	if not is_player:
@@ -106,74 +114,48 @@ func _make_contact(mat: Material) -> void:
 
 
 func _make_dust() -> void:
-	_dust = CPUParticles3D.new()
-	_dust.local_coords = false
-	_dust.amount = 36
-	_dust.lifetime = 0.9
-	_dust.emitting = false
-	_dust.explosiveness = 0.0
-	_dust.direction = Vector3(0, 0.6, -1)
-	_dust.spread = 30.0
-	_dust.gravity = Vector3(0, -1.5, 0)
-	_dust.initial_velocity_min = 1.5
-	_dust.initial_velocity_max = 3.5
-	_dust.scale_amount_min = 0.6
-	_dust.scale_amount_max = 1.4
-	_dust.angle_min = 0.0
-	_dust.angle_max = 360.0
-	_dust.position = Vector3(0, 0.25, -1.9)
-	var qm := QuadMesh.new()
-	qm.size = Vector2(0.4, 0.4)
-	var mat := StandardMaterial3D.new()
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
 	var kind := stage.kind()
 	var pal: Dictionary = stage.def["pal"]
+	var leak: Color = stage.wx["leak"]
+	var col: Color
+	var k := "dust"
 	if kind == "snow":
-		mat.albedo_color = Color(0.95, 0.96, 1.0)
+		col = Color(0.95, 0.96, 1.0)
+		k = "snow"
 	elif kind == "rain":
-		mat.albedo_color = Color(pal["road"]).lerp(Color(0.75, 0.8, 0.85), 0.5)
+		col = Color(pal["road"]).lerp(Color(0.8, 0.84, 0.88), 0.55)
+		k = "spray"
 	else:
-		mat.albedo_color = Color(pal["road"]).lightened(0.35)
-	qm.material = mat
-	_dust.mesh = qm
-	_dust.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		col = Color(pal["road"]).lightened(0.5)
+	_dust = Puffs.make(k, col, leak)
+	_dust.emitting = false
+	_dust.position = Vector3(0, 0.3, -half_len)
 	add_child(_dust)
+	_smoke = Puffs.make("exhaust", Color(0.55, 0.53, 0.52), leak)
+	_smoke.emitting = false
+	_smoke.position = Vector3(0.45, 0.3, -half_len - 0.1)
+	add_child(_smoke)
 
 
+var _smoke: CPUParticles3D
 var _spray: CPUParticles3D
+var _smoke_t := 0.0
 
 
-## A big burst of water when driving through a splash.
+## A big volumetric burst of water when driving through a splash.
 func spray(v: float) -> void:
 	if _spray == null:
-		_spray = CPUParticles3D.new()
-		_spray.one_shot = true
-		_spray.emitting = false
-		_spray.amount = 60
-		_spray.lifetime = 1.1
-		_spray.explosiveness = 0.85
-		_spray.direction = Vector3(0, 1, 0.3)
-		_spray.spread = 75.0
-		_spray.initial_velocity_min = 4.0
-		_spray.initial_velocity_max = 9.0
-		_spray.gravity = Vector3(0, -16, 0)
-		_spray.scale_amount_min = 0.6
-		_spray.scale_amount_max = 1.5
-		_spray.local_coords = false
-		var qm := QuadMesh.new()
-		qm.size = Vector2(0.35, 0.35)
-		var m := StandardMaterial3D.new()
-		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
-		m.albedo_color = Color("#d8e4ea")
-		qm.material = m
-		_spray.mesh = qm
+		_spray = Puffs.make("splash", Color("#dde7ec"), stage.wx["leak"])
 		_spray.position = Vector3(0, 0.3, 0.6)
 		add_child(_spray)
-	_spray.amount = clampi(int(v * 2.5), 20, 80)
+	_spray.amount = clampi(int(v * 2.0), 20, 60)
 	_spray.initial_velocity_max = 4.0 + v * 0.3
 	_spray.restart()
+
+
+## A puff of exhaust smoke (backfires, launches).
+func exhaust_puff(dur := 0.25) -> void:
+	_smoke_t = maxf(_smoke_t, dur)
 
 
 func place_at(s_pos: float, lateral: float) -> void:
@@ -219,9 +201,8 @@ func step(dt: float) -> void:
 	lat = hit[2]
 	on_road = absf(lat) <= track.width * 0.5 + 0.2
 	var wgrip := stage.grip()
-	surface = wgrip * (1.0 if on_road else 0.82)
-	if not on_road and stats["id"] == "badger":
-		surface = wgrip * 0.95
+	var offroad: float = stats.get("offroad", 0.3)
+	surface = wgrip * (1.0 if on_road else lerpf(0.8, 0.97, offroad))
 	# Loose surface patches (gravel / mud / ice / deep snow).
 	var patch := track.patch_at(s, lat)
 	var patch_drag := 0.0
@@ -230,8 +211,7 @@ func step(dt: float) -> void:
 		patch_kind = patch["kind"]
 		surface *= float(patch["grip"])
 		patch_drag = float(patch["drag"])
-		if stats["id"] == "badger":
-			patch_drag *= 0.5
+		patch_drag *= lerpf(1.0, 0.4, offroad)
 	# Water splash: heavy drag, a burst of spray.
 	var water := absf(lat) < track.width * 0.5 + 16.0 and not track.feature_at(s, "splash").is_empty()
 	if water and not in_water:
@@ -282,7 +262,7 @@ func step(dt: float) -> void:
 		a -= hb * 5.0
 	a -= vl * 0.045 + signf(vl) * 0.5
 	if not on_road:
-		a -= vl * (0.55 if stats["id"] != "badger" else 0.3)
+		a -= vl * lerpf(0.55, 0.12, offroad)
 	if in_puddle:
 		a -= vl * 0.5
 	if water:
@@ -302,7 +282,14 @@ func step(dt: float) -> void:
 	var sp := absf(vl)
 	var sf := clampf(sp / 4.0, 0.0, 1.0)
 	var lim := float(stats["steer"]) * 2.5 / (1.0 + sp / 24.0)
+	var drive: String = stats.get("drive", "awd")
+	if drive == "fwd" and thr > 0.5:
+		lim *= 0.88          # front-drive: understeers on the power
 	var target_w := -steer * lim * sf * (1.0 if vl >= 0.0 else -1.0)
+	if drive == "rwd" and thr > 0.6 and sp > 6.0:
+		# Rear-drive: power slides the tail out.
+		target_w *= 1.12
+		target_w += -steer * 0.25 * thr
 	if hb > 0.0 and not frozen:
 		target_w *= 1.4
 	var resp := clampf(dt * (5.0 + 4.0 * surface), 0.0, 1.0) * grounded
@@ -314,6 +301,10 @@ func step(dt: float) -> void:
 	vl = vel.dot(f)
 	vt = vel.dot(r)
 	var mu := BASE_MU * float(stats["grip"]) * surface * (0.42 if (hb > 0.0 and not frozen) else 1.0)
+	if drive == "rwd" and thr > 0.6:
+		mu *= 0.88
+	elif drive == "fwd":
+		mu *= 1.04
 	var max_dv := mu * dt * grounded
 	var removed := clampf(vt, -max_dv, max_dv)
 	vt -= removed
@@ -375,7 +366,7 @@ func _sync_visual(delta: float) -> void:
 		pitch_t = clampf(-vy / maxf(absf(v_long), 1.0), -0.3, 0.3)
 	_pitch = lerpf(_pitch, pitch_t, clampf(delta * 5.0, 0.0, 1.0))
 	_body.rotation = Vector3(_pitch, 0.0, _roll)
-	_spin += v_long * delta / CarModel.WHEEL_R
+	_spin += v_long * delta / wheel_r
 	for i in _wheels.size():
 		var wnode: Node3D = _wheels[i]
 		if i < 2:
@@ -385,5 +376,9 @@ func _sync_visual(delta: float) -> void:
 	if _dust:
 		var spd := absf(v_long)
 		var emit := spd > 6.0 and (slip > 0.12 or not on_road or stage.kind() != "dry" or spd > 18.0)
-		_dust.emitting = emit
-		_dust.speed_scale = clampf(0.6 + slip, 0.6, 1.6)
+		_dust.emitting = emit and not airborne
+		_dust.speed_scale = clampf(0.7 + slip, 0.7, 1.6)
+	if _smoke:
+		_smoke_t -= delta
+		# Launch smoke and backfire smoke.
+		_smoke.emitting = _smoke_t > 0.0 or (throttle > 0.8 and absf(v_long) < 6.0 and not frozen)
