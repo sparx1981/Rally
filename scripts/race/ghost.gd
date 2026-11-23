@@ -45,6 +45,8 @@ func record(t: float, car: Car) -> void:
 
 
 func save(stage_id: String) -> void:
+	if Game.no_save:
+		return
 	DirAccess.make_dir_recursive_absolute("user://ghosts")
 	var f := FileAccess.open(path_for(stage_id), FileAccess.WRITE)
 	if f:

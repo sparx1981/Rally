@@ -102,6 +102,8 @@ func _start_race() -> void:
 	race.pause_requested.connect(_pause)
 	if _shot.has("hazard"):
 		race.skip_to_hazard(_shot["hazard"])
+	if _shot.has("at"):
+		race.skip_to_s(_shot["at"])
 	_apply_post()
 	_clear_menu()
 	_back = Callable()
@@ -454,8 +456,8 @@ func _stage_select() -> void:
 	var opts := HBoxContainer.new()
 	opts.add_theme_constant_override("separation", 12)
 	content.add_child(opts)
-	opts.add_child(_choice_inline(["Sprint (~1 km)", "Classic (~2 km)", "Marathon (~4 km)"], int(Catalog.stages()[Game.stage_index]["variant"]), func(i):
-		Game.stage_index = cur_loc * 3 + i
+	opts.add_child(_choice_inline(["Sprint (4 km)", "Classic (8 km)", "Long (10 km)", "Marathon (15 km)"], int(Catalog.stages()[Game.stage_index]["variant"]), func(i):
+		Game.stage_index = cur_loc * 4 + i
 		_stage_select()))
 	opts.add_child(_choice_inline(["Time: stage default", "Time: Day", "Time: Dusk", "Time: Night"], Game.time_of_day + 1, func(i):
 		Game.time_of_day = i - 1))
@@ -468,7 +470,7 @@ func _stage_select() -> void:
 	var first: Button
 	var variant: int = Catalog.stages()[Game.stage_index]["variant"]
 	for li in Catalog.locations().size():
-		var si := li * 3 + variant
+		var si = li * 4 + variant
 		var sd: Dictionary = Catalog.stages()[si]
 		var wx := Catalog.weather(sd["weather"])
 		var best := Game.best_time(si)
@@ -594,6 +596,7 @@ func _pause() -> void:
 		return
 	_paused = true
 	get_tree().paused = true
+	race.set_overlay_visible(false)
 	Haptics.stop()
 	_pause_menu()
 
@@ -628,8 +631,6 @@ func _photo_mode() -> void:
 	menu.add_child(pm)
 	pm.closed.connect(func():
 		pm.queue_free()
-		if race._hud_layer:
-			race._hud_layer.visible = true
 		_apply_post()
 		race.camera.snap()
 		_pause_menu())
@@ -637,6 +638,8 @@ func _photo_mode() -> void:
 
 func _resume() -> void:
 	_paused = false
+	if race:
+		race.set_overlay_visible(true)
 	_clear_menu()
 	_back = Callable()
 	get_tree().paused = false
@@ -803,6 +806,8 @@ func _slider(label: String, mn: float, mx: float, stp: float, value: float, on_c
 # --- results ----------------------------------------------------------------------------------------
 
 func _on_race_finished(result: Dictionary) -> void:
+	if race:
+		race.set_overlay_visible(false)
 	_last_result = result
 	Haptics.stop()
 	match Game.mode:
@@ -945,6 +950,8 @@ func _parse_args() -> void:
 			Settings.data["camera"] = int(a.substr(9))
 		elif a.begins_with("--tod="):
 			Game.time_of_day = int(a.substr(6))
+		elif a.begins_with("--at="):
+			_shot["at"] = float(a.substr(5))
 		elif a.begins_with("--hazard="):
 			_shot["hazard"] = a.substr(9)
 		elif a.begins_with("--mode="):
@@ -980,13 +987,13 @@ func _lineup() -> void:
 	for i in cars.size():
 		var m := CarModel.build(cars[i], i + 1, mat)
 		var r: Node3D = m["root"]
-		r.position = Vector3((i % 5) * 6.0 - 12.0, 0, (i / 5) * 7.0 - 7.0)
-		r.rotation.y = 0.6
+		r.position = Vector3((i % 5) * 6.0 - 12.0, 0, (i / 5) * 6.5 - 10.0)
+		r.rotation.y = 1.25
 		w.add_child(r)
 	var cam := Camera3D.new()
 	cam.fov = 40
 	w.add_child(cam)
-	cam.position = Vector3(0, 22, 26)
+	cam.position = Vector3(0, 15, 25)
 	cam.look_at(Vector3(0, 0, 0))
 	cam.current = true
 	post.visible = false
@@ -996,8 +1003,12 @@ func _run_bench() -> void:
 	# Headless logic check: every stage, autopilot to the finish, in each mode.
 	_shot["autopilot"] = true
 	Engine.max_fps = 0
-	for si in Catalog.stages().size():
-		for m in [Game.Mode.TIME_TRIAL, Game.Mode.RACE]:
+	var list: Array = range(Catalog.stages().size())
+	if OS.get_cmdline_user_args().has("--quick"):
+		list = range(0, Catalog.stages().size(), 4)
+		list.append(35)
+	for si in list:
+		for m in ([Game.Mode.TIME_TRIAL] if si == 35 else [Game.Mode.TIME_TRIAL, Game.Mode.RACE]):
 			Game.mode = m
 			Game.stage_index = si
 			var t0 := Time.get_ticks_msec()
@@ -1007,7 +1018,7 @@ func _run_bench() -> void:
 			var res := {}
 			race.finished.connect(func(r): res["r"] = r)
 			var frames := 0
-			while res.is_empty() and frames < 30 * 400:
+			while res.is_empty() and frames < 30 * 1500:
 				await get_tree().process_frame
 				frames += 1
 			if res.is_empty():

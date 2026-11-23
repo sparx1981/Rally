@@ -53,6 +53,7 @@ func _ready() -> void:
 	cam.offset_top = 18
 	cam.offset_bottom = 88
 	cam.pressed.connect(func(): camera_pressed.emit())
+	_cam_btn = cam
 	pace = PaceNote.new()
 	add_child(pace)
 	pace.anchor_left = 0.5
@@ -133,6 +134,12 @@ func show_center(text: String, dur := 1.0, size := 72) -> void:
 
 
 var _hint_t := 0.0
+var _cam_btn: Control
+
+
+func set_controls_visible(v: bool) -> void:
+	if _cam_btn:
+		_cam_btn.visible = v
 
 
 func show_hint_timed(text: String, dur: float) -> void:

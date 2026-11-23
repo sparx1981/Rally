@@ -492,7 +492,7 @@ static func banner(rng: RandomNumberGenerator) -> Dictionary:
 	var bg := Color(sp[1])
 	var fg := Color(sp[2])
 	var w := 5.6
-	var pitch := -0.95
+	var pitch := -0.42
 	var T := Transform3D(Basis(Vector3.RIGHT, pitch), Vector3(0, 0.12, 0))
 	b.card(PaperKit.rect(w, 1.3, 0, 0), T, bg, {"thick": 0.05, "edge": 0.05, "lip": 0.05})
 	b.card(PaperKit.rect(w - 0.3, 0.07, 0, 0.18), T * Transform3D(Basis(), Vector3(0, 0, 0.03)), fg, {"thick": 0.005, "edge": 0.0, "lip": 0.0, "sides": false})
@@ -511,7 +511,7 @@ static func billboard(rng: RandomNumberGenerator) -> Dictionary:
 	var sp: Array = SPONSORS[rng.randi() % SPONSORS.size()]
 	var bg := Color(sp[1])
 	var fg := Color(sp[2])
-	var pitch := -0.7
+	var pitch := -0.28
 	var T := Transform3D(Basis(Vector3.RIGHT, pitch), Vector3(0, 0.3, 0))
 	b.card(PaperKit.rrect(4.4, 2.2, 0.08, 0, 0), T, bg, {"thick": 0.06, "edge": 0.05, "lip": 0.06})
 	b.card(PaperKit.rrect(4.0, 0.12, 0.04, 0, 0.55), T * Transform3D(Basis(), Vector3(0, 0, 0.035)), fg, {"thick": 0.005, "edge": 0.0, "lip": 0.0, "sides": false})

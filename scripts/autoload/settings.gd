@@ -32,6 +32,7 @@ func _ready() -> void:
 	_setup_buses()
 	_setup_input()
 	load_settings()
+	data["camera"] = clampi(int(data["camera"]), 0, 4)
 	if not FileAccess.file_exists(PATH) and OS.has_feature("mobile"):
 		apply_preset("medium")
 	apply()

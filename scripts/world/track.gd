@@ -27,64 +27,163 @@ var terrain: Terrain                 # the landscape heightfield around the road
 var features: Array = []             # {type: jump|crest|splash|chicane, s0, s1, s (centre), side}
 var patches: Array = []              # {s0, s1, lat0, lat1, kind, grip, drag}
 var notes: Array = []                # pace notes: corners + features, sorted by s0
+var barriers: Array = []             # {s0, s1, side (+1 = +nrm side), kind: armco | fence}
+
+
+## Pre-generated layouts ship in res://data/tracks (same seed and settings = same road), so phones
+## never pay for the self-avoiding search; anything else is generated and cached in user://.
+static func cache_key(seed_v: int, target_len: float, twist: float) -> String:
+	return "%d_%d_%d" % [seed_v, int(target_len), int(round(twist * 1000.0))]
 
 
 func generate(seed_v: int, target_len: float, twist: float, w: float) -> void:
 	width = w
-	for attempt in 40:
+	var key := cache_key(seed_v, target_len, twist)
+	for path in ["res://data/tracks/%s.bin" % key, "user://tracks/%s.bin" % key]:
+		if FileAccess.file_exists(path):
+			var f := FileAccess.open(path, FileAccess.READ)
+			if f:
+				var data = bytes_to_var(f.get_buffer(f.get_length()))
+				if data is PackedVector2Array and data.size() > 10:
+					pts = data
+					_rebuild_grid()
+					_finalize()
+					return
+	_generate_fresh(seed_v, target_len, twist)
+	DirAccess.make_dir_recursive_absolute("user://tracks")
+	var wf := FileAccess.open("user://tracks/%s.bin" % key, FileAccess.WRITE)
+	if wf:
+		wf.store_buffer(var_to_bytes(pts))
+
+
+func _generate_fresh(seed_v: int, target_len: float, twist: float) -> void:
+	var best := PackedVector2Array()
+	for attempt in 16:
 		if _try(seed_v + attempt * 7919, target_len, twist):
 			_finalize()
 			return
+		if pts.size() > best.size():
+			best = pts.duplicate()
+	pts = best
+	_rebuild_grid()
 	_finalize()
 
 
+## Self-avoiding road built segment by segment (straights and clothoid-eased bends). When the
+## road runs into itself it rewinds to an earlier segment and tries another bend, so stages of
+## 15 km and more lay out without crossing.
 func _try(seed_v: int, target_len: float, twist: float) -> bool:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_v
 	pts = PackedVector2Array()
 	grid = {}
-	var pos := Vector2.ZERO
-	var h := 0.0
-	var base := 0.0
-	var k := 0.0
-	pts.append(pos)
-	_grid_add(0, pos)
-	var total := 0.0
-	# Run-up straight for the start grid.
-	var segs: Array = [[0.0, 46.0]]
-	while total < target_len:
-		if segs.is_empty():
-			if rng.randf() < 0.32 - twist * 0.14:
-				segs.append([0.0, rng.randf_range(24.0, 80.0) * (1.2 - twist * 0.4)])
-			else:
-				var hair := rng.randf() < twist * 0.16
-				var radius := 14.0 if hair else lerpf(80.0, 17.0, pow(rng.randf(), 0.8) * (0.45 + twist * 0.55))
-				var ang := deg_to_rad(rng.randf_range(155.0, 178.0) if hair else rng.randf_range(25.0, 80.0 + 70.0 * twist))
-				var sgn := -1.0 if rng.randf() < 0.5 else 1.0
-				var off := wrapf(h - base, -PI, PI)
-				if absf(off) > 1.0:
-					sgn = -signf(off)
-				segs.append([sgn / radius, ang * radius])
-				if rng.randf() < 0.3 + twist * 0.3:
-					segs.append([0.0, rng.randf_range(8.0, 20.0)])
-			base += rng.randf_range(-0.5, 0.5)
-		var seg: Array = segs.pop_front()
-		var kt: float = seg[0]
-		var seg_len: float = seg[1]
-		var steps := int(seg_len / STEP)
-		for i in steps:
-			k = lerpf(k, kt, 0.22)
-			h += k * STEP
-			pos += Vector2(sin(h), cos(h)) * STEP
-			var idx := pts.size()
-			if _collides(pos, idx):
-				return false
-			pts.append(pos)
-			_grid_add(idx, pos)
-			total += STEP
-			if total >= target_len:
+	var st := {"pos": Vector2.ZERO, "h": 0.0, "base": 0.0, "k": 0.0, "total": 0.0}
+	pts.append(Vector2.ZERO)
+	_grid_add(0, Vector2.ZERO)
+	var checkpoints: Array = []
+	var first := true
+	var budget := 12000
+	while st["total"] < target_len:
+		budget -= 1
+		if budget <= 0:
+			return false
+		checkpoints.append({"n": pts.size(), "st": st.duplicate(), "fails": 0})
+		var segs: Array = []
+		if first:
+			segs = [[0.0, 46.0]]
+			first = false
+		else:
+			segs = _pick_segment(rng, twist, st)
+		var ok := true
+		for seg in segs:
+			if not _run_segment(seg, st, target_len):
+				ok = false
 				break
+			if st["total"] >= target_len:
+				break
+		if ok:
+			continue
+		# Rewind: retry from this checkpoint, or back further after repeated failures.
+		var cp: Dictionary = checkpoints.pop_back()
+		cp["fails"] = int(cp["fails"]) + 1
+		while int(cp["fails"]) > 8 and not checkpoints.is_empty():
+			cp = checkpoints.pop_back()
+			cp["fails"] = int(cp["fails"]) + 1
+		if int(cp["fails"]) > 8:
+			return false
+		_truncate(int(cp["n"]))
+		st = (cp["st"] as Dictionary).duplicate()
+		# Steer the retry back toward the general direction of travel.
+		st["base"] = float(st["base"]) + rng.randf_range(-0.6, 0.6)
+		checkpoints.append(cp)
+		checkpoints.pop_back()
 	return true
+
+
+func _pick_segment(rng: RandomNumberGenerator, twist: float, st: Dictionary) -> Array:
+	var out: Array = []
+	var h: float = st["h"]
+	var base: float = st["base"]
+	if rng.randf() < 0.32 - twist * 0.14:
+		out.append([0.0, rng.randf_range(24.0, 80.0) * (1.2 - twist * 0.4)])
+	else:
+		var hair := rng.randf() < twist * 0.16
+		var radius := 14.0 if hair else lerpf(80.0, 17.0, pow(rng.randf(), 0.8) * (0.45 + twist * 0.55))
+		var ang := deg_to_rad(rng.randf_range(155.0, 178.0) if hair else rng.randf_range(25.0, 80.0 + 70.0 * twist))
+		var sgn := -1.0 if rng.randf() < 0.5 else 1.0
+		var off := wrapf(h - base, -PI, PI)
+		if absf(off) > 0.9:
+			sgn = -signf(off)
+		out.append([sgn / radius, ang * radius])
+		if rng.randf() < 0.3 + twist * 0.3:
+			out.append([0.0, rng.randf_range(8.0, 20.0)])
+	st["base"] = base + rng.randf_range(-0.35, 0.35)
+	return out
+
+
+func _run_segment(seg: Array, st: Dictionary, target_len: float) -> bool:
+	var kt: float = seg[0]
+	var steps := int(float(seg[1]) / STEP)
+	var pos: Vector2 = st["pos"]
+	var h: float = st["h"]
+	var k: float = st["k"]
+	var total: float = st["total"]
+	for i in steps:
+		k = lerpf(k, kt, 0.22)
+		h += k * STEP
+		pos += Vector2(sin(h), cos(h)) * STEP
+		var idx := pts.size()
+		if _collides(pos, idx):
+			return false
+		pts.append(pos)
+		_grid_add(idx, pos)
+		total += STEP
+		if total >= target_len:
+			break
+	st["pos"] = pos
+	st["h"] = h
+	st["k"] = k
+	st["total"] = total
+	return true
+
+
+func _truncate(n: int) -> void:
+	for i in range(n, pts.size()):
+		var key := Vector2i(floori(pts[i].x / CELL), floori(pts[i].y / CELL))
+		if grid.has(key):
+			var arr: PackedInt32Array = grid[key]
+			var keep := PackedInt32Array()
+			for j in arr:
+				if j < n:
+					keep.append(j)
+			grid[key] = keep
+	pts.resize(n)
+
+
+func _rebuild_grid() -> void:
+	grid = {}
+	for i in pts.size():
+		_grid_add(i, pts[i])
 
 
 func _collides(p: Vector2, idx: int) -> bool:
@@ -326,7 +425,8 @@ func build_elevation(params: Dictionary, seed_v: int) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_v * 11 + 1
 	var n := pts.size()
-	var climb: float = float(params.get("climb", 0.0)) * length / 1000.0
+	# Climb over the first few km, then the long stages go over a series of cols (up and down).
+	var climb: float = minf(float(params.get("climb", 0.0)) * minf(length, 3000.0) / 1000.0, 170.0)
 	var amp: float = params.get("amp", 5.0)
 	var wave: float = params.get("wave", 180.0)
 	var grade: float = params.get("grade", 0.09)
@@ -338,7 +438,8 @@ func build_elevation(params: Dictionary, seed_v: int) -> void:
 	for i in n:
 		var d := dist[i]
 		var t := d / maxf(length, 1.0)
-		var climb_t := t * t * (3.0 - 2.0 * t)   # gentle start and summit
+		var cols := maxf(1.0, round(length / 4000.0))
+		var climb_t := 0.5 - 0.5 * cos(t * PI * (2.0 * cols - 1.0))   # rise to a summit, then over further cols
 		raw[i] = climb * climb_t + amp * (sin(d / wave * TAU + ph1) * 0.65 + sin(d / (wave * 0.37) * TAU + ph2) * 0.35) \
 			+ amp * 0.5 * sin(d / (wave * 2.7) * TAU + ph3)
 	# Flat start and finish areas for the grid and the gantries.
@@ -409,9 +510,12 @@ func build_hazards(seed_v: int, kind: String, twist: float) -> void:
 	var strict := _candidates(-12, 24, 1.0 / 90.0)
 	var loose := _candidates(-6, 14, 1.0 / 60.0)
 	var used: Array = []
-	var want := ["jump", "splash", "chicane", "crest", "jump", "crest", "splash"]
+	var base_want := ["jump", "splash", "chicane", "crest", "jump", "crest", "splash"]
 	if twist > 0.55:
-		want = ["jump", "chicane", "splash", "crest", "crest", "chicane"]
+		base_want = ["jump", "chicane", "splash", "crest", "crest", "chicane"]
+	var want: Array = []
+	for r in int(ceil(length / 2200.0)):
+		want.append_array(base_want)
 	for t in want:
 		var pool: Array = strict if t in ["jump", "crest"] else loose
 		if pool.is_empty():
@@ -448,7 +552,7 @@ func build_hazards(seed_v: int, kind: String, twist: float) -> void:
 				heights[i] = maxf(heights[i], _bump(f, dist[i]))
 	# Loose-surface patches on the road (gravel / mud / ice / deep snow).
 	var pk := {"dry": ["gravel", 0.78, 0.1], "rain": ["mud", 0.62, 0.45], "snow": ["ice", 0.55, 0.0]}
-	for k in 6:
+	for k in int(6 * maxf(1.0, length / 2200.0)):
 		var sc := rng.randf_range(120.0, length - 120.0)
 		var near := false
 		for f in features:
@@ -562,4 +666,43 @@ func next_note(s: float, ahead: float) -> Dictionary:
 		if c["s0"] - s > ahead:
 			return {}
 		return c
+	return {}
+
+
+# --- barriers -----------------------------------------------------------------------------------
+
+## Armco on the outside of fast bends and where the land drops away; post-and-rail fencing along
+## farm and moor stretches. kinds: which barrier kinds this location uses.
+func build_barriers(seed_v: int, kinds: Array) -> void:
+	barriers = []
+	if kinds.is_empty():
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_v * 5 + 17
+	var n := pts.size()
+	var s := 70.0
+	while s < finish_s - 120.0:
+		var kind: String = kinds[rng.randi() % kinds.size()]
+		var run := rng.randf_range(50.0, 150.0) if kind == "armco" else rng.randf_range(70.0, 200.0)
+		# Armco on the outside of the bend (or the side the land falls away), fences either side.
+		var side := -1.0 if rng.randf() < 0.5 else 1.0
+		if kind == "armco":
+			var k := curv[index_at(s + run * 0.5)]
+			if absf(k) > 1.0 / 200.0:
+				side = 1.0 if k > 0.0 else -1.0   # outside of the bend
+		var clear := true
+		for f in features:
+			if s + run > float(f["s0"]) - 25.0 and s < float(f["s1"]) + 25.0:
+				clear = false
+				break
+		if clear:
+			barriers.append({"s0": s, "s1": minf(s + run, finish_s - 60.0), "side": side, "kind": kind})
+		s += run + rng.randf_range(40.0, 160.0)
+
+
+## Barrier at s on the given side of the road, or {}.
+func barrier_at(s: float, side: float) -> Dictionary:
+	for b in barriers:
+		if s >= float(b["s0"]) and s <= float(b["s1"]) and float(b["side"]) == side:
+			return b
 	return {}

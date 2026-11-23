@@ -23,8 +23,8 @@ var puddles: Array = []       # [Vector2 pos, radius]
 var popups := true
 var draw_distance := 110.0
 
-var _pivots: Array[Node3D] = []
-var _springs: Array[FlapSpring] = []
+var _pivots: Array = []    # per placement: hinge node while its chunk is built, else null
+var _springs: Array = []   # per placement: FlapSpring while built, else null
 var _ppos := PackedVector2Array()
 var _jitter := PackedFloat32Array()
 var _pgrid := {}            # Vector2i (16-unit cells) -> PackedInt32Array of piece indices
@@ -195,6 +195,9 @@ func _try_add(kind: String, p: Vector2, rng: RandomNumberGenerator, s: float, bi
 	var vi := rng.randi() % vars.size()
 	var r: float = vars[vi]["r"]
 	var need := track.width * 0.5 + 1.6 + r + (2.5 if big else 0.0)
+	var hit0: Array = track.project(p, track.index_at(s))
+	if not track.barrier_at(float(hit0[1]), signf(float(hit0[2]))).is_empty():
+		need = maxf(need, track.width * 0.5 + 1.6 + r)
 	if track.clearance(p) < need:
 		return
 	# Keep pieces from cutting into each other.
@@ -309,11 +312,11 @@ func scare(p: Vector2) -> void:
 			if not _pgrid.has(key):
 				continue
 			for i in _pgrid[key]:
-				if _scared.has(i) or placements[i]["kind"] != "spectators":
+				if _scared.has(i) or placements[i]["kind"] != "spectators" or _pivots[i] == null:
 					continue
 				if _ppos[i].distance_to(p) < 11.0:
 					_scared[i] = true
-					var pv := _pivots[i]
+					var pv: Node3D = _pivots[i]
 					var away := Vector3(sin(float(placements[i]["out_yaw"])), 0, cos(float(placements[i]["out_yaw"])))
 					var tw := pv.create_tween()
 					tw.tween_property(pv, "position", pv.position + away * 2.5 + Vector3.UP * 0.6, 0.22).set_trans(Tween.TRANS_SINE)
@@ -348,8 +351,8 @@ func break_piece(idx: int, car_vel: Vector2) -> void:
 	var pl: Dictionary = placements[idx]
 	var p: Vector2 = pl["pos"]
 	var start := Transform3D(Basis(Vector3.UP, float(pl["yaw"])), Vector3(p.x, _ground(p) + 0.02, p.y))
-	if popups and idx < _pivots.size():
-		start = _pivots[idx].get_child(0).global_transform
+	if popups and idx < _pivots.size() and _pivots[idx] != null:
+		start = (_pivots[idx] as Node3D).get_child(0).global_transform
 		_pivots[idx].visible = false
 		_up.erase(idx)
 		_active.erase(idx)
@@ -411,14 +414,163 @@ func solids_near(p: Vector2) -> Array:
 	return out
 
 
-var _chimneys: Array = []   # [emitter or light, world position, piece index or -1]
 var lights_on := false
 
+# --- streaming: scenery is built in chunks of road around the camera and freed behind it ------
+const STREAM_R := 320.0
+var _chunk_members := {}    # chunk id -> Array of placement indices
+var _chunk_center := {}     # chunk id -> Vector2
+var _live := {}             # chunk id -> Node3D
+var _chunk_fx := {}         # chunk id -> Array of [emitter or light, world position, piece index or -1]
+var _stream_t := 0.0
+var _last_center := Vector2.INF
 
-func _add_chimneys() -> void:
-	_chimneys.clear()
-	var leak: Color = Catalog.weather(stage_def["weather"])["leak"]
+
+func _index_chunks() -> void:
+	_chunk_members.clear()
+	_chunk_center.clear()
+	_ppos.resize(placements.size())
+	_jitter.resize(placements.size())
+	_pgrid.clear()
 	for i in placements.size():
+		var pl: Dictionary = placements[i]
+		var cid := int(float(pl["s"]) / CHUNK)
+		if not _chunk_members.has(cid):
+			_chunk_members[cid] = []
+			_chunk_center[cid] = track.point_at((cid + 0.5) * CHUNK)
+		_chunk_members[cid].append(i)
+		var p: Vector2 = pl["pos"]
+		_ppos[i] = p
+		_jitter[i] = float(pl["delay"]) * 0.55
+		var key := Vector2i(floori(p.x / PCELL), floori(p.y / PCELL))
+		if not _pgrid.has(key):
+			_pgrid[key] = PackedInt32Array()
+		var arr: PackedInt32Array = _pgrid[key]
+		arr.append(i)
+		_pgrid[key] = arr
+
+
+func rebuild_visuals(use_popups: bool) -> void:
+	popups = use_popups
+	if _content:
+		_content.queue_free()
+	_content = Node3D.new()
+	_content.name = "Content"
+	add_child(_content)
+	_live.clear()
+	_chunk_fx.clear()
+	_mm_map.clear()
+	_active.clear()
+	_up.clear()
+	_pivots.clear()
+	_springs.clear()
+	_pivots.resize(placements.size())
+	_springs.resize(placements.size())
+	if _chunk_members.is_empty():
+		_index_chunks()
+	var c := _last_center if _last_center != Vector2.INF else track.point_at(track.start_s)
+	_stream(c, true)
+
+
+## Build chunks near the camera, free the ones far away.
+func _stream(center: Vector2, all_now := false) -> void:
+	_last_center = center
+	var built := 0
+	for cid in _chunk_members.keys():
+		var d: float = (_chunk_center[cid] as Vector2).distance_to(center)
+		if d < STREAM_R and not _live.has(cid):
+			if built >= 2 and not all_now:
+				continue   # spread the work over frames
+			_build_chunk(cid)
+			built += 1
+		elif d > STREAM_R + 140.0 and _live.has(cid):
+			_free_chunk(cid)
+
+
+func _build_chunk(cid: int) -> void:
+	var node := Node3D.new()
+	_content.add_child(node)
+	_live[cid] = node
+	var members: Array = _chunk_members[cid]
+	if popups:
+		for i in members:
+			var pl: Dictionary = placements[i]
+			var pivot := Node3D.new()
+			var p: Vector2 = pl["pos"]
+			pivot.position = Vector3(p.x, _ground(p) + 0.02, p.y)
+			pivot.rotation.y = pl["out_yaw"]
+			var mi := MeshInstance3D.new()
+			mi.mesh = _piece_mesh(pl)
+			mi.material_override = material
+			mi.rotation.y = float(pl["yaw"]) - float(pl["out_yaw"])
+			mi.visibility_range_end = draw_distance
+			pivot.add_child(mi)
+			_make_labels(mi, lib[pl["kind"]][pl["var"]], pl.get("text", ""))
+			pivot.rotation.x = PI * 0.5
+			pivot.visible = false
+			node.add_child(pivot)
+			var sp := FlapSpring.new(float(lib[pl["kind"]][pl["var"]]["size"]), randf_range(-1.0, 1.0))
+			sp.reset(0.0)
+			_pivots[i] = pivot
+			_springs[i] = sp
+	else:
+		var groups := {}
+		for i in members:
+			if broken.has(i):
+				continue
+			var pl: Dictionary = placements[i]
+			var key := "%s|%d" % [pl["kind"], pl["var"]]
+			if not groups.has(key):
+				groups[key] = []
+			groups[key].append(i)
+		for key in groups.keys():
+			var arr: Array = groups[key]
+			var mm := MultiMesh.new()
+			mm.transform_format = MultiMesh.TRANSFORM_3D
+			mm.mesh = _piece_mesh(placements[arr[0]])
+			mm.instance_count = arr.size()
+			var center := Vector3.ZERO
+			for i in arr:
+				var p: Vector2 = placements[i]["pos"]
+				center += Vector3(p.x, _ground(p), p.y)
+			center /= arr.size()
+			for k in arr.size():
+				var pl: Dictionary = placements[arr[k]]
+				var p: Vector2 = pl["pos"]
+				var t := Transform3D(Basis(Vector3.UP, float(pl["yaw"])), Vector3(p.x, _ground(p) + 0.02, p.y) - center)
+				mm.set_instance_transform(k, t)
+				_mm_map[int(arr[k])] = [mm, k]
+				if lib[pl["kind"]][pl["var"]].has("labels"):
+					var holder := Node3D.new()
+					node.add_child(holder)
+					holder.transform = Transform3D(t.basis, center + t.origin)
+					_make_labels(holder, lib[pl["kind"]][pl["var"]], pl.get("text", ""))
+			var mmi := MultiMeshInstance3D.new()
+			mmi.multimesh = mm
+			mmi.material_override = material
+			mmi.position = center
+			mmi.visibility_range_end = draw_distance + CHUNK * 0.5
+			node.add_child(mmi)
+	_chunk_fx[cid] = _make_fx(members, node)
+
+
+func _free_chunk(cid: int) -> void:
+	for i in _chunk_members[cid]:
+		_pivots[i] = null
+		_springs[i] = null
+		_up.erase(i)
+		_active.erase(i)
+		_mm_map.erase(i)
+	(_live[cid] as Node3D).queue_free()
+	_live.erase(cid)
+	_chunk_fx.erase(cid)
+
+
+## Chimney smoke for houses and working lamps (at dusk and night) in a chunk.
+func _make_fx(members: Array, node: Node3D) -> Array:
+	var out: Array = []
+	var leak: Color = Catalog.weather(stage_def["weather"])["leak"]
+	for i in members:
 		var pl: Dictionary = placements[i]
 		var info: Dictionary = lib[pl["kind"]][pl["var"]]
 		if lights_on and pl["kind"] == "lamp":
@@ -430,8 +582,8 @@ func _add_chimneys() -> void:
 			ol.omni_attenuation = 1.2
 			ol.position = Vector3(lp.x, _ground(lp) + 3.6, lp.y)
 			ol.visible = false
-			_content.add_child(ol)
-			_chimneys.append([ol, ol.position, -1])
+			node.add_child(ol)
+			out.append([ol, ol.position, -1])
 			continue
 		if not info.has("chimney"):
 			continue
@@ -440,50 +592,30 @@ func _add_chimneys() -> void:
 		var em := Puffs.make("chimney", Color("#d8d6d2"), leak)
 		em.emitting = false
 		var world := Transform3D(Basis(Vector3.UP, float(pl["yaw"])), Vector3(p.x, _ground(p), p.y)) * local
-		if popups:
-			var mi: Node3D = _pivots[i].get_child(0)
-			mi.add_child(em)
+		if popups and _pivots[i] != null:
+			(_pivots[i] as Node3D).get_child(0).add_child(em)
 			em.position = local
+			out.append([em, world, i])
 		else:
-			_content.add_child(em)
+			node.add_child(em)
 			em.position = world
-		_chimneys.append([em, world, i if popups else -1])
+			out.append([em, world, -1])
+	return out
 
 
 ## Chimneys only smoke near the camera (and only once their house has unfolded).
 func update_chimneys(center: Vector2, radius: float) -> void:
-	for c in _chimneys:
-		var wp: Vector3 = c[1]
-		var near := Vector2(wp.x, wp.z).distance_to(center) < radius + 50.0
-		var up: bool = c[2] < 0 or _springs[c[2]].p > 0.9
-		if not is_instance_valid(c[0]):
-			continue
-		if c[0] is CPUParticles3D:
-			(c[0] as CPUParticles3D).emitting = near and up
-		else:
-			(c[0] as Node3D).visible = Vector2(wp.x, wp.z).distance_to(center) < radius + 30.0
-
-
-func rebuild_visuals(use_popups: bool) -> void:
-	popups = use_popups
-	if _content:
-		_content.queue_free()
-	_content = Node3D.new()
-	_content.name = "Content"
-	add_child(_content)
-	_pivots.clear()
-	_springs.clear()
-	_mm_map.clear()
-	_active.clear()
-	_up.clear()
-	_pgrid.clear()
-	_ppos = PackedVector2Array()
-	_jitter = PackedFloat32Array()
-	if popups:
-		_build_popups()
-	else:
-		_build_static()
-	_add_chimneys()
+	for fx in _chunk_fx.values():
+		for c in fx:
+			if not is_instance_valid(c[0]):
+				continue
+			var wp: Vector3 = c[1]
+			var dd := Vector2(wp.x, wp.z).distance_to(center)
+			if c[0] is CPUParticles3D:
+				var up: bool = c[2] < 0 or (_springs[c[2]] != null and (_springs[c[2]] as FlapSpring).p > 0.9)
+				(c[0] as CPUParticles3D).emitting = dd < radius + 50.0 and up
+			else:
+				(c[0] as Node3D).visible = dd < radius + 30.0
 
 
 ## Ground height under a piece (pieces beside the road stand on the landscape).
@@ -495,82 +627,16 @@ func _piece_mesh(pl: Dictionary) -> Mesh:
 	return lib[pl["kind"]][pl["var"]]["mesh"]
 
 
-func _build_popups() -> void:
-	for pl in placements:
-		var pivot := Node3D.new()
-		var p: Vector2 = pl["pos"]
-		pivot.position = Vector3(p.x, _ground(p) + 0.02, p.y)
-		pivot.rotation.y = pl["out_yaw"]
-		var mi := MeshInstance3D.new()
-		mi.mesh = _piece_mesh(pl)
-		mi.material_override = material
-		mi.rotation.y = float(pl["yaw"]) - float(pl["out_yaw"])
-		mi.visibility_range_end = draw_distance
-		pivot.add_child(mi)
-		_make_labels(mi, lib[pl["kind"]][pl["var"]], pl.get("text", ""))
-		pivot.rotation.x = PI * 0.5
-		pivot.visible = false
-		_content.add_child(pivot)
-		var size: float = lib[pl["kind"]][pl["var"]]["size"]
-		var sp := FlapSpring.new(size, randf_range(-1.0, 1.0))
-		sp.reset(0.0)
-		var idx := _pivots.size()
-		_pivots.append(pivot)
-		_springs.append(sp)
-		_ppos.append(p)
-		_jitter.append(float(pl["delay"]) * 0.55)
-		var key := Vector2i(floori(p.x / PCELL), floori(p.y / PCELL))
-		if not _pgrid.has(key):
-			_pgrid[key] = PackedInt32Array()
-		var arr: PackedInt32Array = _pgrid[key]
-		arr.append(idx)
-		_pgrid[key] = arr
-
-
-func _build_static() -> void:
-	# Group by chunk of the stage and by mesh.
-	var groups := {}
-	for pl in placements:
-		var key := "%d|%s|%d" % [int(float(pl["s"]) / CHUNK), pl["kind"], pl["var"]]
-
-		if not groups.has(key):
-			groups[key] = []
-		groups[key].append(pl)
-	for key in groups.keys():
-		var arr: Array = groups[key]
-		var mm := MultiMesh.new()
-		mm.transform_format = MultiMesh.TRANSFORM_3D
-		mm.mesh = _piece_mesh(arr[0])
-		mm.instance_count = arr.size()
-		var center := Vector3.ZERO
-		for pl in arr:
-			var p: Vector2 = pl["pos"]
-			center += Vector3(p.x, _ground(p), p.y)
-		center /= arr.size()
-		for i in arr.size():
-			var p: Vector2 = arr[i]["pos"]
-			var t := Transform3D(Basis(Vector3.UP, float(arr[i]["yaw"])), Vector3(p.x, _ground(p) + 0.02, p.y) - center)
-			mm.set_instance_transform(i, t)
-			_mm_map[int(arr[i]["_idx"])] = [mm, i]
-			if lib[arr[i]["kind"]][arr[i]["var"]].has("labels"):
-				var holder := Node3D.new()
-				_content.add_child(holder)
-				holder.transform = Transform3D(t.basis, center + t.origin)
-				_make_labels(holder, lib[arr[i]["kind"]][arr[i]["var"]], arr[i].get("text", ""))
-		var mmi := MultiMeshInstance3D.new()
-		mmi.multimesh = mm
-		mmi.material_override = material
-		mmi.position = center
-		mmi.visibility_range_end = draw_distance + CHUNK * 0.5
-		_content.add_child(mmi)
-
-
 ## Pop-ups follow what the camera sees: every piece within `radius` of the view centre unfolds
 ## (staggered by a per-piece jitter so they rise in waves as they come into view) and folds
 ## back down once it is well out of view.
 func update(center: Vector2, radius: float, dt: float) -> void:
+	_stream_t -= dt
+	if _stream_t <= 0.0:
+		_stream_t = 0.25
+		_stream(center)
 	update_chimneys(center, radius)
-	if not popups or _springs.is_empty():
+	if not popups:
 		return
 	var rose := 0
 	var reach := ceili((radius + 2.0) / PCELL)
@@ -581,34 +647,31 @@ func update(center: Vector2, radius: float, dt: float) -> void:
 			if not _pgrid.has(key):
 				continue
 			for i in _pgrid[key]:
-				if _up.has(i) or broken.has(i):
+				if _up.has(i) or broken.has(i) or _springs[i] == null:
 					continue
 				if _ppos[i].distance_to(center) < radius - _jitter[i]:
 					_up[i] = true
-					_springs[i].set_target(1.0)
+					(_springs[i] as FlapSpring).set_target(1.0)
 					_active[i] = true
 					rose += 1
 	var down_r := radius + 14.0
 	for i in _up.keys():
-		if _ppos[i].distance_to(center) > down_r:
+		if _springs[i] == null:
 			_up.erase(i)
-			_springs[i].set_target(0.0)
+		elif _ppos[i].distance_to(center) > down_r:
+			_up.erase(i)
+			(_springs[i] as FlapSpring).set_target(0.0)
 			_active[i] = true
 	for i in _active.keys():
+		if _springs[i] == null:
+			_active.erase(i)
+			continue
 		var sp: FlapSpring = _springs[i]
 		var p := sp.step(dt)
-		_pivots[i].rotation.x = (1.0 - p) * PI * 0.5
-		_pivots[i].visible = p > 0.01 and not broken.has(i)
+		var pv: Node3D = _pivots[i]
+		pv.rotation.x = (1.0 - p) * PI * 0.5
+		pv.visible = p > 0.01 and not broken.has(i)
 		if sp.at_rest:
 			_active.erase(i)
 	if rose > 0:
 		Sfx.flap(-20.0 + minf(rose, 6.0))
-
-
-## Stand everything up immediately (title screen / camera fly-by).
-func raise_all() -> void:
-	for i in _springs.size():
-		_springs[i].reset(1.0)
-		_springs[i].target = 1.0
-		_pivots[i].rotation.x = 0.0
-		_pivots[i].visible = true

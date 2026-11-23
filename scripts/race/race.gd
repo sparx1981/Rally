@@ -116,7 +116,10 @@ func skip_to_hazard(type: String) -> void:
 			break
 	if f.is_empty():
 		return
-	var s0: float = float(f["s0"]) - 70.0
+	skip_to_s(float(f["s0"]) - 70.0)
+
+
+func skip_to_s(s0: float) -> void:
 	for i in cars.size():
 		cars[i].place_at(s0 - 9.0 * (i / 2) + (0.0 if cars[i] == player else 4.0), (-2.0 if i % 2 == 0 else 2.0) if cars.size() > 1 else 0.0)
 		cars[i].vel = cars[i].fwd() * 22.0
@@ -124,6 +127,14 @@ func skip_to_hazard(type: String) -> void:
 	_count = 0.0
 	state = State.RACING
 	camera.snap()
+
+
+## Show or hide the whole in-race overlay (HUD, touch buttons, camera / pause icons).
+func set_overlay_visible(v: bool) -> void:
+	if _hud_layer:
+		_hud_layer.visible = v
+	if touch and not v:
+		touch.release_all()
 
 
 func cycle_camera() -> void:
@@ -189,7 +200,9 @@ func _process(delta: float) -> void:
 		dt = sim_dt
 	_clock += dt
 	if touch:
-		touch.visible = touch.should_show()
+		touch.visible = touch.should_show() and state != State.DONE
+	if hud:
+		hud.set_controls_visible(state != State.DONE)
 	if not attract and state != State.DONE and not autopilot:
 		input.apply(player, dt)
 	_update_state(dt)
@@ -213,6 +226,7 @@ func _process(delta: float) -> void:
 	if not attract and player:
 		stage.scenery.scare(player.pos)
 	_check_finish()
+	player.sync_now()
 	camera.follow(dt)
 	var vi := camera.view_index()
 	stage.set_bonnet(ChaseCamera.is_ground_level(vi))
@@ -363,6 +377,24 @@ func _collide() -> void:
 			c.pos += n * pen
 			var hit := _apply_contact(c, n, closest, Vector2.ZERO, null)
 			_on_impact(c, hit, closest, true)
+	# Armco and fences are walls along the road edge.
+	for c in cars:
+		var side := signf(c.lat)
+		if side == 0.0 or absf(c.lat) < stage.track.width * 0.5 - 1.5:
+			continue
+		var bar := stage.track.barrier_at(c.s, side)
+		if bar.is_empty():
+			continue
+		var wn: Vector2 = stage.track.nrm[c.track_i] * side          # points out of the road
+		var ext := c.half_wid * absf(c.right_axis().dot(wn)) + c.half_len * absf(c.fwd().dot(wn))
+		var wall := stage.track.width * 0.5 + Stage.BARRIER_LAT
+		var pen := absf(c.lat) + ext - wall
+		if pen > 0.0:
+			c.pos -= wn * pen
+			var cp := _corner_support(c, wn)
+			var hit := _apply_contact(c, -wn, cp, Vector2.ZERO, null)
+			c.vel *= 0.995
+			_on_impact(c, hit, cp)
 	for i in cars.size():
 		for j in range(i + 1, cars.size()):
 			var a := cars[i]

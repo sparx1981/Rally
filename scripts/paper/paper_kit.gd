@@ -136,6 +136,34 @@ class Builder:
 				pts.append(P.call(k.x * h.x, k.y * h.y, k.z * h.z))
 			quad(pts[0], pts[1], pts[2], pts[3], (bas * f[0]).normalized(), f[2])
 
+	## A side profile (points in the z-y plane, counter-clockwise: z forward, y up) folded into a solid
+	## between x0 and x1: two printed side panels plus folded strips round the outline.
+	## strip_cols: optional {edge index: Color} (windscreens, rear windows). Returns nothing.
+	func prism(profile: PackedVector2Array, x0: float, x1: float, xf: Transform3D, col: Color, strip_cols: Dictionary = {}, top_tone := 1.06) -> void:
+		var p := PaperKit.ccw(profile)
+		var flipped := p != profile
+		var cnt := p.size()
+		var cs := PaperKit.lin(col, 1.0)
+		var bas := xf.basis
+		var idx := Geometry2D.triangulate_polygon(p)
+		for side in [x0, x1]:
+			var nn := (bas * Vector3(signf(side - (x0 + x1) * 0.5), 0, 0)).normalized()
+			for k in range(0, idx.size(), 3):
+				var a := p[idx[k]]
+				var b := p[idx[k + 1]]
+				var c2 := p[idx[k + 2]]
+				tri3(xf * Vector3(side, a.y, a.x), xf * Vector3(side, b.y, b.x), xf * Vector3(side, c2.y, c2.x), nn, cs, cs, cs)
+		for i in cnt:
+			var j := (i + 1) % cnt
+			var a := p[i]
+			var b := p[j]
+			var e := b - a
+			var n2 := Vector2(e.y, -e.x).normalized()   # outward in (z, y)
+			var nn := (bas * Vector3(0, n2.y, n2.x)).normalized()
+			var key := (cnt - 1 - i - 1 + cnt) % cnt if flipped else i
+			var sc: Color = strip_cols.get(key, col * (top_tone if n2.y > 0.6 else 1.0))
+			quad(xf * Vector3(x0, a.y, a.x), xf * Vector3(x1, a.y, a.x), xf * Vector3(x1, b.y, b.x), xf * Vector3(x0, b.y, b.x), nn, PaperKit.lin(sc, 1.0))
+
 	## A sloped roof plank or any thin slab between four corner points.
 	func slab(a: Vector3, b: Vector3, d: Vector3, e: Vector3, thick: float, col: Color) -> void:
 		var nn := (b - a).cross(e - a).normalized()

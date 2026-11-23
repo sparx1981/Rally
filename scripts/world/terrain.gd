@@ -10,13 +10,15 @@ var cell := 5.0
 var nx := 0
 var nz := 0
 var h := PackedFloat32Array()
+var far := PackedByteArray()   # 1 = more than 300 m from any road (not meshed)
 var min_h := 0.0
 var max_h := 0.0
 
 
 func build(track: Track, hills: float, seed_v: int, roughness := 1.0) -> void:
 	var b := track.bounds().grow(210.0)
-	cell = 5.0 if b.size.x * b.size.y < 1.6e6 else 7.0
+	# Keep the grid under ~240k cells whatever the stage size.
+	cell = maxf(5.0, sqrt(b.size.x * b.size.y / 240000.0))
 	origin = b.position
 	nx = int(ceil(b.size.x / cell)) + 1
 	nz = int(ceil(b.size.y / cell)) + 1
@@ -94,6 +96,7 @@ func build(track: Track, hills: float, seed_v: int, roughness := 1.0) -> void:
 	noise.fractal_octaves = 4
 	noise.fractal_gain = 0.45 * roughness
 	h.resize(total)
+	far.resize(total)
 	var hw := track.width * 0.5
 	min_h = 1e9
 	max_h = -1e9
@@ -109,6 +112,7 @@ func build(track: Track, hills: float, seed_v: int, roughness := 1.0) -> void:
 		if d < hw + 2.5:
 			v = road_e[k] - 0.1
 		h[k] = v
+		far[k] = 1 if d > hw + 300.0 else 0
 		min_h = minf(min_h, v)
 		max_h = maxf(max_h, v)
 
@@ -132,6 +136,16 @@ func build_meshes(parent: Node3D, mat: Material, chunk := 28) -> void:
 		for cx in range(0, nx - 1, chunk):
 			var x1 := mini(cx + chunk, nx - 1)
 			var z1 := mini(cz + chunk, nz - 1)
+			var needed := false
+			for z in range(cz, z1 + 1, 4):
+				for x in range(cx, x1 + 1, 4):
+					if far[z * nx + x] == 0:
+						needed = true
+						break
+				if needed:
+					break
+			if not needed:
+				continue
 			var v := PackedVector3Array()
 			var nn := PackedVector3Array()
 			var idx := PackedInt32Array()
@@ -161,4 +175,5 @@ func build_meshes(parent: Node3D, mat: Material, chunk := 28) -> void:
 			mi.mesh = m
 			mi.material_override = mat
 			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+			mi.visibility_range_end = 700.0
 			parent.add_child(mi)

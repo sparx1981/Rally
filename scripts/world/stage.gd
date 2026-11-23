@@ -68,6 +68,7 @@ func build(stage_def: Dictionary, time_of_day := -1) -> void:
 	var ep: Dictionary = def.get("elev", {})
 	track.build_elevation(ep, int(def["seed"]))
 	track.build_hazards(int(def["seed"]), wx["kind"], float(def["twist"]))
+	track.build_barriers(int(def["seed"]), def.get("barriers", []))
 	track.terrain = Terrain.new()
 	track.terrain.build(track, float(ep.get("hills", 10.0)), int(def["seed"]) + 5)
 	_make_materials()
@@ -82,6 +83,7 @@ func build(stage_def: Dictionary, time_of_day := -1) -> void:
 	scenery.setup(track, def, paper_mat, float(Settings.g("density")), float(Settings.g("draw_distance")), bool(Settings.g("popups")))
 	_make_puddles()
 	_make_hazards()
+	_make_barriers()
 	_make_weather()
 	_make_mist()
 	_make_birds()
@@ -376,6 +378,56 @@ func _make_hazards() -> void:
 		mi.material_override = paper_mat
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(mi)
+
+
+const BARRIER_LAT := 0.75   # metres outside the road edge
+
+
+## Armco (galvanised paper strip with a pressed groove on stubby posts) and post-and-rail fences.
+func _make_barriers() -> void:
+	var hw := track.width * 0.5 + BARRIER_LAT
+	for bar in track.barriers:
+		var s0: float = bar["s0"]
+		var s1: float = bar["s1"]
+		var side: float = bar["side"]
+		var armco: bool = bar["kind"] == "armco"
+		var s := s0
+		while s < s1:
+			var s_end := minf(s + 60.0, s1)
+			var b := PaperKit.Builder.new(int(s))
+			var step := 2.0
+			var k := s
+			var post_every := 4.0 if armco else 3.0
+			var next_post := k
+			while k < s_end:
+				var i0 := track.index_at(k)
+				var i1 := track.index_at(minf(k + step, s_end))
+				var p0 := track.pts[i0] + track.nrm[i0] * side * hw
+				var p1 := track.pts[i1] + track.nrm[i1] * side * hw
+				var y0 := track.elev[i0] - 0.1
+				var y1 := track.elev[i1] - 0.1
+				if armco:
+					var lo := 0.42
+					var hi := 0.78
+					b.slab(Vector3(p0.x, y0 + hi, p0.y), Vector3(p1.x, y1 + hi, p1.y), Vector3(p1.x, y1 + lo, p1.y), Vector3(p0.x, y0 + lo, p0.y), 0.06, Color("#b4b8bb"))
+					var o := track.nrm[i0] * -side * 0.04
+					b.slab(Vector3(p0.x + o.x, y0 + 0.61, p0.y + o.y), Vector3(p1.x + o.x, y1 + 0.61, p1.y + o.y), Vector3(p1.x + o.x, y1 + 0.57, p1.y + o.y), Vector3(p0.x + o.x, y0 + 0.57, p0.y + o.y), 0.02, Color("#7d8286"))
+				else:
+					for rh in [0.45, 0.95]:
+						b.slab(Vector3(p0.x, y0 + rh + 0.09, p0.y), Vector3(p1.x, y1 + rh + 0.09, p1.y), Vector3(p1.x, y1 + rh - 0.04, p1.y), Vector3(p0.x, y0 + rh - 0.04, p0.y), 0.06, Color("#9a7552"))
+				if k >= next_post:
+					var ph := 0.85 if armco else 1.15
+					var pc := Color("#6d7174") if armco else Color("#6e5038")
+					var pp := p0 + track.nrm[i0] * side * 0.08
+					b.box(Vector3(pp.x, y0 + ph * 0.5 - 0.2, pp.y), Vector3(0.14, ph + 0.4, 0.14), Transform3D(), pc)
+					next_post += post_every
+				k += step
+			var mi := MeshInstance3D.new()
+			mi.mesh = b.mesh()
+			mi.material_override = paper_mat
+			mi.visibility_range_end = float(Settings.g("draw_distance")) + 60.0
+			add_child(mi)
+			s = s_end
 
 
 var _flat_mats := {}

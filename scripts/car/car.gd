@@ -169,50 +169,37 @@ func exhaust_puff(dur := 0.25) -> void:
 ## Headlights (and a little red tail glow) for dusk and night. Only the player's beam casts
 ## shadows, to keep phones fast.
 func enable_lights(shadows: bool) -> void:
+	# Two dipped-beam headlamps: a wide, soft-edged spread that lights the road ahead and the verges,
+	# brightest close in and fading with distance (no hard central hot-spot).
 	var lamp: Vector3 = _model["lamp"]
-	for xs in ([0.0] if not shadows else [-0.45, 0.45]):
+	for xs in [-0.5, 0.5]:
 		var sl := SpotLight3D.new()
-		sl.light_color = Color("#ffe9c2")
-		sl.light_energy = 5.0 if shadows else 6.0
-		sl.spot_range = 48.0
-		sl.spot_angle = 30.0
-		sl.spot_attenuation = 0.8
+		sl.light_color = Color("#ffe6c0")
+		sl.light_energy = 1.6
+		sl.spot_range = 38.0
+		sl.spot_angle = 52.0
+		sl.spot_angle_attenuation = 2.6
+		sl.spot_attenuation = 1.4
 		sl.shadow_enabled = shadows and xs > 0.0
 		sl.shadow_bias = 0.08
-		sl.position = lamp + Vector3(xs, 0.1, 0.1)
-		sl.rotation = Vector3(-0.1, PI, 0.0)
+		sl.position = lamp + Vector3(xs * half_wid * 1.2, 0.05, 0.1)
+		sl.rotation = Vector3(-0.16, PI + xs * 0.12, 0.0)
 		_body.add_child(sl)
 		_lights.append(sl)
 	var tail := OmniLight3D.new()
 	tail.light_color = Color("#ff5a3a")
-	tail.light_energy = 0.8
+	tail.light_energy = 0.7
 	tail.omni_range = 4.0
 	tail.position = Vector3(0, lamp.y, -half_len - 0.4)
 	_body.add_child(tail)
 	_lights.append(tail)
-	# A faint beam of light in the night air.
-	var beam := MeshInstance3D.new()
-	var cm := CylinderMesh.new()
-	cm.top_radius = 0.25
-	cm.bottom_radius = 5.5
-	cm.height = 22.0
-	cm.radial_segments = 10
-	cm.rings = 1
-	cm.cap_top = false
-	cm.cap_bottom = false
-	beam.mesh = cm
-	var bm := StandardMaterial3D.new()
-	bm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	bm.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-	bm.cull_mode = BaseMaterial3D.CULL_DISABLED
-	bm.albedo_color = Color(0.07, 0.06, 0.045, 1.0)
-	bm.no_depth_test = false
-	beam.material_override = bm
-	beam.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	beam.position = lamp + Vector3(0, -0.6, 11.0)
-	beam.rotation = Vector3(-PI * 0.5 - 0.05, 0, 0)
-	_body.add_child(beam)
-	_lights.append(beam)
+
+
+## Sync the visible car to the physics state now (before the camera follows it), so fast-moving
+## close cameras never lag a frame behind.
+func sync_now() -> void:
+	position = Vector3(pos.x, y + (Stage.ROAD_Y if on_road else 0.0), pos.y)
+	rotation.y = h
 
 
 var _damage := 0
@@ -261,7 +248,14 @@ func cockpit(show: bool) -> void:
 ## Where the driver's eyes are (for the cockpit camera).
 func eye_transform() -> Transform3D:
 	var hp: Vector3 = _model["head"]
-	return global_transform * _body.transform * Transform3D(Basis(Vector3.UP, PI), hp + Vector3(0, 0.05, 0.05))
+	return global_transform * _body.transform * Transform3D(Basis(Vector3.UP, PI), hp)
+
+
+## Bonnet camera mount: above the front of the bonnet, ahead of any lamp pod.
+func bonnet_transform() -> Transform3D:
+	var lamp: Vector3 = _model["lamp"]
+	var mount := Vector3(0.0, lamp.y + 0.75, lamp.z - 0.25)
+	return global_transform * _body.transform * Transform3D(Basis(Vector3.UP, PI) * Basis(Vector3.RIGHT, -0.06), mount)
 
 
 func place_at(s_pos: float, lateral: float) -> void:
