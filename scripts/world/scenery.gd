@@ -225,7 +225,28 @@ func _place_hazard_props(rng: RandomNumberGenerator) -> void:
 					_add("spectators", rng.randi() % lib["spectators"].size(), sp, track.heading_at(j) + side * PI * 0.5, track.dist[j], rng, true)
 
 
+## Only what would really grow or lie on a clifftop near the edge: no houses, lamps or signs.
+const CLIFF_OK := ["tree", "pine", "pine_snow", "birch", "bush", "tuft", "rock", "flowers", "heather", "_chev_l", "_chev_r", "warn", "km", "post"]
+
+
+## True when p is within ~30 m of a sea drop (clifftops and the landward lip of a beach).
+func _near_drop(p: Vector2) -> bool:
+	var tr := track.terrain
+	if tr.sea.is_empty() or bool(stage_def.get("coast", {}).get("beach", false)):
+		return false   # a harbour front is built right up to the water
+	if tr.is_sea(p):
+		return true
+	for r in [8.0, 16.0, 24.0, 32.0]:
+		for k in 8:
+			var a := k * TAU / 8.0
+			if tr.is_sea(p + Vector2(cos(a), sin(a)) * r):
+				return true
+	return false
+
+
 func _try_add(kind: String, p: Vector2, rng: RandomNumberGenerator, s: float, big: bool) -> void:
+	if not kind in CLIFF_OK and _near_drop(p):
+		return
 	if p.distance_to(track.point_at(track.length - Stage.PARC_BACK)) < 34.0:
 		return   # keep the parc fermé lot clear
 	if track.river_dist(p) < 12.0:
@@ -260,6 +281,8 @@ func _overlaps(p: Vector2, r: float) -> bool:
 
 
 func _add(kind: String, vi: int, p: Vector2, yaw: float, s: float, rng: RandomNumberGenerator, solid: bool, text := "") -> void:
+	if not kind in CLIFF_OK and not kind.begins_with("flag") and _near_drop(p):
+		return   # sponsor banners, billboards and the like stay off the clifftops
 	var r: float = lib[kind][vi]["r"]
 	# Fold direction: away from the road.
 	var hit: Array = track.project(p, track.index_at(s))
@@ -273,7 +296,7 @@ func _add(kind: String, vi: int, p: Vector2, yaw: float, s: float, rng: RandomNu
 	var c := Vector2i(floori(p.x / 8.0), floori(p.y / 8.0))
 	if not obstacles.has(c):
 		obstacles[c] = []
-	obstacles[c].append([p.x, p.y, r if solid else -r, -1, kind in BREAKABLE])
+	obstacles[c].append([p.x, p.y, r if solid else -r, -1, kind in BREAKABLE, kind])
 
 
 ## Rally furniture: sponsor banners and billboards along the stage, warning boards before every

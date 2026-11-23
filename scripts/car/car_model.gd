@@ -433,10 +433,55 @@ static func build_cockpit(car: Dictionary, model: Dictionary, mat: Material) -> 
 			b.box(Vector3.ZERO, Vector3(0.045, 0.045, (c2 - a2).length()), Transform3D(Basis.looking_at((c2 - a2).normalized(), Vector3.UP), (a2 + c2) * 0.5), cage)
 			b.box(Vector3(xs * (hx - 0.08), (top_y + roof_y) * 0.5, head.z - 0.45), Vector3(0.045, cab_h, 0.045), I, cage)
 		b.box(Vector3(0, roof_y - 0.06, head.z - 0.45), Vector3(hx * 2.0 - 0.16, 0.045, 0.045), I, cage)
+		# --- rally-car detail ---------------------------------------------------------------
+		var ink := Color("#2a2624")
+		var dx: float = head.x
+		var cx: float = -head.x
+		# Instrument binnacle over the driver's dials, with a speedo and three small gauges.
+		var tilt := Basis(Vector3.RIGHT, -0.5) * Basis(Vector3.UP, PI)
+		b.card(PaperKit.circle(0.07, 0, 0, 14), Transform3D(tilt, Vector3(dx + 0.1, top_y + 0.15, dash_z - 0.035)), PaperKit.CREAM, {"thick": 0.01, "edge": 0.012, "lip": 0.0})
+		for k in 3:
+			b.card(PaperKit.circle(0.03, 0, 0, 10), Transform3D(tilt, Vector3(dx - 0.21 - k * 0.065, top_y + 0.13, dash_z - 0.03)), Color("#e8dcc0"), {"thick": 0.008, "edge": 0.008, "lip": 0.0})
+		# Gauge pod standing on the dash behind the dials.
+		b.box(Vector3(dx - 0.05, top_y + 0.14, dash_z - 0.0), Vector3(0.56, 0.16, 0.05), Transform3D(Basis(Vector3.RIGHT, -0.5), Vector3.ZERO), Color("#2e2a28"))
+		# Shift light strip along the top of the binnacle.
+		for k in 5:
+			var lc: Color = [Color("#5fa860"), Color("#5fa860"), Color("#e8b04a"), Color("#e8b04a"), Color("#c8553d")][k]
+			b.box(Vector3(dx - 0.08 + k * 0.04, top_y + 0.215, dash_z + 0.0), Vector3(0.022, 0.014, 0.01), I, lc)
+		# Co-driver: tripmaster with a lit display, intercom box and the pace-note book on the dash.
+		b.box(Vector3(cx, top_y + 0.1, dash_z - 0.02), Vector3(0.24, 0.1, 0.08), I, Color("#26282c"))
+		b.box(Vector3(cx, top_y + 0.11, dash_z - 0.065), Vector3(0.18, 0.045, 0.01), I, Color("#b8e0a0"), Color(-1, 0, 0), true)
+		b.box(Vector3(cx - 0.17, top_y + 0.08, dash_z - 0.01), Vector3(0.08, 0.06, 0.06), I, Color("#3a3c40"))
+		b.box(Vector3(cx + 0.05, top_y + 0.07, dash_z + 0.16), Vector3(0.22, 0.02, 0.15), Transform3D(Basis(Vector3.UP, 0.25), Vector3.ZERO), Color("#e8dcc0"))
+		# Switch panel on the centre console: a row of coloured toggles and a big red kill switch.
+		b.box(Vector3(0, top_y - 0.08, dash_z - 0.14), Vector3(0.3, 0.14, 0.02), I, Color("#3a3430"))
+		for k in 6:
+			b.box(Vector3(-0.11 + k * 0.044, top_y - 0.06, dash_z - 0.155), Vector3(0.016, 0.03, 0.02), I, [Color("#d8d4cc"), Color("#e8b04a"), Color("#3f6fa8")][k % 3])
+		b.box(Vector3(0.0, top_y - 0.12, dash_z - 0.156), Vector3(0.05, 0.05, 0.02), I, Color("#c8553d"))
+		# Gear stick and the tall hydraulic handbrake beside it.
+		var gbase := Vector3(0.06, floor_y + 0.36, head.z + 0.42)
+		b.box(Vector3.ZERO, Vector3(0.03, 0.03, 0.34), Transform3D(Basis(Vector3.RIGHT, -1.15), gbase + Vector3(0, 0.15, -0.06)), ink)
+		b.box(gbase + Vector3(0, 0.31, -0.12), Vector3(0.06, 0.06, 0.06), I, Color("#1a1816"))
+		var hbase := Vector3(0.13, floor_y + 0.36, head.z + 0.18)
+		b.box(Vector3.ZERO, Vector3(0.03, 0.03, 0.42), Transform3D(Basis(Vector3.RIGHT, -1.0), hbase + Vector3(0, 0.18, -0.1)), Color("#9a9690"))
+		b.box(hbase + Vector3(0, 0.38, -0.21), Vector3(0.045, 0.1, 0.045), I, Color("#c8553d"))
+		# Racing harnesses on both seat backs.
+		for sx in [dx, cx]:
+			for k in [-1.0, 1.0]:
+				b.box(Vector3(sx + k * 0.1, top_y + 0.05, head.z - 0.235), Vector3(0.05, 0.62, 0.012), I, Color("#c8553d"))
+			b.box(Vector3(sx, top_y - 0.2, head.z - 0.232), Vector3(0.24, 0.05, 0.012), I, Color("#c8553d"))
+		# Door cards: a pull strap and a map pocket each side.
+		for xs in [-1.0, 1.0]:
+			var dxp: float = xs * (hx - 0.04)
+			b.box(Vector3(dxp, top_y - 0.05, head.z + 0.15), Vector3(0.02, 0.04, 0.22), I, Color("#c8553d"))
+			b.box(Vector3(dxp, floor_y + 0.32, head.z + 0.3), Vector3(0.03, 0.16, 0.4), I, Color("#3a3430"))
+		# Fire extinguisher strapped to the floor between the seats.
+		b.box(Vector3(0, floor_y + 0.12, head.z - 0.15), Vector3(0.09, 0.09, 0.36), I, Color("#c8553d"))
+		b.box(Vector3(0, floor_y + 0.12, head.z + 0.05), Vector3(0.05, 0.05, 0.06), I, ink)
 	else:
 		b.box(Vector3(0, float(P["ride"]) + 0.55, dash_z), Vector3(W * 0.5, 0.12, 0.25), I, dark)
 	# Rev dial on the dash.
-	var dial_pos := Vector3(head.x, top_y + 0.03, dash_z - 0.05)
+	var dial_pos := Vector3(head.x - 0.08, top_y + 0.15, dash_z - 0.035)
 	b.card(PaperKit.circle(0.09, 0, 0, 14), Transform3D(Basis(Vector3.RIGHT, -0.5) * Basis(Vector3.UP, PI), dial_pos), PaperKit.CREAM, {"thick": 0.01, "edge": 0.015, "lip": 0.0})
 	var root := Node3D.new()
 	var mi := MeshInstance3D.new()
@@ -444,6 +489,15 @@ static func build_cockpit(car: Dictionary, model: Dictionary, mat: Material) -> 
 	mi.material_override = mat
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	root.add_child(mi)
+	# Soft cabin fill so the dash, dials and switches read instead of sitting in black shadow.
+	var fill := OmniLight3D.new()
+	fill.position = Vector3(0.0, head.y + 0.1, head.z + 0.15)
+	fill.omni_range = 1.4
+	fill.omni_attenuation = 1.2
+	fill.light_energy = 1.8
+	fill.light_color = Color("#ffe8c8")
+	fill.shadow_enabled = false
+	root.add_child(fill)
 	if gb.v.size() > 0:
 		var gm := StandardMaterial3D.new()
 		gm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -458,7 +512,7 @@ static func build_cockpit(car: Dictionary, model: Dictionary, mat: Material) -> 
 		root.add_child(gmi)
 	# Steering wheel (its own node so it turns).
 	var wheel := Node3D.new()
-	wheel.position = Vector3(head.x, head.y - 0.36, head.z + 0.5)
+	wheel.position = Vector3(head.x, head.y - 0.3, head.z + 0.47)
 	wheel.rotation.x = -0.5
 	var wb := PaperKit.Builder.new(22)
 	var ring := PackedVector2Array()

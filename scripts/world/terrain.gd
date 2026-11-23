@@ -248,10 +248,12 @@ func build_meshes(parent: Node3D, mat: Material, chunk := 28) -> void:
 			var nn := PackedVector3Array()
 			var idx := PackedInt32Array()
 			var w := x1 - cx + 1
+			# Vertices relative to the chunk centre: visibility ranges measure to the node origin.
+			var cen := Vector3(origin.x + (cx + x1) * 0.5 * cell, 0.0, origin.y + (cz + z1) * 0.5 * cell)
 			for z in range(cz, z1 + 1):
 				for x in range(cx, x1 + 1):
 					var k := z * nx + x
-					v.append(Vector3(origin.x + x * cell, h[k], origin.y + z * cell))
+					v.append(Vector3(origin.x + x * cell, h[k], origin.y + z * cell) - cen)
 					var hl := h[z * nx + maxi(x - 1, 0)]
 					var hr := h[z * nx + mini(x + 1, nx - 1)]
 					var hd := h[maxi(z - 1, 0) * nx + x]
@@ -271,6 +273,7 @@ func build_meshes(parent: Node3D, mat: Material, chunk := 28) -> void:
 			m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
 			var mi := MeshInstance3D.new()
 			mi.mesh = m
+			mi.position = cen
 			mi.material_override = mat
 			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 			mi.visibility_range_end = 700.0

@@ -93,7 +93,7 @@ func setup(stage_i: int, mode_v: int, entrants: Array, attract_v := false, tod :
 	if mode == Game.Mode.TIME_TRIAL and not attract:
 		ghost = Ghost.new()
 		add_child(ghost)
-		ghost.setup(Catalog.stages()[stage_i]["id"], player.stats)
+		ghost.setup(Catalog.stages()[stage_i]["id"], player.stats, stage.track)
 	if stage.wx.get("headlights", false):
 		for c in cars:
 			c.enable_lights(c == player and int(Settings.g("shadows")) > 0, int(stage.wx.get("tod", 0)) == 2)
@@ -114,6 +114,10 @@ func setup(stage_i: int, mode_v: int, entrants: Array, attract_v := false, tod :
 ## Test helper: start the cars just before the first hazard of a type, countdown skipped.
 func skip_to_hazard(type: String) -> void:
 	var f: Dictionary = {}
+	for bar in stage.track.barriers:
+		if bar["kind"] == type:
+			skip_to_s(float(bar["s0"]) - 20.0)
+			return
 	if type == "bridge" and not stage.track.bridges.is_empty():
 		skip_to_s(float(stage.track.bridges[0]["s"]) - 70.0)
 		return
@@ -367,6 +371,10 @@ func _apply_contact(c: Car, n: Vector2, cp: Vector2, other_vel: Vector2, other: 
 	return -vn
 
 
+## Speed kept after smashing through a breakable prop.
+const BREAK_KEEP := {"bale": 0.58, "snowbank": 0.72, "crates": 0.82, "tent": 0.85, "cactus": 0.9, "logs": 0.7}
+
+
 func _collide() -> void:
 	for c in cars:
 		var f := c.fwd()
@@ -379,11 +387,16 @@ func _collide() -> void:
 				var dd := op - c.pos
 				if absf(dd.dot(r)) < c.half_wid + rad and absf(dd.dot(f)) < c.half_len + rad and not c.airborne:
 					stage.scenery.break_piece(int(o[3]), c.vel)
-					c.vel *= 0.97
+					# Heavy props (a tight hay bale weighs a few hundred kilos) cost real speed.
+					var keep: float = BREAK_KEEP.get(o[5] if o.size() > 5 else "", 0.97)
+					c.vel *= keep
+					c.yaw_rate += randf_range(-0.4, 0.4) * (1.0 - keep)
+					if keep < 0.8 and c == player:
+						camera.kick(0.35)
 					_debris(Vector3(op.x, c.y + 0.5, op.y), 8.0)
 					if c == player:
-						Haptics.impulse(0.25, 0.06)
-						Sfx.impact(0.25, true)
+						Haptics.impulse(0.25 + (1.0 - keep) * 1.2, 0.06 + (1.0 - keep) * 0.2)
+						Sfx.impact(0.25 + (1.0 - keep), true)
 				continue
 			var d := op - c.pos
 			var lx := clampf(d.dot(r), -c.half_wid, c.half_wid)

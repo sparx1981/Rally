@@ -7,7 +7,7 @@ extends Camera3D
 
 const VIEWS := [
 	{"name": "Chase", "dist": 50.0, "pitch": 44.0, "fov": 30.0, "lead": 5.0},
-	{"name": "Low chase", "dist": 7.2, "pitch": 10.0, "fov": 62.0, "lead": 2.5, "low": true},
+	{"name": "Low chase", "dist": 7.8, "pitch": 10.0, "fov": 62.0, "lead": 2.5, "low": true},
 	{"name": "Far chase", "dist": 66.0, "pitch": 47.0, "fov": 30.0, "lead": 7.0},
 	{"name": "Bonnet", "dist": 0.0, "pitch": 0.0, "fov": 64.0, "lead": 0.0},
 	{"name": "Cockpit", "dist": 0.0, "pitch": 0.0, "fov": 70.0, "lead": 0.0},
@@ -135,7 +135,7 @@ func _follow_low(dt: float, v: Dictionary, sh: Vector3) -> void:
 	var car_p := target.position
 	var spd := clampf(target.v_long, 0.0, 40.0)
 	var d: float = float(v["dist"]) + spd * 0.04
-	var hgt := 2.05 + spd * 0.006
+	var hgt := 2.75 + spd * 0.008
 	var want := car_p - fw * d + Vector3.UP * hgt
 	# Keep clear of the ground behind the car (crests, banks, the far side of a dip).
 	var gp := Vector2(want.x, want.z)

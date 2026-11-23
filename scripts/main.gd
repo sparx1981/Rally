@@ -77,12 +77,84 @@ func _loading(text: String) -> void:
 	await get_tree().process_frame
 
 
+const TIPS := [
+	"Brake in a straight line before the bend, then turn in. Braking mid-corner unsettles the car.",
+	"The pace note number is the bend's severity: 1 is a hairpin, 6 is nearly flat out.",
+	"A tap of the handbrake swings the tail round tight hairpins.",
+	"Hay bales and snowbanks will cost you a lot of speed. Rocks and trees will stop you dead.",
+	"Rain makes the mud slick and puddles throw the car about. Ease off on wet stages.",
+	"Ice and snow have very little grip: smooth inputs, early braking.",
+	"Jumps launch you further the faster you go. Land straight to keep your speed.",
+	"Beat the Gold time to earn a gold medal. Your best run comes back as a ghost car.",
+	"Tap the camera icon to try the Low chase, Bonnet or Cockpit views.",
+	"On the clifftops, the Armco is there for a reason.",
+	"Off the racing line the gravel is loose: you will slide and lose time.",
+	"At dusk and night your headlights light the road. Look further ahead.",
+]
+
+
+## Static loading card: the stage's preview picture, its name and conditions, and a driving tip.
+func _loading_stage(sdef: Dictionary) -> void:
+	_clear_menu()
+	var bg := ColorRect.new()
+	bg.color = Color("#eadcc0")
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	menu.add_child(bg)
+	var c := _center_box()
+	var v := VBoxContainer.new()
+	v.alignment = BoxContainer.ALIGNMENT_CENTER
+	v.add_theme_constant_override("separation", 14)
+	c.add_child(v)
+	var pv := "res://ui/previews/%s.png" % sdef.get("loc_id", "")
+	if ResourceLoader.exists(pv):
+		var frame := PanelContainer.new()
+		frame.add_theme_stylebox_override("panel", PaperTheme.box(PaperTheme.CREAM, PaperTheme.EDGE, 3, 8, 6))
+		var tr := TextureRect.new()
+		tr.texture = load(pv)
+		tr.custom_minimum_size = Vector2(576, 324)
+		tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		frame.add_child(tr)
+		frame.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		v.add_child(frame)
+	var title := PaperTheme.tag("%s  -  %s" % [sdef["name"], sdef["variant_name"]], 34)
+	title.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	v.add_child(title)
+	var wx := Catalog.weather(sdef["weather"])
+	var tod_i: int = Game.race_tod()
+	if tod_i < 0:
+		tod_i = int(sdef.get("tod", 0))
+	var info := Label.new()
+	info.text = "%.0f km   -   %s   -   %s   -   %s" % [float(sdef["length"]) / 1000.0, wx["label"], Catalog.TOD_NAMES[clampi(tod_i, 0, 2)], Game.mode_name()]
+	info.add_theme_font_size_override("font_size", 22)
+	info.add_theme_color_override("font_color", PaperTheme.INK)
+	info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(info)
+	var tip := Label.new()
+	tip.text = "Tip: " + TIPS[randi() % TIPS.size()]
+	tip.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	tip.custom_minimum_size.x = 760
+	tip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	tip.add_theme_font_size_override("font_size", 19)
+	tip.add_theme_color_override("font_color", PaperTheme.INK.lightened(0.15))
+	v.add_child(tip)
+	var ld := Label.new()
+	ld.text = "Folding the stage..."
+	ld.add_theme_font_size_override("font_size", 18)
+	ld.add_theme_color_override("font_color", PaperTheme.EDGE)
+	ld.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(ld)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+
 func _start_race() -> void:
 	get_tree().paused = false
 	_paused = false
 	_clear_race()
 	var sdef: Dictionary = Catalog.stages()[Game.stage_index]
-	await _loading("Folding %s..." % sdef["name"])
+	await _loading_stage(sdef)
 	var entrants: Array
 	match Game.mode:
 		Game.Mode.TIME_TRIAL:
@@ -1058,6 +1130,14 @@ func _run_shot() -> void:
 	if view == "bench":
 		_run_bench()
 		return
+	if view == "loading":
+		await _loading_stage(Catalog.stages()[int(_shot.get("stage", 0))])
+		await get_tree().create_timer(0.5).timeout
+		await RenderingServer.frame_post_draw
+		get_viewport().get_texture().get_image().save_png(_shot["path"])
+		print("SHOT saved ", _shot["path"])
+		get_tree().quit()
+		return
 	if view == "lineup":
 		_lineup()
 		await get_tree().create_timer(1.0).timeout
@@ -1145,6 +1225,10 @@ func _run_shot() -> void:
 		for pl in race.stage.scenery.placements:
 			cnt[pl["kind"]] = cnt.get(pl["kind"], 0) + 1
 		print("SHOT kinds ", cnt)
+		var bk := {}
+		for bar in race.stage.track.barriers:
+			bk[bar["kind"]] = bk.get(bar["kind"], 0) + 1
+		print("SHOT barriers ", bk, " player s=", race.player.s)
 	if race and race.skids:
 		print("SHOT skid marks: %d" % race.skids.multimesh.visible_instance_count)
 	if race and race.player:

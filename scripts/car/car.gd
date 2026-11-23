@@ -100,6 +100,7 @@ func setup(car_stats: Dictionary, num: int, stg: Stage, mat: Material) -> void:
 	_mat = mat
 	_make_contact(mat)
 	_make_dust()
+	_make_rear_lamps()
 	if not is_player:
 		# AI engines are positional: you hear rivals close behind and alongside.
 		_eng3d = AudioStreamPlayer3D.new()
@@ -124,6 +125,73 @@ func _make_contact(mat: Material) -> void:
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
 	_contact = mi
+
+
+## Brake lights (bright red) and reversing lights (white): glowing lamp faces on the tail plus a
+## small light that washes the road behind.
+var _brake_lamps: Array = []
+var _rev_lamps: Array = []
+var _brake_light: OmniLight3D
+var _rev_light: OmniLight3D
+
+
+func _make_rear_lamps() -> void:
+	var lamp: Vector3 = _model["lamp"]
+	var y := lamp.y + 0.04
+	var z := -half_len - 0.03
+	var mk := func(col: Color) -> StandardMaterial3D:
+		var m := StandardMaterial3D.new()
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		m.albedo_color = col
+		return m
+	var red: StandardMaterial3D = mk.call(Color(1.0, 0.16, 0.1))
+	var white: StandardMaterial3D = mk.call(Color(1.0, 0.98, 0.92))
+	for xs in [-1.0, 1.0]:
+		var bm := BoxMesh.new()
+		bm.size = Vector3(0.26, 0.11, 0.03)
+		var b := MeshInstance3D.new()
+		b.mesh = bm
+		b.material_override = red
+		b.position = Vector3(xs * half_wid * 0.68, y, z)
+		b.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		b.visible = false
+		_body.add_child(b)
+		_brake_lamps.append(b)
+		var rm := BoxMesh.new()
+		rm.size = Vector3(0.1, 0.08, 0.03)
+		var r := MeshInstance3D.new()
+		r.mesh = rm
+		r.material_override = white
+		r.position = Vector3(xs * half_wid * 0.36, y - 0.02, z)
+		r.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		r.visible = false
+		_body.add_child(r)
+		_rev_lamps.append(r)
+	_brake_light = OmniLight3D.new()
+	_brake_light.light_color = Color("#ff3a24")
+	_brake_light.light_energy = 1.4
+	_brake_light.omni_range = 4.5
+	_brake_light.position = Vector3(0, y, z - 0.5)
+	_brake_light.visible = false
+	_body.add_child(_brake_light)
+	_rev_light = OmniLight3D.new()
+	_rev_light.light_color = Color("#fff4e0")
+	_rev_light.light_energy = 1.6
+	_rev_light.omni_range = 6.0
+	_rev_light.position = Vector3(0, y, z - 0.6)
+	_rev_light.visible = false
+	_body.add_child(_rev_light)
+
+
+func _update_rear_lamps() -> void:
+	var braking := brake > 0.08 and v_long > 0.5 and not frozen
+	var reversing := gear == 0 and not frozen
+	for b in _brake_lamps:
+		b.visible = braking
+	for r in _rev_lamps:
+		r.visible = reversing
+	_brake_light.visible = braking
+	_rev_light.visible = reversing
 
 
 ## Low chase view sits right behind the car: keep the player's own dust and spray low and small
@@ -268,8 +336,9 @@ func cockpit(show: bool) -> void:
 
 ## Where the driver's eyes are (for the cockpit camera).
 func eye_transform() -> Transform3D:
-	var hp: Vector3 = _model["head"]
-	return global_transform * _body.transform * Transform3D(Basis(Vector3.UP, PI), hp)
+	# A touch forward and up from the seat back: a clear view over the dash, still inside the cabin.
+	var hp: Vector3 = _model["head"] + Vector3(0.0, 0.04, 0.09)
+	return global_transform * _body.transform * Transform3D(Basis(Vector3.UP, PI) * Basis(Vector3.RIGHT, -0.07), hp)
 
 
 ## Bonnet camera mount: above the front of the bonnet, ahead of any lamp pod.
@@ -480,6 +549,8 @@ func _process(delta: float) -> void:
 
 
 func _sync_visual(delta: float) -> void:
+	if _brake_light:
+		_update_rear_lamps()
 	position = Vector3(pos.x, y + (Stage.ROAD_Y if on_road else 0.0), pos.y)
 	if _contact:
 		# The printed contact shadow stays on the road / ground while the car flies.

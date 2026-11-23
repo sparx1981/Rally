@@ -439,7 +439,9 @@ func _make_barriers() -> void:
 				var p1 := track.pts[i1] + track.nrm[i1] * side * hw
 				var y0 := track.elev[i0] - 0.1
 				var y1 := track.elev[i1] - 0.1
-				if armco:
+				if bar["kind"] == "wall":
+					_stone_wall(b, p0, p1, y0, y1, track.nrm[i0] * side, k)
+				elif armco:
 					var lo := 0.42
 					var hi := 0.78
 					b.slab(Vector3(p0.x, y0 + hi, p0.y), Vector3(p1.x, y1 + hi, p1.y), Vector3(p1.x, y1 + lo, p1.y), Vector3(p0.x, y0 + lo, p0.y), 0.06, Color("#b4b8bb"))
@@ -448,7 +450,7 @@ func _make_barriers() -> void:
 				else:
 					for rh in [0.45, 0.95]:
 						b.slab(Vector3(p0.x, y0 + rh + 0.09, p0.y), Vector3(p1.x, y1 + rh + 0.09, p1.y), Vector3(p1.x, y1 + rh - 0.04, p1.y), Vector3(p0.x, y0 + rh - 0.04, p0.y), 0.06, Color("#9a7552"))
-				if k >= next_post:
+				if k >= next_post and bar["kind"] != "wall":
 					var ph := 0.85 if armco else 1.15
 					var pc := Color("#6d7174") if armco else Color("#6e5038")
 					var pp := p0 + track.nrm[i0] * side * 0.08
@@ -458,9 +460,50 @@ func _make_barriers() -> void:
 			var mi := MeshInstance3D.new()
 			mi.mesh = b.mesh()
 			mi.material_override = paper_mat
-			mi.visibility_range_end = float(Settings.g("draw_distance")) + 60.0
+			mi.position = Vector3.ZERO
 			add_child(mi)
 			s = s_end
+
+
+## Dry-stone wall: a rough grey core, irregular face stones in mixed tones on both faces, and a
+## row of upright coping stones along the top (the classic British field wall).
+func _stone_wall(b: PaperKit.Builder, p0: Vector2, p1: Vector2, y0: float, y1: float, out: Vector2, seed_s: float) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(seed_s * 13.0) + 7
+	var tones := [Color("#a39b8c"), Color("#b7ae9c"), Color("#8f887b"), Color("#c3bba8"), Color("#9c9384")]
+	var dir := (p1 - p0)
+	var seg := dir.length()
+	if seg < 0.01:
+		return
+	var yaw := atan2(dir.x, dir.y)
+	var bas := Basis(Vector3.UP, yaw)
+	var mid := (p0 + p1) * 0.5
+	var ym := (y0 + y1) * 0.5
+	var H := 0.95
+	# Core, slightly battered (narrower at the top).
+	b.box(Vector3(mid.x, ym + H * 0.45, mid.y), Vector3(0.55, H * 0.9, seg + 0.02), Transform3D(bas, Vector3.ZERO), Color("#958d80"), Color("#a59d90"))
+	# Face stones on the road side: flat printed stones (cheap quads) in mixed tones.
+	var n3 := -Vector3(out.x, 0, out.y)
+	var along := bas * Vector3(0, 0, 1)
+	var row_y := 0.08
+	while row_y < H * 0.8:
+		var rh := rng.randf_range(0.22, 0.3)
+		var u := -seg * 0.5 + rng.randf_range(0.0, 0.25)
+		while u < seg * 0.5 - 0.15:
+			var w := minf(rng.randf_range(0.4, 0.7), seg * 0.5 - u)
+			var base: Vector3 = Vector3(mid.x, ym + row_y, mid.y) + n3 * 0.29 + along * u
+			var g := 0.03
+			var col: Color = tones[rng.randi() % tones.size()]
+			b.quad(base + along * g, base + along * (w - g), base + along * (w - g) + Vector3(0, rh - g, 0), base + along * g + Vector3(0, rh - g, 0), n3, PaperKit.lin(col, 1.0))
+			u += w
+		row_y += rh
+	# Upright coping stones.
+	var t := -seg * 0.5
+	while t < seg * 0.5:
+		var cw := rng.randf_range(0.24, 0.34)
+		var c2: Vector3 = Vector3(mid.x, ym, mid.y) + bas * Vector3(0, 0, t + cw * 0.5) + Vector3(0, H * 0.9 + 0.12, 0)
+		b.box(c2, Vector3(0.42, rng.randf_range(0.2, 0.28), cw * 0.9), Transform3D(bas * Basis(Vector3.FORWARD, rng.randf_range(-0.12, 0.12)), Vector3.ZERO), tones[rng.randi() % tones.size()].darkened(0.08))
+		t += cw
 
 
 ## Bridges and their rivers.
@@ -878,11 +921,67 @@ func _flat_mat(c: Color) -> Material:
 	return _flat_mats[c]
 
 
+## Autumn: dry leaves gusting across the road around the camera, tumbling as they go.
+func _make_leaves() -> void:
+	var lp := CPUParticles3D.new()
+	lp.local_coords = false
+	var mat := StandardMaterial3D.new()
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.vertex_color_use_as_albedo = true
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	mat.roughness = 1.0
+	mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+	# A leaf: a pointed oval cut from paper.
+	var leaf := PackedVector2Array()
+	for k in 10:
+		var a := TAU * k / 10.0
+		leaf.append(Vector2(cos(a) * 0.11, sin(a) * 0.17 * (1.0 + 0.35 * signf(sin(a)) * absf(sin(a)))))
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for k in leaf.size():
+		var a0 := leaf[k]
+		var a1 := leaf[(k + 1) % leaf.size()]
+		st.set_normal(Vector3(0, 0, 1))
+		st.add_vertex(Vector3.ZERO)
+		st.add_vertex(Vector3(a1.x, a1.y, 0))
+		st.add_vertex(Vector3(a0.x, a0.y, 0))
+	var lm := st.commit()
+	lm.surface_set_material(0, mat)
+	lp.mesh = lm
+	lp.amount = 220
+	lp.lifetime = 5.0
+	lp.preprocess = 5.0
+	lp.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	lp.emission_box_extents = Vector3(28, 0.8, 28)
+	lp.position = Vector3(0, 1.1, 0)
+	lp.direction = Vector3(1.0, 0.1, 0.35)
+	lp.spread = 35.0
+	lp.initial_velocity_min = 2.5
+	lp.initial_velocity_max = 6.0
+	lp.gravity = Vector3(0.8, -0.4, 0.25)
+	lp.damping_min = 0.2
+	lp.damping_max = 0.6
+	lp.angular_velocity_min = -320.0
+	lp.angular_velocity_max = 320.0
+	lp.angle_min = 0.0
+	lp.angle_max = 360.0
+	lp.scale_amount_min = 0.8
+	lp.scale_amount_max = 1.5
+	var g := Gradient.new()
+	g.offsets = PackedFloat32Array([0.0, 0.3, 0.6, 0.85, 1.0])
+	g.colors = PackedColorArray([Color("#c8553d"), Color("#e8a040"), Color("#d0682e"), Color("#a8452e"), Color("#e8c05a")])
+	lp.color_initial_ramp = g
+	lp.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	weather_fx.add_child(lp)
+
+
 func _make_weather() -> void:
 	weather_fx = Node3D.new()
 	add_child(weather_fx)
 	var kind: String = wx["particles"]
 	Sfx.set_ambience(kind)
+	if def.get("leaves", false):
+		_make_leaves()
 	if kind == "":
 		return
 	_particles = CPUParticles3D.new()
