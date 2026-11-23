@@ -1121,6 +1121,8 @@ func _run_shot() -> void:
 		await get_tree().process_frame
 		frames += 1
 	print("SHOT fps_avg=%.1f frames=%d" % [frames / t, frames])
+	if race and race.skids:
+		print("SHOT skid marks: %d" % race.skids.multimesh.visible_instance_count)
 	if race and race.player:
 		print("SHOT player s=%.1f speed=%.1f lat=%.1f" % [race.player.s, race.player.speed(), race.player.lat])
 	if DisplayServer.get_name() == "headless":
