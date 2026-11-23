@@ -111,7 +111,7 @@ func is_sea(p: Vector2) -> bool:
 	return sea[z * nx + x] == 1
 
 
-func build(track: Track, hills: float, seed_v: int, roughness := 1.0) -> void:
+func build(track: Track, hills: float, seed_v: int, roughness := 1.0, bank_height := 0.0) -> void:
 	var b := track.bounds().grow(210.0)
 	# Keep the grid under ~240k cells whatever the stage size.
 	cell = maxf(5.0, sqrt(b.size.x * b.size.y / 240000.0))
@@ -207,6 +207,13 @@ func build(track: Track, hills: float, seed_v: int, roughness := 1.0) -> void:
 		var nv := noise.get_noise_2d(wx, wz)
 		var away := smoothstep(hw + 4.0, hw + 62.0, d)
 		var v := road_e[k] + nv * hills * away + absf(nv) * hills * 0.35 * away
+		# Hillside cuttings rise outside the verge. A broad noise mask leaves
+		# flat stretches between banks and avoids a continuous roadside berm.
+		if bank_height > 0.0 and d < hw + 36.0:
+			var edge := d - hw
+			var sector := smoothstep(-0.20, 0.25, noise.get_noise_2d(wx + 907.0, wz - 671.0))
+			var shoulder := smoothstep(cell + 1.0, cell + 9.0, edge) * (1.0 - smoothstep(17.0, 35.0, edge))
+			v += bank_height * sector * shoulder
 		if d < hw + 2.5:
 			v = road_e[k] - 0.1
 		h[k] = v

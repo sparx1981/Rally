@@ -72,7 +72,8 @@ func build(stage_def: Dictionary, time_of_day := -1) -> void:
 	track.index_watercourses()
 	track.build_barriers(int(def["seed"]), def.get("barriers", []))
 	track.terrain = Terrain.new()
-	track.terrain.build(track, float(ep.get("hills", 10.0)), int(def["seed"]) + 5)
+	var bank_height: float = {"canyon": 4.8, "alpine": 5.6, "moor": 2.4, "autumn": 3.2}.get(def["loc_id"], 0.0)
+	track.terrain.build(track, float(ep.get("hills", 10.0)), int(def["seed"]) + 5, 1.0, bank_height)
 	if def.has("coast"):
 		var cst: Dictionary = def["coast"]
 		var lo := INF
@@ -166,8 +167,7 @@ func _make_materials() -> void:
 func _make_lights() -> void:
 	var we := WorldEnvironment.new()
 	env = Environment.new()
-	env.background_mode = Environment.BG_COLOR
-	env.background_color = _ground_bg()
+	env.background_mode = Environment.BG_SKY
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = wx["amb"]
 	env.ambient_light_energy = float(wx["amb_e"]) * 0.95
@@ -180,6 +180,36 @@ func _make_lights() -> void:
 	var el := deg_to_rad(float(wx["elev"]))
 	var az := deg_to_rad(float(wx["azim"]))
 	var sun := Vector3(cos(el) * sin(az), sin(el), cos(el) * cos(az))
+	var sky_mat := ShaderMaterial.new()
+	sky_mat.shader = preload("res://shaders/sky.gdshader")
+	var wet: bool = wx["kind"] == "rain"
+	var horizon := Color("#cedacb") if wet else Color("#f1dfc3")
+	var zenith := Color("#748797") if wet else Color("#719abc")
+	var cloud := Color("#a5acaa") if wet else Color("#fff2d8")
+	if wx["kind"] == "snow":
+		horizon = Color("#e3e7ed")
+		zenith = Color("#8499b8")
+		cloud = Color("#f4f1ea")
+	if tod == 1:
+		horizon = Color("#e9ac88")
+		zenith = Color("#796f99")
+		cloud = Color("#a98189")
+	elif tod == 2:
+		horizon = Color("#34394e")
+		zenith = Color("#0e152b")
+		cloud = Color("#42475d")
+	sky_mat.set_shader_parameter("horizon", horizon)
+	sky_mat.set_shader_parameter("zenith", zenith)
+	sky_mat.set_shader_parameter("cloud_ink", cloud)
+	sky_mat.set_shader_parameter("light_ink", Color("#d8dfed") if tod == 2 else Color("#fff2d1"))
+	sky_mat.set_shader_parameter("light_dir", sun)
+	sky_mat.set_shader_parameter("cover", 0.44 if wet else 0.54)
+	sky_mat.set_shader_parameter("night", tod == 2)
+	sky_mat.set_shader_parameter("offset", Vector2(float(def["seed"] % 197) / 197.0, float(def["loc"]) * 0.08))
+	sky_mat.set_shader_parameter("paper_noise", noise_tex())
+	env.sky = Sky.new()
+	env.sky.sky_material = sky_mat
+	env.fog_light_color = horizon
 	key_light.basis = Basis.looking_at(-sun, Vector3.UP if absf(sun.y) < 0.99 else Vector3.FORWARD)
 	key_light.shadow_enabled = true
 	key_light.shadow_blur = 1.6
@@ -311,6 +341,31 @@ func _make_gantries() -> void:
 		line.rotation.y = track.heading_at(i)
 		line.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(line)
+	# Intermediate split banners on clear sections of the organised road rallies.
+	if def["loc_id"] in ["meadow", "harbour", "alpine", "autumn"]:
+		for fraction: float in [0.34, 0.69]:
+			var split := track.length * fraction
+			for attempt in 16:
+				var idx := track.index_at(split)
+				var at := track.pts[idx]
+				if track.bridge_at(split, 20).is_empty() and not track.overlaps_water(at, track.width) and absf(track.heights[idx]) < 0.1 and track.feature_at(split, "chicane", 20).is_empty():
+					var gantry := MeshInstance3D.new()
+					gantry.mesh = Pieces.split_gantry(track.width + 4.0)
+					gantry.material_override = paper_mat
+					gantry.position = Vector3(at.x, track.road_h_i(idx), at.y)
+					gantry.rotation.y = track.heading_at(idx)
+					add_child(gantry)
+					var sign_text := Label3D.new()
+					sign_text.text = "SPLIT  1" if fraction < 0.5 else "SPLIT  2"
+					sign_text.font_size = 64
+					sign_text.pixel_size = 0.011
+					sign_text.modulate = PaperKit.CREAM
+					sign_text.outline_size = 0
+					sign_text.position = Vector3(0, 4.5, -0.18)
+					sign_text.rotation.y = PI
+					gantry.add_child(sign_text)
+					break
+				split += 10.0
 
 
 func _make_puddles() -> void:
@@ -1141,7 +1196,7 @@ func _make_birds() -> void:
 	birds = Birds.new()
 	birds.name = "Birds"
 	add_child(birds)
-	birds.setup(track, paper_mat, int(def["seed"]), wx["kind"] == "rain")
+	birds.setup(track, paper_mat, int(def["seed"]), wx["kind"] == "rain", def["loc_id"])
 
 
 ## Per-frame: keep weather and birds around the focus, aim the frontal fill along the camera.
@@ -1159,16 +1214,9 @@ func set_bonnet(on: bool) -> void:
 	if on == _bonnet:
 		return
 	_bonnet = on
-	var sky: Color = Color(def["pal"]["ground"]).lerp(Color(wx["fill"]), 0.35).lightened(0.12)
-	if tod == 1:
-		sky = Color("#8a7fa8")
-	elif tod == 2:
-		sky = Color("#070a1a")
-	env.background_color = sky if on else _ground_bg()
 	env.fog_enabled = on
-	env.fog_light_color = sky
-	env.fog_density = 0.011 if tod < 2 else 0.007
-	env.fog_sky_affect = 1.0
+	env.fog_density = 0.008 if tod < 2 else 0.005
+	env.fog_sky_affect = 0.16
 
 
 func update(dt: float, focus: Vector3, radius: float, player_s: float, cam: Camera3D) -> void:

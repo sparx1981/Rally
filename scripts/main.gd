@@ -96,59 +96,37 @@ const TIPS := [
 ]
 
 
-## Static loading card: the stage's preview picture, its name and conditions, and a driving tip.
+## The native splash and the first interactive frame share the same original rally print.
 func _loading_stage(sdef: Dictionary, startup := false) -> void:
 	_clear_menu()
-	var bg := ColorRect.new()
-	bg.color = Color("#eadcc0")
-	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	menu.add_child(bg)
-	var c := _center_box()
-	var v := VBoxContainer.new()
-	v.alignment = BoxContainer.ALIGNMENT_CENTER
-	v.add_theme_constant_override("separation", 14)
-	c.add_child(v)
-	var pv := "res://ui/previews/%s.png" % sdef.get("loc_id", "")
-	if ResourceLoader.exists(pv):
-		var frame := PanelContainer.new()
-		frame.add_theme_stylebox_override("panel", PaperTheme.box(PaperTheme.CREAM, PaperTheme.EDGE, 3, 8, 6))
-		var tr := TextureRect.new()
-		tr.texture = load(pv)
-		tr.custom_minimum_size = Vector2(576, 324)
-		tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-		frame.add_child(tr)
-		frame.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-		v.add_child(frame)
-	var title := PaperTheme.tag("Paper Rally" if startup else "%s  -  %s" % [sdef["name"], sdef["variant_name"]], 34)
-	title.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	v.add_child(title)
-	var wx := Catalog.weather(sdef["weather"])
-	var tod_i: int = Game.race_tod()
-	if tod_i < 0:
-		tod_i = int(sdef.get("tod", 0))
-	var info := Label.new()
-	info.text = "%.0f km   -   %s   -   %s   -   %s" % [float(sdef["length"]) / 1000.0, wx["label"], Catalog.TOD_NAMES[clampi(tod_i, 0, 2)], Game.mode_name()]
-	if startup:
-		info.text = "Preparing %s" % sdef["name"]
-	info.add_theme_font_size_override("font_size", 22)
-	info.add_theme_color_override("font_color", PaperTheme.INK)
-	info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	v.add_child(info)
-	var tip := Label.new()
-	tip.text = "Tip: " + TIPS[randi() % TIPS.size()]
-	tip.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	tip.custom_minimum_size.x = 760
-	tip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	tip.add_theme_font_size_override("font_size", 19)
-	tip.add_theme_color_override("font_color", PaperTheme.INK.lightened(0.15))
-	v.add_child(tip)
-	var ld := Label.new()
-	ld.text = "Folding the stage..."
-	ld.add_theme_font_size_override("font_size", 18)
-	ld.add_theme_color_override("font_color", PaperTheme.EDGE)
-	ld.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	v.add_child(ld)
+	var poster := TextureRect.new()
+	poster.texture = preload("res://ui/boot.png")
+	poster.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	poster.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	poster.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	menu.add_child(poster)
+	var footer := PanelContainer.new()
+	footer.add_theme_stylebox_override("panel", PaperTheme.box(PaperTheme.CREAM, PaperTheme.EDGE, 1, 0, 0))
+	poster.add_child(footer)
+	footer.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE, Control.PRESET_MODE_MINSIZE)
+	footer.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	var rows := VBoxContainer.new()
+	footer.add_child(rows)
+	var stage_name := Label.new()
+	stage_name.text = "Folding %s…" % sdef["name"] if startup else "%s  ·  %s" % [sdef["name"], sdef["variant_name"]]
+	stage_name.add_theme_font_size_override("font_size", 25)
+	stage_name.add_theme_color_override("font_color", PaperTheme.INK)
+	rows.add_child(stage_name)
+	if not startup:
+		var tod_i := Game.race_tod()
+		if tod_i < 0:
+			tod_i = int(sdef.get("tod", 0))
+		var info := Label.new()
+		info.text = "%.1f km  ·  %s  ·  %s     |     %s" % [float(sdef["length"]) / 1000.0, Catalog.weather(sdef["weather"])["label"], Catalog.TOD_NAMES[clampi(tod_i, 0, 2)], TIPS.pick_random()]
+		info.add_theme_font_size_override("font_size", 17)
+		info.add_theme_color_override("font_color", PaperTheme.EDGE)
+		info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		rows.add_child(info)
 	await get_tree().process_frame
 	await get_tree().process_frame
 	await get_tree().process_frame
@@ -816,6 +794,8 @@ func _settings() -> void:
 			list.add_child(_slider("Tilt sensitivity", 0.5, 2.0, 0.1, float(Settings.g("tilt_sens")), func(v): Settings.set_value("tilt_sens", v), "%.1fx", 1.0))
 			list.add_child(_choice("Invert tilt", ["Off", "On"], 1 if Settings.g("tilt_invert") else 0, func(i): Settings.set_value("tilt_invert", i == 1)))
 			list.add_child(_choice("Camera view", ChaseCamera.VIEWS.map(func(v): return v["name"]), int(Settings.g("camera")), func(i): Settings.set_value("camera", i)))
+			list.add_child(_slider("Cockpit field of view", 58, 90, 1, float(Settings.g("cockpit_fov")), func(v): Settings.set_value("cockpit_fov", v), "%d°", 1.0))
+			list.add_child(_choice("Accelerator trigger", ["Match touch", "Progressive"], int(Settings.g("progressive_trigger")), func(i): Settings.set_value("progressive_trigger", i == 1)))
 			list.add_child(_choice("Speed units", ["km/h", "mph"], int(Settings.g("units")), func(i): Settings.set_value("units", i)))
 			list.add_child(_choice("AI difficulty", ["Easy", "Medium", "Hard"], int(Settings.g("ai_difficulty")), func(i): Settings.set_value("ai_difficulty", i)))
 			list.add_child(_choice("Opponents (Race / Championship)", ["3", "5"], 1 if int(Settings.g("opponents")) == 5 else 0, func(i): Settings.set_value("opponents", 5 if i == 1 else 3)))

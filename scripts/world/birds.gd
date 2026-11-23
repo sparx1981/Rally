@@ -15,26 +15,30 @@ var _time := 0.0
 var _rng := RandomNumberGenerator.new()
 
 
-func setup(track: Track, mat: Material, seed_v: int, rain: bool) -> void:
+func setup(track: Track, mat: Material, seed_v: int, rain: bool, region: String) -> void:
 	_rng.seed = seed_v * 17 + 9
-	var body := _body_mesh()
-	var wing_l := _wing_mesh(1.0)
-	var wing_r := _wing_mesh(-1.0)
+	var coastal := region in ["harbour", "cliffs"]
+	var body := _body_mesh(coastal)
+	var wing_l := _wing_mesh(1.0, coastal)
+	var wing_r := _wing_mesh(-1.0, coastal)
 	var s := 90.0
 	while s < track.length - 60.0:
 		var i := track.index_at(s)
 		var side := -1.0 if _rng.randf() < 0.5 else 1.0
 		var home2 := track.pts[i] + track.nrm[i] * side * _rng.randf_range(track.width * 0.5 + 6.0, track.width * 0.5 + 26.0)
-		if track.clearance(home2) > track.width * 0.5 + 4.0:
+		if not track.overlaps_water(home2, 5.5) and track.clearance(home2) > track.width * 0.5 + 4.0:
 			var gy = track.terrain.height(home2) if track.terrain else 0.0
 			var flock := {"home": Vector3(home2.x, gy, home2.y), "birds": [], "fled": false, "quiet": 0.0}
 			var n := _rng.randi_range(3, 6) if not rain else _rng.randi_range(2, 3)
 			for k in n:
 				var perch: Vector3 = flock["home"] + Vector3(_rng.randf_range(-3.5, 3.5), 0.0, _rng.randf_range(-3.5, 3.5))
 				if track.terrain:
+					if track.terrain.is_sea(Vector2(perch.x, perch.z)):
+						continue
 					perch.y = track.terrain.height(Vector2(perch.x, perch.z))
 				flock["birds"].append(_make_bird(body, wing_l, wing_r, mat, perch))
-			_flocks.append(flock)
+			if not flock["birds"].is_empty():
+				_flocks.append(flock)
 		s += _rng.randf_range(110.0, 220.0)
 
 
@@ -195,9 +199,9 @@ static func _lay() -> Transform3D:
 	return Transform3D(Basis(Vector3.RIGHT, -PI * 0.5), Vector3.ZERO)
 
 
-static func _body_mesh() -> ArrayMesh:
+static func _body_mesh(coastal: bool) -> ArrayMesh:
 	var b := PaperKit.Builder.new(3)
-	var ink := Color("#3a3430")
+	var ink := Color("#ded7c9") if coastal else Color("#3a3430")
 	var lay := _lay()
 	# Body: a chunky teardrop along +Z (card Y maps to -Z, so mirror).
 	var body := PackedVector2Array()
@@ -212,16 +216,20 @@ static func _body_mesh() -> ArrayMesh:
 	return b.mesh()
 
 
-static func _wing_mesh(side: float) -> ArrayMesh:
+static func _wing_mesh(side: float, coastal: bool) -> ArrayMesh:
 	var b := PaperKit.Builder.new(5 if side > 0 else 6)
 	var lay := _lay()
 	var pts := PackedVector2Array([Vector2(0.0, -0.3), Vector2(0.5, -0.28), Vector2(0.95, -0.12), Vector2(1.1, 0.06), Vector2(0.85, 0.2), Vector2(0.45, 0.3), Vector2(0.0, 0.3)])
 	var tip := PackedVector2Array([Vector2(0.66, -0.18), Vector2(0.95, -0.12), Vector2(1.1, 0.06), Vector2(0.85, 0.2), Vector2(0.66, 0.22)])
+	if coastal:
+		for polygon in [pts, tip]:
+			for i in polygon.size():
+				polygon[i] = Vector2(polygon[i].x * 1.25, polygon[i].y + pow(polygon[i].x, 2.0) * 0.24)
 	if side < 0:
 		for i in pts.size():
 			pts[i].x = -pts[i].x
 		for i in tip.size():
 			tip[i].x = -tip[i].x
-	b.card(pts, lay, Color("#efe3c8"), {"thick": 0.02, "edge": 0.025, "lip": 0.03})
+	b.card(pts, lay, Color("#efe3c8") if coastal else Color("#645b53"), {"thick": 0.02, "edge": 0.025, "lip": 0.03})
 	b.card(tip, lay * Transform3D(Basis(), Vector3(0, 0, 0.015)), Color("#5a4a3e"), {"thick": 0.01, "edge": 0.0, "lip": 0.0})
 	return b.mesh()

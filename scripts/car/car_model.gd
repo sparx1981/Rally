@@ -464,6 +464,7 @@ static func build_cockpit(car: Dictionary, model: Dictionary, mat: Material) -> 
 	var b := PaperKit.Builder.new(21)
 	var I := Transform3D()
 	var dash_z := head.z + 0.55
+	var trip_display: Label3D
 	var speed_pivot: Node3D
 	var speed_mesh: MeshInstance3D
 	var gb := PaperKit.Builder.new(24)   # glass panes (drawn with a tinted see-through material)
@@ -530,6 +531,11 @@ static func build_cockpit(car: Dictionary, model: Dictionary, mat: Material) -> 
 		_bonnet_print(b, car.get("paint", "sweep"), car["accent"], W, maxf(cab_f, L * 0.5 - float(P["bon"])), L * 0.5 - 0.25, top_y + 0.006, top_y + 0.006)
 		b.box(Vector3(0, top_y - 0.05, cab_f - 0.05), Vector3(W * 0.9, 0.18, 0.5), I, Color("#4e4640"), Color("#6a6058"))
 		b.box(Vector3(0, top_y + 0.03, dash_z + 0.05), Vector3(W * 0.86, 0.12, 0.36), I, Color("#4e4640"), Color("#5e564e"))
+		# Recessed demister slots across the scuttle, with raised folded lips.
+		for section in 3:
+			var slot_x := W * 0.23 * (section - 1)
+			for row in 2:
+				b.box(Vector3(slot_x, top_y + 0.047, cab_f + 0.05 + row * 0.028), Vector3(W * 0.16, 0.008, 0.013), I, dark)
 		# Rear-view mirror, seats, centre console and a roll cage.
 		var mirror := Vector3(0, roof_y - 0.063, cab_f - rake + 0.04)
 		b.box(mirror + Vector3.UP * 0.035, Vector3(0.022, 0.075, 0.026), I, dark)
@@ -590,6 +596,21 @@ static func build_cockpit(car: Dictionary, model: Dictionary, mat: Material) -> 
 		b.box(Vector3(cx, top_y + 0.1, dash_z - 0.02), Vector3(0.24, 0.1, 0.08), I, Color("#26282c"))
 		b.box(Vector3(cx, top_y + 0.11, dash_z - 0.065), Vector3(0.18, 0.045, 0.01), I, Color("#b8e0a0"), Color(-1, 0, 0), true)
 		b.box(Vector3(cx - 0.17, top_y + 0.08, dash_z - 0.01), Vector3(0.08, 0.06, 0.06), I, Color("#3a3c40"))
+		trip_display = Label3D.new()
+		trip_display.position = Vector3(cx, top_y + 0.11, dash_z - 0.073)
+		trip_display.rotation.y = PI
+		trip_display.font_size = 44
+		trip_display.pixel_size = 0.00065
+		trip_display.modulate = Color("#223329")
+		trip_display.outline_size = 0
+		# Recessed radio speaker and four mounting screws on the co-driver fascia.
+		var grille := Vector3(cx, top_y - 0.038, dash_z - 0.15)
+		b.box(grille, Vector3(0.22, 0.083, 0.012), I, dark)
+		for k in 7:
+			b.box(grille + Vector3((k - 3) * 0.021, 0, -0.009), Vector3(0.009, 0.054, 0.007), I, Color("#80776d"))
+		for xsign: float in [-1.0, 1.0]:
+			for ysign: float in [-1.0, 1.0]:
+				b.box(grille + Vector3(xsign * 0.096, ysign * 0.03, -0.009), Vector3(0.009, 0.009, 0.005), I, PaperKit.CREAM)
 		var notebook := Transform3D(Basis(Vector3.UP, 0.18), Vector3(cx + 0.05, top_y + 0.107, dash_z + 0.16))
 		b.box(Vector3.ZERO, Vector3(0.26, 0.024, 0.19), notebook, car["accent"])
 		b.box(Vector3(0, 0.016, 0), Vector3(0.245, 0.012, 0.178), notebook, PaperKit.CREAM)
@@ -699,6 +720,8 @@ static func build_cockpit(car: Dictionary, model: Dictionary, mat: Material) -> 
 	npiv.add_child(nmi)
 	needle.add_child(npiv)
 	root.add_child(needle)
+	if trip_display:
+		root.add_child(trip_display)
 	if speed_pivot:
 		root.add_child(speed_pivot)
-	return {"root": root, "wheel": wheel, "needle": npiv, "speed_hand": speed_mesh}
+	return {"root": root, "wheel": wheel, "needle": npiv, "speed_hand": speed_mesh, "trip_display": trip_display}

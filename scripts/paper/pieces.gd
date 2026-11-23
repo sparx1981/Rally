@@ -22,6 +22,8 @@ static func make(kind: String, pal: Dictionary, seed_v: int, variant := 0, regio
 		"bush": return bush(pal, rng)
 		"tuft": return tuft(pal, rng, false)
 		"flowers": return tuft(pal, rng, true)
+		"fern": return fern(pal, rng)
+		"bulrush": return bulrush(pal, rng)
 		"heather": return heather(pal, rng)
 		"rock": return rock(pal, rng)
 		"mesa": return mesa(pal, rng)
@@ -171,6 +173,32 @@ static func bush(pal: Dictionary, rng: RandomNumberGenerator) -> Dictionary:
 				b.card(dot, xf * Transform3D(Basis(), Vector3(0, 0, 0.085 * side)), pal["flower"], {"thick": 0.02, "edge": 0.02, "lip": 0.0})
 	_crown(b, r * 0.7, r * 0.75, pal["f_dark"], pal["f_mid"], rng.randi())
 	return _out(b, r * 0.6, false, r * 1.1, 0.3)
+
+
+static func fern(pal: Dictionary, rng: RandomNumberGenerator) -> Dictionary:
+	var b := PaperKit.Builder.new(rng.randi())
+	for frond in 6:
+		var length := rng.randf_range(0.5, 0.95)
+		var frame := Transform3D(Basis(Vector3.UP, frond * TAU / 6 + rng.randf_range(-0.2, 0.2)), Vector3.ZERO)
+		var outline := PackedVector2Array([Vector2.ZERO])
+		for leaflet in 5:
+			var t := (leaflet + 1) / 6.0
+			outline.append(Vector2(t * length, length * sin(t * 1.9) * 0.55))
+			outline.append(Vector2((t - 0.08) * length, length * sin(t * 1.9) * 0.55 + 0.11 * (1.1 - t)))
+		outline.append(Vector2(length, length * 0.45))
+		b.card(outline, frame, pal["f_mid"] if frond % 2 else pal["f_dark"], {"thick": 0.016, "edge": 0.0, "lip": 0.0})
+	return _out(b, 0.6, false, 0.6, 0.35)
+
+
+static func bulrush(pal: Dictionary, rng: RandomNumberGenerator) -> Dictionary:
+	var b := PaperKit.Builder.new(rng.randi())
+	for stem in 8:
+		var height := rng.randf_range(0.65, 1.35)
+		var frame := Transform3D(Basis(Vector3.UP, rng.randf() * TAU), Vector3(rng.randf_range(-0.32, 0.32), 0, rng.randf_range(-0.32, 0.32)))
+		b.box(Vector3(0, height * 0.5, 0), Vector3(0.022, height, 0.022), frame, pal["f_mid"])
+		b.box(Vector3(0, height - 0.10, 0), Vector3(0.064, 0.21, 0.064), frame, pal["wood"])
+		b.card(PackedVector2Array([Vector2.ZERO, Vector2(0.09, height * 0.48), Vector2(0.24, height * 0.7), Vector2(0.12, height * 0.25)]), frame, pal["f_dark"], {"thick": 0.012, "edge": 0.0, "lip": 0.0})
+	return _out(b, 0.38, false, 1.35, 0.35)
 
 
 static func tuft(pal: Dictionary, rng: RandomNumberGenerator, flowers: bool) -> Dictionary:
@@ -328,7 +356,16 @@ static func house(pal: Dictionary, rng: RandomNumberGenerator, cabin: bool, vari
 	for xs in [1.0, -1.0]:
 		var side := Transform3D(Basis(Vector3.UP, xs * PI * 0.5), Vector3(xs * (w * 0.5 + 0.02), 0, 0))
 		_window(b, side, 0, h * 0.35, d * 0.24, h * 0.32, PaperKit.CREAM)
-	match variant % 3:
+	match variant % 4:
+		3:
+			# A glazed gable workshop with a shallow lean-to roof.
+			var depth := 0.85
+			var face_z := d * 0.5 + depth
+			b.box(Vector3(0, h * 0.27, face_z - depth * 0.5), Vector3(w * 0.78, h * 0.54, depth), I, pal["wood"])
+			for bay in 4:
+				_window(b, Transform3D(Basis(), Vector3(0, 0, face_z + 0.03)), (bay - 1.5) * w * 0.18, h * 0.20, w * 0.16, h * 0.31, PaperKit.CREAM)
+			b.slab(Vector3(-w * 0.42, h * 0.69, d * 0.5), Vector3(w * 0.42, h * 0.69, d * 0.5),
+				Vector3(w * 0.42, h * 0.54, face_z + 0.1), Vector3(-w * 0.42, h * 0.54, face_z + 0.1), 0.08, rc)
 		1:
 			# A covered gallery, projected just beyond the gable.
 			for sx: float in [-0.38, 0.38]:
@@ -690,6 +727,21 @@ static func chevron(dir: float) -> ArrayMesh:
 
 
 ## Start / finish gantry spanning the road.
+static func split_gantry(span: float) -> ArrayMesh:
+	var b := PaperKit.Builder.new(24)
+	var metal := Color("#555954")
+	for side: float in [-1, 1]:
+		var x := side * span * 0.5
+		for leg: float in [-0.22, 0.22]:
+			b.box(Vector3(x + leg, 2.22, 0), Vector3(0.12, 4.64, 0.22), Transform3D(), metal)
+		for k in 5:
+			var angle := 0.44 if k % 2 == 0 else -0.44
+			b.box(Vector3.ZERO, Vector3(0.085, 1.02, 0.13), Transform3D(Basis(Vector3.BACK, angle), Vector3(x, k * 0.9 + 0.42, 0)), metal)
+	b.box(Vector3(0, 4.5, 0), Vector3(span + 0.65, 0.82, 0.29), Transform3D(), Color("#326b69"))
+	b.box(Vector3(0, 4.95, 0), Vector3(span + 0.78, 0.10, 0.34), Transform3D(), PaperKit.CREAM)
+	return b.mesh()
+
+
 static func arch(span: float, finish: bool) -> ArrayMesh:
 	var b := PaperKit.Builder.new(11 if finish else 13)
 	var post := Color("#3a3430")

@@ -62,6 +62,7 @@ var model_root: Node3D
 var _model: Dictionary
 var _mat: Material
 var _cockpit: Dictionary = {}
+var _trip_centikm := -1
 var _lights: Array = []
 var _prev_gh := 0.0
 var _slope := 0.0
@@ -339,8 +340,8 @@ func cockpit(show: bool) -> void:
 ## Where the driver's eyes are (for the cockpit camera).
 func eye_transform() -> Transform3D:
 	# A touch forward and up from the seat back: a clear view over the dash, still inside the cabin.
-	var hp: Vector3 = _model["head"] + Vector3(0.0, 0.04, 0.09)
-	return global_transform * _body.transform * Transform3D(Basis(Vector3.UP, PI) * Basis(Vector3.RIGHT, -0.07), hp)
+	var hp: Vector3 = _model["head"] + Vector3(0.0, 0.045, -0.025)
+	return global_transform * _body.transform * Transform3D(Basis(Vector3.UP, PI) * Basis(Vector3.RIGHT, -0.045), hp)
 
 
 ## Bonnet camera mount: above the front of the bonnet, ahead of any lamp pod.
@@ -580,6 +581,11 @@ func _sync_visual(delta: float) -> void:
 	if not _cockpit.is_empty() and _cockpit["root"].visible:
 		(_cockpit["wheel"] as Node3D).rotation.z = steer * 1.6
 		(_cockpit["needle"] as Node3D).rotation.z = lerpf(-2.2, 1.8, clampf(rpm / 7500.0, 0.0, 1.0))
+		var trip_display: Label3D = _cockpit["trip_display"]
+		var distance := floori(maxf(s, 0.0) / 10.0)
+		if trip_display and distance != _trip_centikm:
+			_trip_centikm = distance
+			trip_display.text = "%.2f" % (distance * 0.01)
 		var speed_hand: Node3D = _cockpit["speed_hand"]
 		if speed_hand:
 			speed_hand.rotation.z = lerpf(2.2, -1.8, clampf(speed() * 3.6 / 240.0, 0.0, 1.0))

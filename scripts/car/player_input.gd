@@ -4,6 +4,7 @@ extends RefCounted
 
 var touch: TouchControls
 var _steer := 0.0
+var _trigger_down := false
 
 
 # Ignore rest noise and allow a slightly short physical throw to reach full pedal.
@@ -13,7 +14,10 @@ static func pedal(travel: float) -> float:
 
 func apply(car: Car, dt: float) -> void:
 	var s_axis := Input.get_axis("steer_left", "steer_right")
-	var thr := maxf(Input.get_action_strength("accelerate"), pedal(Input.get_action_raw_strength("throttle_trigger")))
+	var travel := Input.get_action_raw_strength("throttle_trigger")
+	_trigger_down = travel > (0.10 if _trigger_down else 0.18)
+	var trigger := pedal(travel) if Settings.g("progressive_trigger") else float(_trigger_down)
+	var thr := maxf(Input.get_action_strength("accelerate"), trigger)
 	var brk := maxf(Input.get_action_strength("brake"), pedal(Input.get_action_raw_strength("brake_trigger")))
 	var hb := Input.get_action_strength("handbrake")
 	if touch and touch.visible:

@@ -80,7 +80,7 @@ func follow(dt: float) -> void:
 	if vi != _last_view:
 		_last_view = vi
 		_init_done = false
-	fov = v["fov"]
+	fov = float(Settings.g("cockpit_fov")) if vi == COCKPIT else float(v["fov"])
 	var sh := Vector3.ZERO
 	if _shake > 0.001:
 		sh = Vector3(randf_range(-1, 1), randf_range(-1, 1), randf_range(-1, 1)) * _shake
