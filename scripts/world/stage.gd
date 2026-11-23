@@ -211,10 +211,9 @@ func _make_ground() -> void:
 	add_child(mi)
 	if is_coastal():
 		# The sea: a flat sheet out to the horizon, edged with paper surf where it meets the land.
-		var sm := StandardMaterial3D.new()
-		sm.albedo_color = sea_color()
-		sm.roughness = 1.0
-		sm.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+		var sm := ShaderMaterial.new()
+		sm.shader = preload("res://shaders/water.gdshader")
+		sm.set_shader_parameter("paper_tint", sea_color())
 		var sea := MeshInstance3D.new()
 		var sp := PlaneMesh.new()
 		sp.size = b.size * 3.0
@@ -345,31 +344,11 @@ func _make_hazards() -> void:
 		var hd := track.heading_at(i)
 		match f["type"]:
 			"splash":
-				# A stream crossing the road: stepped water tones, wobbly banks, cream ripple dashes.
-				var b := PaperKit.Builder.new(rng.randi())
 				var wl := track.width * 0.5 + 16.0
-				var stream := PackedVector2Array()
-				for k in 25:
-					var x := lerpf(-wl, wl, k / 24.0)
-					stream.append(Vector2(x, 3.6 + sin(k * 0.9) * 0.5))
-				for k in 25:
-					var x := lerpf(wl, -wl, k / 24.0)
-					stream.append(Vector2(x, -3.6 + sin(k * 1.3 + 1.0) * 0.5))
-				b.card(stream, lay, Color("#7f98a6"), {"thick": 0.03, "edge": 0.06, "lip": 0.08})
-				var inner := PackedVector2Array()
-				for q in stream:
-					inner.append(Vector2(q.x * 0.97, q.y * 0.55))
-				b.card(inner, lay * Transform3D(Basis(), Vector3(0, 0, 0.02)), Color("#6a8494"), {"thick": 0.01, "edge": 0.0, "lip": 0.0})
-				for k in 10:
-					var dx := rng.randf_range(-wl * 0.8, wl * 0.8)
-					b.card(PaperKit.rrect(rng.randf_range(0.8, 1.6), 0.12, 0.05, dx, rng.randf_range(-2.0, 2.0)), lay * Transform3D(Basis(), Vector3(0, 0, 0.035)), Color("#e6ecee"), {"thick": 0.01, "edge": 0.0, "lip": 0.0, "sides": false})
-				var mi := MeshInstance3D.new()
-				mi.mesh = b.mesh()
-				mi.material_override = paper_mat
-				mi.position = Vector3(p.x, track.road_h_i(i) + ROAD_Y + 0.02, p.y)
-				mi.rotation.y = hd
-				mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-				add_child(mi)
+				var stream := _water_sheet(wl * 2.0, 3.6, Color("#7895a4"), rng.randi())
+				stream.position = Vector3(p.x, track.road_h_i(i) + ROAD_Y + 0.025, p.y)
+				stream.rotation.y = hd + PI * 0.5
+				add_child(stream)
 			"jump", "crest":
 				# Posts under the ramp edges so it reads as a built paper ramp.
 				for s_off in range(int(f["s0"]) + 2, int(f["s1"]), 3):
@@ -475,35 +454,75 @@ func _stone_wall(b: PaperKit.Builder, p0: Vector2, p1: Vector2, y0: float, y1: f
 	var seg := dir.length()
 	if seg < 0.01:
 		return
-	var yaw := atan2(dir.x, dir.y)
-	var bas := Basis(Vector3.UP, yaw)
-	var mid := (p0 + p1) * 0.5
-	var ym := (y0 + y1) * 0.5
-	var H := 0.95
-	# Core, slightly battered (narrower at the top).
-	b.box(Vector3(mid.x, ym + H * 0.45, mid.y), Vector3(0.55, H * 0.9, seg + 0.02), Transform3D(bas, Vector3.ZERO), Color("#958d80"), Color("#a59d90"))
-	# Face stones on the road side: flat printed stones (cheap quads) in mixed tones.
-	var n3 := -Vector3(out.x, 0, out.y)
-	var along := bas * Vector3(0, 0, 1)
-	var row_y := 0.08
-	while row_y < H * 0.8:
-		var rh := rng.randf_range(0.22, 0.3)
-		var u := -seg * 0.5 + rng.randf_range(0.0, 0.25)
-		while u < seg * 0.5 - 0.15:
-			var w := minf(rng.randf_range(0.4, 0.7), seg * 0.5 - u)
-			var base: Vector3 = Vector3(mid.x, ym + row_y, mid.y) + n3 * 0.29 + along * u
-			var g := 0.03
-			var col: Color = tones[rng.randi() % tones.size()]
-			b.quad(base + along * g, base + along * (w - g), base + along * (w - g) + Vector3(0, rh - g, 0), base + along * g + Vector3(0, rh - g, 0), n3, PaperKit.lin(col, 1.0))
+	var along := Vector3(dir.x, y1 - y0, dir.y) / seg
+	var face := Vector3(-dir.y, 0, dir.x) / seg
+	if face.dot(Vector3(out.x, 0, out.y)) > 0.0:
+		face = -face
+	var start := Vector3(p0.x, y0, p0.y)
+	var frame := Transform3D(Basis(Vector3(dir.y, 0, -dir.x) / seg, Vector3.UP, along), start)
+	b.box(Vector3(0, 0.40, seg * 0.5), Vector3(0.50, 0.86, seg + 0.015), frame, Color("#786f64"))
+	# Three staggered courses. Clipped corners and a narrow lighter shoulder
+	# pick out each fieldstone against the continuous recessed core.
+	for row in 3:
+		var u := 0.0
+		while u < seg - 0.04:
+			var w := minf(rng.randf_range(0.38, 0.76), seg - u)
+			if u == 0.0 and row % 2 == 1:
+				w *= 0.55
+			var h := rng.randf_range(0.24, 0.27)
+			var chip := minf(w * 0.15, rng.randf_range(0.045, 0.10))
+			var col: Color = tones[rng.randi_range(0, tones.size() - 1)]
+			for side: float in [-1.0, 1.0]:
+				var n := face * side
+				var base := start + along * u + Vector3.UP * (0.015 + row * 0.275) + n * 0.265
+				var lo := base + along * 0.014
+				var hi := base + along * (w - 0.014)
+				var a := lo + Vector3.UP * (h - chip)
+				var d := hi + Vector3.UP * (h - chip * 0.65)
+				var crown_l := a + along * chip + Vector3.UP * chip - n * 0.012
+				var crown_r := d - along * chip + Vector3.UP * (chip * 0.65) - n * 0.012
+				b.quad(lo + along * chip * 0.4, hi - along * chip * 0.3, d, a, n, PaperKit.lin(col))
+				b.quad(a, d, crown_r, crown_l, (n + Vector3.UP * 0.4).normalized(), PaperKit.lin(col.lightened(0.09)))
 			u += w
-		row_y += rh
-	# Upright coping stones.
-	var t := -seg * 0.5
-	while t < seg * 0.5:
-		var cw := rng.randf_range(0.24, 0.34)
-		var c2: Vector3 = Vector3(mid.x, ym, mid.y) + bas * Vector3(0, 0, t + cw * 0.5) + Vector3(0, H * 0.9 + 0.12, 0)
-		b.box(c2, Vector3(0.42, rng.randf_range(0.2, 0.28), cw * 0.9), Transform3D(bas * Basis(Vector3.FORWARD, rng.randf_range(-0.12, 0.12)), Vector3.ZERO), tones[rng.randi() % tones.size()].darkened(0.08))
-		t += cw
+	var t := 0.0
+	while t < seg - 0.04:
+		var w := minf(rng.randf_range(0.26, 0.44), seg - t)
+		var cap := frame.translated_local(Vector3(0, 0.91, t + w * 0.5))
+		cap.basis = cap.basis * Basis(Vector3.FORWARD, rng.randf_range(-0.10, 0.10))
+		var col: Color = tones[rng.randi_range(0, tones.size() - 1)]
+		b.box(Vector3.ZERO, Vector3(0.57, rng.randf_range(0.20, 0.29), w * 0.95), cap, col, col.lightened(0.09))
+		t += w
+
+
+## A cut-paper channel with pale shallows, a wandering deep seam and long facets.
+## Local Z follows the current for both the geometry and the moving ink marks.
+func _water_sheet(length: float, half_width: float, water: Color, seed_v: int) -> MeshInstance3D:
+	var b := PaperKit.Builder.new(seed_v)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_v
+	var steps := maxi(2, ceili(length / 3.5))
+	var last := PackedVector3Array()
+	var bands := [water.lightened(0.13), water, water.darkened(0.13), water.darkened(0.04), water.lightened(0.10)]
+	for i in steps + 1:
+		var z := length * (float(i) / steps - 0.5)
+		var drift := sin(i * 0.53 + seed_v % 17) * 0.10
+		var section := PackedVector3Array()
+		for x: float in [-1.0, -0.72, -0.30 + drift, 0.18 + drift, 0.72, 1.0]:
+			section.append(Vector3((x + rng.randf_range(-0.05, 0.05)) * half_width, 0, z))
+		if i > 0:
+			for j in bands.size():
+				var c := PaperKit.lin(bands[j])
+				var fold := PaperKit.lin(Color(bands[j]).lightened(rng.randf_range(0.012, 0.045)))
+				b.tri3(last[j], last[j + 1], section[j], Vector3.UP, c, c, c)
+				b.tri3(last[j + 1], section[j + 1], section[j], Vector3.UP, fold, fold, fold)
+		last = section
+	var mi := MeshInstance3D.new()
+	mi.mesh = b.mesh()
+	var mat := ShaderMaterial.new()
+	mat.shader = preload("res://shaders/water.gdshader")
+	mi.material_override = mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return mi
 
 
 ## Bridges and their rivers.
@@ -518,20 +537,15 @@ func _make_bridges() -> void:
 		var t2 := track.tang[ci]
 		var n2 := track.nrm[ci]
 		var c2 := track.pts[ci]
-		# River: a long blue card with paler ripple strips.
 		var a: Vector2 = br["a"]
 		var e: Vector2 = br["b"]
 		var mid := (a + e) * 0.5
-		var along := (e - a)
-		var rl := along.length()
-		var rb := Basis(Vector3.UP, atan2(along.x, along.y)) * Basis(Vector3.RIGHT, -PI * 0.5)
+		var along := e - a
 		var water := Color("#5d8fae") if def["weather"].begins_with("dry") else Color("#5b7f90")
-		b.card(PaperKit.rect(11.0, rl, 0, -rl * 0.5), Transform3D(rb, Vector3(mid.x, wy, mid.y)), water, {"thick": 0.04, "edge": 0.12, "lip": 0.2})
-		var rng := RandomNumberGenerator.new()
-		rng.seed = int(sc)
-		for k in int(rl / 9.0):
-			var off := rng.randf_range(-rl * 0.5 + 3.0, rl * 0.5 - 3.0)
-			b.card(PaperKit.rrect(0.35, rng.randf_range(2.0, 4.5), 0.15, rng.randf_range(-3.5, 3.5), off), Transform3D(rb, Vector3(mid.x, wy + 0.04, mid.y)), water.lightened(0.35), {"thick": 0.01, "edge": 0.0, "lip": 0.0, "sides": false})
+		var river := _water_sheet(along.length(), 5.5, water, int(sc))
+		river.position = Vector3(mid.x, wy, mid.y)
+		river.rotation.y = atan2(along.x, along.y)
+		add_child(river)
 		# Local frame at the centre of the deck: x along the road, z across it, y up.
 		var ybase := track.road_h_i(ci) - 0.85 if br["kind"] == "stone" else track.road_h_i(ci)
 		var org := Vector3(c2.x, 0.0, c2.y)

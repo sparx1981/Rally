@@ -577,7 +577,10 @@ func _sync_visual(delta: float) -> void:
 	_spin += v_long * delta / wheel_r
 	if not _cockpit.is_empty() and _cockpit["root"].visible:
 		(_cockpit["wheel"] as Node3D).rotation.z = steer * 1.6
-		(_cockpit["needle"] as Node3D).rotation.z = 2.2 - clampf(rpm / 7500.0, 0.0, 1.0) * 4.0
+		(_cockpit["needle"] as Node3D).rotation.z = lerpf(-2.2, 1.8, clampf(rpm / 7500.0, 0.0, 1.0))
+		var speed_hand: Node3D = _cockpit["speed_hand"]
+		if speed_hand:
+			speed_hand.rotation.z = lerpf(2.2, -1.8, clampf(speed() * 3.6 / 240.0, 0.0, 1.0))
 	# Suspension travel: wheels droop in the air and jiggle over rough ground, within the arches.
 	var rough := 0.0 if on_road else clampf(absf(v_long) / 25.0, 0.0, 1.0) * 0.025
 	for i in _wheels.size():

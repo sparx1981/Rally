@@ -103,6 +103,12 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 		if P.get("roof2", false):
 			cab_col = PaperKit.CREAM if body_c.v < 0.8 else Color("#2b2b2b")
 		b.prism(cab, -cw * 0.5, cw * 0.5, I, cab_col, {1: glass, 3: glass}, 1.0)
+		# Two laid-down wipers follow the rake of this particular screen.
+		var screen_up := Vector3(0, cab_h + 0.01, -float(P["rake"]))
+		var windshield := Transform3D(Basis(Vector3.RIGHT, screen_up.normalized(), Vector3.RIGHT.cross(screen_up).normalized()), Vector3(0, top_y - 0.01, cab_f))
+		for side_x: float in [-0.24, 0.24]:
+			var blade := windshield * Transform3D(Basis(Vector3.BACK, 0.12), Vector3(cw * side_x, screen_up.length() * 0.13, 0.014))
+			b.box(Vector3.ZERO, Vector3(cw * 0.39, 0.024, 0.018), blade, ink)
 		# Side windows: the cabin side outline inset, printed as glass.
 		var inset := PackedVector2Array()
 		var cc := Vector2((cab_r + cab_f) * 0.5, top_y + cab_h * 0.5)
@@ -125,9 +131,8 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 			var dz := (cab_r + cab_f) * 0.5
 			b.card(PaperKit.rect(0.025, low * 0.7, -dz * xs + 0.6, y0 + 0.12), body_side * Transform3D(Basis(), Vector3(0, 0, 0.015)), body_c.darkened(0.35), {"thick": 0.005, "edge": 0.0, "lip": 0.0, "sides": false})
 			b.card(PaperKit.circle(low * 0.25, -dz * xs, y0 + low * 0.62, 14), body_side * Transform3D(Basis(), Vector3(0, 0, 0.02)), PaperKit.CREAM, {"thick": 0.012, "edge": 0.02, "lip": 0.0})
-			for d in mini(number, 4):
-				var dot := PaperKit.circle(0.045, -dz * xs - 0.1 + d * 0.07, y0 + low * 0.62, 6)
-				b.card(dot, body_side * Transform3D(Basis(), Vector3(0, 0, 0.032)), ink, {"thick": 0.01, "edge": 0.0, "lip": 0.0, "sides": false})
+			var roundel := body_side.translated_local(Vector3(-dz * xs, y0 + low * 0.62, 0.030))
+			_print_number(b, number, roundel, low * 0.24, ink)
 			for k in 2:
 				var pz = (L * 0.33 - k * L * 0.66) * xs
 				var sc: Color = SPONSOR_COLS[(number + k) % SPONSOR_COLS.size()]
@@ -152,6 +157,16 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 					b.card(PaperKit.rrect(W * 0.24, 0.13, 0.04, xs * W * 0.3, lamp_y - 0.04), front, Color("#fff0c8"), {"thick": 0.02, "edge": 0.025, "lip": 0.0, "glow": true})
 			b.card(PaperKit.rrect(W * 0.18, 0.12, 0.04, xs * W * 0.33, y0 + float(P["tail"]) * 0.7), back, Color("#d84a32"), {"thick": 0.02, "edge": 0.025, "lip": 0.0, "glow": true})
 		b.card(PaperKit.rrect(W * 0.3, 0.12, 0.04, 0, y0 + float(P["nose"]) * 0.42), front, Color("#3a3430"), {"thick": 0.02, "edge": 0.0, "lip": 0.0})
+		# A pressed tail panel and cream rally plate sit between the rear lamps.
+		var plate_y := y0 + float(P["tail"]) * 0.60
+		var plate := Transform3D(back.basis, Vector3(0, plate_y, back.origin.z))
+		b.box(Vector3.ZERO, Vector3(W * 0.28, 0.145, 0.028), plate, ink)
+		b.box(Vector3(0, 0, 0.019), Vector3(W * 0.24, 0.106, 0.012), plate, PaperKit.CREAM)
+		_print_number(b, number, plate.translated_local(Vector3(0, 0, 0.028)), 0.080, ink)
+		for pin: float in [-1.0, 1.0]:
+			b.box(Vector3(pin * W * 0.096, 0.025, 0.028), Vector3(0.025, 0.018, 0.008), plate, ink)
+		for k in 3:
+			b.box(Vector3(0, y0 + float(P["nose"]) * 0.42 + 0.025 + k * 0.035, front.origin.z + 0.018), Vector3(W * 0.25, 0.012, 0.012), I, ink.lightened(0.32))
 		if P.get("bumpers", false):
 			b.box(Vector3(0, y0 + 0.08, L * 0.5 + 0.07), Vector3(W * 0.96, 0.12, 0.12), I, Color("#d8d4cc"))
 			b.box(Vector3(0, y0 + 0.08, -L * 0.5 - 0.07), Vector3(W * 0.96, 0.12, 0.12), I, Color("#d8d4cc"))
@@ -168,7 +183,10 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 		if P.get("louvres", false):
 			for k in 4:
 				b.card(PaperKit.rect(W * 0.34, 0.035, 0, 0), Transform3D(lay, Vector3(0, top_y + 0.018, bon_mid + 0.25 - k * 0.12)), ink, {"thick": 0.006, "edge": 0.0, "lip": 0.0, "sides": false})
-		b.card(PaperKit.rect(cw * 0.22, (cab_f - cab_r) * 0.6, 0, 0), Transform3D(lay, Vector3(0, top_y + cab_h + 0.012, (cab_f + cab_r) * 0.5 + (cab_f - cab_r) * 0.3)), acc, {"thick": 0.012, "edge": 0.02, "lip": 0.0})
+		var roof_front := cab_f - float(P["rake"])
+		var roof_rear := cab_r + float(P["back"])
+		var roof_print := (roof_front - roof_rear) * 0.84
+		b.card(PaperKit.rect(cw * 0.22, roof_print, 0, -roof_print * 0.5), Transform3D(lay, Vector3(0, top_y + cab_h + 0.012, (roof_rear + roof_front) * 0.5)), acc, {"thick": 0.012, "edge": 0.02, "lip": 0.0})
 		# Box arches over the wheels.
 		# Arch trim: a flared ring round each opening (wider on the box-arch cars).
 		var flare := 0.16 if P.get("arches", false) else 0.07
@@ -240,6 +258,26 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 		"lamp": Vector3(0, y0 + float(P["nose"]) * 0.7, L * 0.5 + 0.1), "style": style}
 
 
+## Cut-stencil numerals printed directly into the body mesh.
+static func _print_number(b: PaperKit.Builder, number: int, face: Transform3D, height: float, ink: Color) -> void:
+	var digits := str(absi(number))
+	var masks := [0x3f, 0x06, 0x5b, 0x4f, 0x66, 0x6d, 0x7d, 0x07, 0x7f, 0x6f]
+	# Clockwise from the top, with the crossbar last.
+	var centres := [Vector2(0, 0.45), Vector2(0.23, 0.23), Vector2(0.23, -0.23), Vector2(0, -0.45), Vector2(-0.23, -0.23), Vector2(-0.23, 0.23), Vector2.ZERO]
+	for i in digits.length():
+		var mask: int = masks[int(digits[i])]
+		for k in centres.size():
+			if (mask & (1 << k)) == 0:
+				continue
+			var h := Vector2(0.21, 0.055) if k in [0, 3, 6] else Vector2(0.055, 0.19)
+			var c: Vector2 = centres[k] + Vector2((i - (digits.length() - 1) * 0.5) * 0.75, 0)
+			var quad := PackedVector3Array()
+			for sign_xy: Vector2 in [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]:
+				var pt := (c + sign_xy * h) * height
+				quad.append(face * Vector3(pt.x, pt.y, 0))
+			b.quad(quad[0], quad[1], quad[2], quad[3], face.basis.z, PaperKit.lin(ink))
+
+
 static func _wing(b: PaperKit.Builder, P: Dictionary, L: float, W: float, top_y: float, cab_h: float, cab_r: float, acc: Color, ink: Color) -> void:
 	var wing: String = P["wing"]
 	var y0: float = P["ride"]
@@ -302,6 +340,11 @@ static func _buggy(b: PaperKit.Builder, P: Dictionary, body_c: Color, acc: Color
 	b.box(Vector3(0, y0 + 0.4, -1.15), Vector3(0.8, 0.5, 0.7), I, Color("#8a8a8a"), Color("#6a6a6a"))
 	b.slab(Vector3(-W * 0.3, top + 0.04, 0.2), Vector3(W * 0.3, top + 0.04, 0.2), Vector3(W * 0.3, top + 0.04, -0.6), Vector3(-W * 0.3, top + 0.04, -0.6), 0.04, stripe)
 	b.box(Vector3(0, y0 + 0.7, -1.55), Vector3(0.7, 0.7, 0.18), I, ink)
+	# Webbing over the open seat and cooling fins on the exposed engine.
+	for sx: float in [-0.14, 0.14]:
+		b.box(Vector3(sx, y0 + 0.45, 0.06), Vector3(0.07, 0.46, 0.025), I, stripe)
+	for k in 4:
+		b.box(Vector3(0, y0 + 0.66, -0.94 - k * 0.14), Vector3(0.68, 0.05, 0.05), I, ink)
 	# Whip flag.
 	b.box(Vector3(W * 0.3, top + 0.8, -0.6), Vector3(0.03, 1.6, 0.03), I, ink)
 	b.card(PackedVector2Array([Vector2(0, 0), Vector2(0.45, 0.12), Vector2(0, 0.26)]), Transform3D(Basis(Vector3.UP, PI * 0.5), Vector3(W * 0.3, top + 1.35, -0.6)), Color("#e8b04a"), {"thick": 0.01, "edge": 0.0, "lip": 0.0})
@@ -336,6 +379,15 @@ static func _wheel_mesh(hub: Color, r: float, width: float) -> ArrayMesh:
 	var hub_p := PaperKit.circle(r * 0.5, 0, 0, 10)
 	b.card(hub_p, side * Transform3D(Basis(), Vector3(0, 0, width * 0.5 + 0.01)), hub, {"thick": 0.02, "edge": 0.025, "lip": 0.03})
 	b.card(PaperKit.circle(r * 0.18, 0, 0, 8), side * Transform3D(Basis(), Vector3(0, 0, width * 0.5 + 0.03)), PaperKit.CREAM, {"thick": 0.01, "edge": 0.0, "lip": 0.0})
+	# Five fan-shaped ink apertures leave broad spokes on the coloured wheel face.
+	var face_x := width * 0.5 + 0.025
+	var recess := PaperKit.lin(Color("#403c39"))
+	for k in 5:
+		var angle := TAU * k / 5.0
+		var pts := PackedVector3Array()
+		for polar: Vector2 in [Vector2(-0.20, 0.25), Vector2(-0.10, 0.44), Vector2(0.36, 0.44), Vector2(0.19, 0.25)]:
+			pts.append(Vector3(face_x, sin(angle + polar.x) * r * polar.y, cos(angle + polar.x) * r * polar.y))
+		b.quad(pts[0], pts[1], pts[2], pts[3], Vector3.RIGHT, recess)
 	return b.mesh()
 
 
@@ -357,6 +409,8 @@ static func build_cockpit(car: Dictionary, model: Dictionary, mat: Material) -> 
 	var b := PaperKit.Builder.new(21)
 	var I := Transform3D()
 	var dash_z := head.z + 0.55
+	var speed_pivot: Node3D
+	var speed_mesh: MeshInstance3D
 	var gb := PaperKit.Builder.new(24)   # glass panes (drawn with a tinted see-through material)
 	if style != "buggy":
 		# A closed cabin shell that follows the car's own cabin profile: the only openings are glass.
@@ -439,11 +493,28 @@ static func build_cockpit(car: Dictionary, model: Dictionary, mat: Material) -> 
 		var cx: float = -head.x
 		# Instrument binnacle over the driver's dials, with a speedo and three small gauges.
 		var tilt := Basis(Vector3.RIGHT, -0.5) * Basis(Vector3.UP, PI)
-		b.card(PaperKit.circle(0.07, 0, 0, 14), Transform3D(tilt, Vector3(dx + 0.1, top_y + 0.15, dash_z - 0.035)), PaperKit.CREAM, {"thick": 0.01, "edge": 0.012, "lip": 0.0})
+		var speed_face := Transform3D(tilt, Vector3(dx + 0.10, top_y + 0.15, dash_z - 0.035))
+		b.card(PaperKit.circle(0.07, 0, 0, 14), speed_face, PaperKit.CREAM, {"thick": 0.01, "edge": 0.012, "lip": 0.0})
+		speed_pivot = Node3D.new()
+		speed_pivot.transform = speed_face.translated_local(Vector3(0, 0, 0.010))
+		var speed_hand := PaperKit.Builder.new(26)
+		speed_hand.box(Vector3(0, 0.020, 0), Vector3(0.007, 0.054, 0.004), I, ink)
+		speed_mesh = MeshInstance3D.new()
+		speed_mesh.mesh = speed_hand.mesh()
+		speed_mesh.material_override = mat
+		speed_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		speed_pivot.add_child(speed_mesh)
+		for k in 7:
+			var angle := lerpf(2.2, -1.8, k / 6.0)
+			var tick := speed_face * Transform3D(Basis(Vector3.BACK, angle), Vector3.ZERO)
+			b.box(Vector3(0, 0.05, 0.007), Vector3(0.006, 0.012, 0.003), tick, ink)
 		for k in 3:
-			b.card(PaperKit.circle(0.03, 0, 0, 10), Transform3D(tilt, Vector3(dx - 0.21 - k * 0.065, top_y + 0.13, dash_z - 0.03)), Color("#e8dcc0"), {"thick": 0.008, "edge": 0.008, "lip": 0.0})
+			var gauge := Transform3D(tilt, Vector3(dx - 0.21 - k * 0.065, top_y + 0.13, dash_z - 0.03))
+			b.card(PaperKit.circle(0.03, 0, 0, 10), gauge, Color("#e8dcc0"), {"thick": 0.008, "edge": 0.008, "lip": 0.0})
+			var pointer := gauge * Transform3D(Basis(Vector3.BACK, -0.65 + k * 0.58), Vector3.ZERO)
+			b.box(Vector3(0, 0.009, 0.006), Vector3(0.005, 0.024, 0.003), pointer, ink)
 		# Gauge pod standing on the dash behind the dials.
-		b.box(Vector3(dx - 0.05, top_y + 0.14, dash_z - 0.0), Vector3(0.56, 0.16, 0.05), Transform3D(Basis(Vector3.RIGHT, -0.5), Vector3.ZERO), Color("#2e2a28"))
+		b.box(Vector3.ZERO, Vector3(0.56, 0.16, 0.05), Transform3D(tilt, Vector3(dx - 0.05, top_y + 0.14, dash_z + 0.04)), Color("#2e2a28"))
 		# Shift light strip along the top of the binnacle.
 		for k in 5:
 			var lc: Color = [Color("#5fa860"), Color("#5fa860"), Color("#e8b04a"), Color("#e8b04a"), Color("#c8553d")][k]
@@ -452,7 +523,12 @@ static func build_cockpit(car: Dictionary, model: Dictionary, mat: Material) -> 
 		b.box(Vector3(cx, top_y + 0.1, dash_z - 0.02), Vector3(0.24, 0.1, 0.08), I, Color("#26282c"))
 		b.box(Vector3(cx, top_y + 0.11, dash_z - 0.065), Vector3(0.18, 0.045, 0.01), I, Color("#b8e0a0"), Color(-1, 0, 0), true)
 		b.box(Vector3(cx - 0.17, top_y + 0.08, dash_z - 0.01), Vector3(0.08, 0.06, 0.06), I, Color("#3a3c40"))
-		b.box(Vector3(cx + 0.05, top_y + 0.07, dash_z + 0.16), Vector3(0.22, 0.02, 0.15), Transform3D(Basis(Vector3.UP, 0.25), Vector3.ZERO), Color("#e8dcc0"))
+		var notebook := Transform3D(Basis(Vector3.UP, 0.18), Vector3(cx + 0.05, top_y + 0.107, dash_z + 0.16))
+		b.box(Vector3.ZERO, Vector3(0.26, 0.024, 0.19), notebook, car["accent"])
+		b.box(Vector3(0, 0.016, 0), Vector3(0.245, 0.012, 0.178), notebook, PaperKit.CREAM)
+		for k in 3:
+			b.box(Vector3(-0.014 + 0.012 * k, 0.024, -0.05 + 0.046 * k), Vector3(0.14 - 0.02 * k, 0.003, 0.009), notebook, ink)
+			b.box(Vector3(-0.09 + k * 0.085, 0.022, 0.08), Vector3(0.018, 0.014, 0.038), notebook, dark)
 		# Switch panel on the centre console: a row of coloured toggles and a big red kill switch.
 		b.box(Vector3(0, top_y - 0.08, dash_z - 0.14), Vector3(0.3, 0.14, 0.02), I, Color("#3a3430"))
 		for k in 6:
@@ -482,7 +558,14 @@ static func build_cockpit(car: Dictionary, model: Dictionary, mat: Material) -> 
 		b.box(Vector3(0, float(P["ride"]) + 0.55, dash_z), Vector3(W * 0.5, 0.12, 0.25), I, dark)
 	# Rev dial on the dash.
 	var dial_pos := Vector3(head.x - 0.08, top_y + 0.15, dash_z - 0.035)
-	b.card(PaperKit.circle(0.09, 0, 0, 14), Transform3D(Basis(Vector3.RIGHT, -0.5) * Basis(Vector3.UP, PI), dial_pos), PaperKit.CREAM, {"thick": 0.01, "edge": 0.015, "lip": 0.0})
+	if style == "buggy":
+		dial_pos = Vector3(head.x, float(P["ride"]) + 0.59, dash_z - 0.15)
+	var dial_face := Transform3D(Basis(Vector3.RIGHT, -0.5) * Basis(Vector3.UP, PI), dial_pos)
+	b.card(PaperKit.circle(0.09, 0, 0, 16), dial_face, PaperKit.CREAM, {"thick": 0.01, "edge": 0.012, "lip": 0.0})
+	for k in 9:
+		var angle := lerpf(2.2, -1.8, k / 8.0)
+		var tick := dial_face * Transform3D(Basis(Vector3.BACK, angle), Vector3.ZERO)
+		b.box(Vector3(0, 0.065, 0.007), Vector3(0.008, 0.018, 0.003), tick, Color("#c8553d") if k >= 7 else dark)
 	var root := Node3D.new()
 	var mi := MeshInstance3D.new()
 	mi.mesh = b.mesh()
@@ -547,4 +630,6 @@ static func build_cockpit(car: Dictionary, model: Dictionary, mat: Material) -> 
 	npiv.add_child(nmi)
 	needle.add_child(npiv)
 	root.add_child(needle)
-	return {"root": root, "wheel": wheel, "needle": npiv}
+	if speed_pivot:
+		root.add_child(speed_pivot)
+	return {"root": root, "wheel": wheel, "needle": npiv, "speed_hand": speed_mesh}
