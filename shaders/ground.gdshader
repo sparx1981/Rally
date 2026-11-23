@@ -12,11 +12,18 @@ uniform sampler2D noise : hint_default_white, filter_linear_mipmap, repeat_enabl
 uniform sampler2D fibre : hint_default_white, filter_linear_mipmap, repeat_enable;
 uniform float fibre_amount = 0.09;
 uniform float cloud_amount = 0.18;
+// Coast: steep faces print as layered rock, and a sand band runs along the waterline.
+uniform float rock_amount = 0.0;
+uniform vec3 rock : source_color = vec3(0.78, 0.74, 0.66);
+uniform float sea_y = -10000.0;
+uniform vec3 sand : source_color = vec3(0.9, 0.84, 0.68);
 
 varying vec3 wpos;
+varying vec3 wnrm;
 
 void vertex() {
 	wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	wnrm = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
 }
 
 void fragment() {
@@ -40,6 +47,13 @@ void fragment() {
 	float fl = fract(lay);
 	c *= 1.0 + (mod(floor(lay), 2.0) * 0.035);
 	c *= 1.0 - (1.0 - smoothstep(0.0, 0.05, fl)) * 0.14;
+	if (rock_amount > 0.0) {
+		float steep = 1.0 - smoothstep(0.5, 0.72, wnrm.y);
+		float strata = 1.0 + (mod(floor(wpos.y / 1.2), 3.0) - 1.0) * 0.06;
+		c = mix(c, rock * strata, steep * rock_amount);
+		float shore = 1.0 - smoothstep(sea_y + 1.2, sea_y + 2.2, wpos.y);
+		c = mix(c, sand, shore * (1.0 - steep * 0.7));
+	}
 	// Slow cloud shadows.
 	float cl = texture(noise, p * 0.006 + vec2(TIME * 0.004, TIME * 0.0025)).r;
 	float cs = smoothstep(0.55, 0.68, cl) * cloud_amount;

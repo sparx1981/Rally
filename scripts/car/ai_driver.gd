@@ -9,6 +9,8 @@ var profile := PackedFloat32Array()
 var _offset := 0.0
 var _stuck := 0.0
 var _wobble_seed := 0.0
+var stop_at_s := -1.0     # parc fermé: brake to a stop here
+var park_lat := 0.0
 
 
 func _init(c: Car, skill_v: float) -> void:
@@ -42,7 +44,11 @@ func update(dt: float, others: Array, t: float) -> void:
 	var lane := tr.forced_lane(car.s + 6.0)
 	if not is_nan(lane):
 		want = lane
-	_offset = lerpf(_offset, clampf(want, -tr.width * 0.38, tr.width * 0.38), clampf(dt * (5.0 if not is_nan(lane) else 1.5), 0.0, 1.0))
+	if stop_at_s > 0.0 and car.s > stop_at_s - 45.0:
+		want = park_lat   # swing into the parking bay
+		_offset = lerpf(_offset, want, clampf(dt * 1.6, 0.0, 1.0))
+	else:
+		_offset = lerpf(_offset, clampf(want, -tr.width * 0.38, tr.width * 0.38), clampf(dt * (5.0 if not is_nan(lane) else 1.5), 0.0, 1.0))
 	var target := tr.pts[j] + tr.nrm[j] * _offset
 	var d := (target - car.pos).normalized()
 	var f := car.fwd()
@@ -50,6 +56,8 @@ func update(dt: float, others: Array, t: float) -> void:
 	car.steer = clampf(ang * 2.4, -1.0, 1.0)
 	# Speed target.
 	var vt: float = profile[tr.index_at(car.s + 3.0)] * skill
+	if stop_at_s > 0.0:
+		vt = minf(vt, sqrt(maxf(0.0, 2.0 * 5.0 * (stop_at_s - car.s))))
 	var dv := vt - vl
 	if dv > 0.0:
 		car.throttle = clampf(dv * 0.5 + 0.35, 0.0, 1.0)
@@ -59,12 +67,12 @@ func update(dt: float, others: Array, t: float) -> void:
 		car.brake = clampf(-dv * 0.22, 0.0, 1.0)
 	car.handbrake = 1.0 if (absf(ang) > 0.9 and vl > 8.0) else 0.0
 	# Recover if stuck.
-	if not car.frozen and absf(vl) < 1.0 and not car.airborne:
+	if not car.frozen and absf(vl) < 1.0 and not car.airborne and stop_at_s < 0.0:
 		_stuck += dt
 		if _stuck > 2.5:
 			car.reset_to_track()
 			_stuck = 0.0
 	else:
 		_stuck = 0.0
-	if absf(car.lat) > tr.width * 2.0:
+	if absf(car.lat) > maxf(tr.width * 2.0, absf(park_lat) + 4.0):
 		car.reset_to_track()

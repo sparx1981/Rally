@@ -114,6 +114,9 @@ func setup(stage_i: int, mode_v: int, entrants: Array, attract_v := false, tod :
 ## Test helper: start the cars just before the first hazard of a type, countdown skipped.
 func skip_to_hazard(type: String) -> void:
 	var f: Dictionary = {}
+	if type == "bridge" and not stage.track.bridges.is_empty():
+		skip_to_s(float(stage.track.bridges[0]["s"]) - 70.0)
+		return
 	for x in stage.track.features:
 		if x["type"] == type:
 			f = x
@@ -219,6 +222,10 @@ func _process(delta: float) -> void:
 			if drivers.has(c):
 				drivers[c].update(FIXED, cars, _clock)
 			c.step(FIXED)
+			if c.y < stage.track.road_h(c.s) - 7.0 and not c.frozen:
+				c.reset_to_track()   # over the cliff or into the river: back on the road
+				if c == player:
+					Haptics.impulse(0.8, 0.25)
 		_collide()
 		if state == State.RACING:
 			race_time += FIXED
@@ -272,7 +279,7 @@ func _update_state(dt: float) -> void:
 			Haptics.impulse(0.7, 0.18)
 	elif state == State.DONE:
 		_done_t += dt
-		if _done_t > 2.8 and _done_t - dt <= 2.8:
+		if _done_t > 5.0 and _done_t - dt <= 5.0:
 			finished.emit(_results())
 
 
@@ -288,10 +295,17 @@ func _check_finish() -> void:
 				continue
 			c.finished = true
 			c.finish_time = race_time
+			# Every finisher coasts on into the parc fermé and parks in its own bay.
+			if not drivers.has(c) or c == player:
+				drivers[c] = AIDriver.new(c, 0.7)
+			var bay := _bays_used
+			_bays_used += 1
+			var slot: Array = Stage.parc_bay(tr.length, bay)
+			drivers[c].stop_at_s = slot[0]
+			drivers[c].park_lat = slot[1]
 			if c == player:
 				state = State.DONE
 				_done_t = 0.0
-				drivers[player] = AIDriver.new(player, 0.7)   # coast it through the finish
 				Haptics.pattern_finish()
 				if ghost:
 					var best := Game.best_time(stage_index)
@@ -461,6 +475,7 @@ var _cheered := {}
 var ghost: Ghost
 var skids: SkidMarks
 var _last_view := -1
+var _bays_used := 0
 var _debris_pool: Array[CPUParticles3D] = []
 var _debris_i := 0
 

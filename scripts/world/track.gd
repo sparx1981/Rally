@@ -5,6 +5,7 @@ extends RefCounted
 ## ideal-speed profile used by the AI and for medal times.
 
 const STEP := 2.0
+const POST_FINISH := 120.0   # road beyond the flying finish, ending in the parc fermé
 const CELL := 24.0
 
 var pts := PackedVector2Array()
@@ -27,7 +28,8 @@ var terrain: Terrain                 # the landscape heightfield around the road
 var features: Array = []             # {type: jump|crest|splash|chicane, s0, s1, s (centre), side}
 var patches: Array = []              # {s0, s1, lat0, lat1, kind, grip, drag}
 var notes: Array = []                # pace notes: corners + features, sorted by s0
-var barriers: Array = []             # {s0, s1, side (+1 = +nrm side), kind: armco | fence}
+var barriers: Array = []             # {s0, s1, side (+1 = +nrm side), kind: armco | fence | parapet}
+var bridges: Array = []              # {s, kind: stone | covered, half, a, b (river ends), water_y}
 
 
 ## Pre-generated layouts ship in res://data/tracks (same seed and settings = same road), so phones
@@ -241,7 +243,7 @@ func _finalize() -> void:
 		for j in range(maxi(i - 3, 0), mini(i + 4, n)):
 			m = maxf(m, absf(curv[j]))
 		curv_abs[i] = m
-	finish_s = length - 30.0
+	finish_s = length - POST_FINISH
 	heights.resize(n)
 	heights.fill(0.0)
 	elev.resize(n)
@@ -676,6 +678,7 @@ func next_note(s: float, ahead: float) -> Dictionary:
 func build_barriers(seed_v: int, kinds: Array) -> void:
 	barriers = []
 	if kinds.is_empty():
+		add_bridge_barriers()
 		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_v * 5 + 17
@@ -695,9 +698,131 @@ func build_barriers(seed_v: int, kinds: Array) -> void:
 			if s + run > float(f["s0"]) - 25.0 and s < float(f["s1"]) + 25.0:
 				clear = false
 				break
+		for br in bridges:
+			if s + run > float(br["s"]) - float(br["half"]) - 20.0 and s < float(br["s"]) + float(br["half"]) + 20.0:
+				clear = false
+				break
 		if clear:
 			barriers.append({"s0": s, "s1": minf(s + run, finish_s - 60.0), "side": side, "kind": kind})
 		s += run + rng.randf_range(40.0, 160.0)
+	add_bridge_barriers()
+
+
+# --- bridges -------------------------------------------------------------------------------------
+
+## Bridges over rivers that cross the road at right angles: English stone humpback arches and
+## covered wooden bridges. The deck has a parapet (or wall) each side that the cars bounce off.
+func build_bridges(seed_v: int, kinds: Array) -> void:
+	bridges = []
+	if kinds.is_empty():
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_v * 13 + 5
+	var want := clampi(int(length / 3500.0) + 1, 1, 4)
+	for ci in _candidates(-14, 14, 1.0 / 160.0):
+		if bridges.size() >= want:
+			break
+		var sc: float = dist[ci]
+		if sc < 200.0 or sc > finish_s - 160.0:
+			continue
+		var ok := true
+		for f in features:
+			if absf(float(f["s"]) - sc) < 90.0:
+				ok = false
+				break
+		for b in bridges:
+			if absf(float(b["s"]) - sc) < 700.0:
+				ok = false
+				break
+		if not ok:
+			continue
+		var kind: String = kinds[rng.randi() % kinds.size()]
+		var half := 11.0 if kind == "stone" else 10.0
+		flatten_at(sc, half + 4.0, 16.0)
+		var base := elev[ci]
+		if kind == "stone":
+			# The hump of a packhorse-style arch.
+			for i in range(index_at(sc - half - 6.0), index_at(sc + half + 6.0) + 1):
+				var u := absf(dist[i] - sc) / (half + 6.0)
+				if u < 1.0:
+					elev[i] += 0.85 * pow(cos(u * PI * 0.5), 2.0)
+		var water_y := base - (2.5 if kind == "stone" else 2.8)
+		# River runs straight across the road; it stops before it meets another stretch of road.
+		var ends: Array = []
+		for side: float in [-1.0, 1.0]:
+			var t := 12.0
+			while t < 260.0:
+				var q: Vector2 = pts[ci] + nrm[ci] * side * (t + 4.0)
+				if clearance(q) < (t + 4.0) * 0.6 - 2.0:
+					break
+				t += 4.0
+			ends.append(pts[ci] + nrm[ci] * side * t)
+		bridges.append({"s": sc, "kind": kind, "half": half, "a": ends[0], "b": ends[1], "water_y": water_y, "i": ci})
+	bridges.sort_custom(func(a, b): return a["s"] < b["s"])
+
+
+## Bridge at s (within its deck plus `margin`), or {}.
+func bridge_at(s: float, margin := 0.0) -> Dictionary:
+	for b in bridges:
+		if absf(s - float(b["s"])) <= float(b["half"]) + margin:
+			return b
+	return {}
+
+
+## Distance from p to the nearest river (INF when the stage has none).
+func river_dist(p: Vector2) -> float:
+	var best := INF
+	for b in bridges:
+		var a: Vector2 = b["a"]
+		var e: Vector2 = b["b"]
+		var q := Geometry2D.get_closest_point_to_segment(p, a, e)
+		best = minf(best, p.distance_to(q))
+	return best
+
+
+## Parapets: added after the ordinary barriers so a bridge always has its own.
+func add_bridge_barriers() -> void:
+	for b in bridges:
+		for side: float in [-1.0, 1.0]:
+			barriers.append({"s0": float(b["s"]) - float(b["half"]) - 1.5, "s1": float(b["s"]) + float(b["half"]) + 1.5, "side": side, "kind": "parapet"})
+
+
+## Coast: Armco wherever the land drops away into the sea beside the road.
+func add_cliff_barriers() -> void:
+	var hw := width * 0.5
+	for side: float in [-1.0, 1.0]:
+		var run_s := -1.0
+		var last := -1.0
+		var i := 0
+		while i < pts.size():
+			var s := dist[i]
+			var q := pts[i] + nrm[i] * side * (hw + 9.0)
+			var q2 := pts[i] + nrm[i] * side * (hw + 18.0)
+			var drop := terrain.is_sea(q) or terrain.is_sea(q2) or terrain.height(q) < elev[i] - 4.0
+			var ok := drop and s > 40.0 and s < finish_s - 20.0 and bridge_at(s, 15.0).is_empty()
+			if ok:
+				if run_s < 0.0:
+					run_s = s - 10.0
+				last = s + 10.0
+			elif run_s >= 0.0 and s - last > 12.0:
+				_add_cliff_run(run_s, last, side)
+				run_s = -1.0
+			i += 3
+		if run_s >= 0.0:
+			_add_cliff_run(run_s, last, side)
+
+
+func _add_cliff_run(s0: float, s1: float, side: float) -> void:
+	if s1 - s0 < 24.0:
+		return
+	# Drop any fence already on that stretch; the Armco takes over.
+	var keep: Array = []
+	for b in barriers:
+		if float(b["side"]) == side and float(b["s1"]) > s0 and float(b["s0"]) < s1 and b["kind"] != "parapet":
+			continue
+		keep.append(b)
+	barriers = keep
+	barriers.append({"s0": s0, "s1": s1, "side": side, "kind": "armco"})
 
 
 ## Barrier at s on the given side of the road, or {}.

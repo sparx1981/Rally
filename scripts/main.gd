@@ -103,7 +103,8 @@ func _start_race() -> void:
 	if _shot.has("hazard"):
 		race.skip_to_hazard(_shot["hazard"])
 	if _shot.has("at"):
-		race.skip_to_s(_shot["at"])
+		var at: float = _shot["at"]
+		race.skip_to_s(at if at >= 0.0 else race.stage.track.finish_s + at)
 	_apply_post()
 	_clear_menu()
 	_back = Callable()
@@ -462,8 +463,8 @@ func _stage_select() -> void:
 	opts.add_child(_choice_inline(["Time: stage default", "Time: Day", "Time: Dusk", "Time: Night"], Game.time_of_day + 1, func(i):
 		Game.time_of_day = i - 1))
 	var grid := GridContainer.new()
-	grid.columns = 3
-	grid.add_theme_constant_override("h_separation", 14)
+	grid.columns = 5
+	grid.add_theme_constant_override("h_separation", 10)
 	grid.add_theme_constant_override("v_separation", 10)
 	grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	content.add_child(grid)
@@ -474,13 +475,21 @@ func _stage_select() -> void:
 		var sd: Dictionary = Catalog.stages()[si]
 		var wx := Catalog.weather(sd["weather"])
 		var best := Game.best_time(si)
-		var txt := "%s\n%s  -  %.1f km  -  Best %s" % [sd["name"], wx["label"], float(sd["length"]) / 1000.0, Game.fmt_time(best)]
+		var txt := "%s\n%s  -  %.0f km  -  %s" % [sd["name"], wx["label"], float(sd["length"]) / 1000.0, Game.fmt_time(best) if best > 0.0 else "no time"]
 		var b := _button(txt, func():
 			Game.stage_index = si
 			_start_race())
-		b.custom_minimum_size = Vector2(380, 88)
+		# Preview picture of the location above its name.
+		var pv := "res://ui/previews/%s.png" % sd["loc_id"]
+		if ResourceLoader.exists(pv):
+			b.icon = load(pv)
+			b.expand_icon = true
+			b.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
+			b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		b.custom_minimum_size = Vector2(226, 196)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.add_theme_font_size_override("font_size", 19)
+		b.add_theme_font_size_override("font_size", 15)
+		b.add_theme_constant_override("icon_max_width", 210)
 		b.add_theme_stylebox_override("normal", _weather_style(wx["kind"]))
 		b.tooltip_text = "%s\n%s" % [sd["desc"], sd["region"]]
 		b.focus_entered.connect(func(): _stage_info.text = "%s  %s" % [sd["region"], sd["desc"]])
@@ -950,6 +959,16 @@ func _parse_args() -> void:
 			Settings.data["camera"] = int(a.substr(9))
 		elif a.begins_with("--tod="):
 			Game.time_of_day = int(a.substr(6))
+		elif a == "--nohud":
+			_shot["nohud"] = true
+		elif a.begins_with("--thumb="):
+			_shot["thumb"] = int(a.substr(8))
+		elif a.begins_with("--ox="):
+			_shot["ox"] = float(a.substr(5))
+		elif a.begins_with("--oz="):
+			_shot["oz"] = float(a.substr(5))
+		elif a.begins_with("--overhead="):
+			_shot["overhead"] = float(a.substr(11))
 		elif a.begins_with("--at="):
 			_shot["at"] = float(a.substr(5))
 		elif a.begins_with("--hazard="):
@@ -1124,12 +1143,28 @@ func _run_shot() -> void:
 	if race and race.skids:
 		print("SHOT skid marks: %d" % race.skids.multimesh.visible_instance_count)
 	if race and race.player:
-		print("SHOT player s=%.1f speed=%.1f lat=%.1f" % [race.player.s, race.player.speed(), race.player.lat])
+		print("SHOT player s=%.1f speed=%.1f lat=%.1f pos=%s y=%.1f" % [race.player.s, race.player.speed(), race.player.lat, race.player.pos, race.player.y])
 	if DisplayServer.get_name() == "headless":
 		get_tree().quit()
 		return
+	if _shot.has("overhead") and race:
+		# Debug: look straight down on the player from a height (or from the side with --side).
+		var oc := Camera3D.new()
+		race.add_child(oc)
+		var pp: Vector3 = race.player.global_position
+		var hgt: float = _shot["overhead"]
+		oc.position = pp + Vector3(hgt * float(_shot.get("ox", 0.35)), hgt, hgt * float(_shot.get("oz", 0.35)))
+		oc.look_at(pp)
+		oc.current = true
+		await get_tree().process_frame
+	if _shot.has("nohud") and race:
+		race.set_overlay_visible(false)
+		await get_tree().process_frame
 	await RenderingServer.frame_post_draw
 	var img := get_viewport().get_texture().get_image()
+	if _shot.has("thumb"):
+		var tw: int = _shot["thumb"]
+		img.resize(tw, int(tw * 9.0 / 16.0), Image.INTERPOLATE_LANCZOS)
 	img.save_png(_shot["path"])
 	print("SHOT saved ", _shot["path"])
 	get_tree().quit()

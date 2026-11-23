@@ -13,6 +13,102 @@ var h := PackedFloat32Array()
 var far := PackedByteArray()   # 1 = more than 300 m from any road (not meshed)
 var min_h := 0.0
 var max_h := 0.0
+var sea_y := -INF                 # coastal stages: the sea surface; land outside the road's reach drops into it
+var sea := PackedByteArray()      # 1 = open sea
+var _mind := PackedFloat32Array() # distance from each cell to the road
+
+
+## Coast: everything connected to the map edge that is more than `edge` metres from the road (with a
+## ragged noise line) becomes sea. Land drops to it in a cliff, or slopes to a beach when `beach`.
+func make_coast(track: Track, sea_level: float, edge: float, beach: bool, seed_v: int) -> void:
+	sea_y = sea_level
+	var total := nx * nz
+	sea.resize(total)
+	sea.fill(0)
+	var noise := FastNoiseLite.new()
+	noise.seed = seed_v
+	noise.frequency = 1.0 / 90.0
+	var cand := PackedByteArray()
+	cand.resize(total)
+	for k in total:
+		var x := k % nx
+		var z := k / nx
+		var wx := origin.x + x * cell
+		var wz := origin.y + z * cell
+		var lim := track.width * 0.5 + edge + noise.get_noise_2d(wx, wz) * edge * 0.45
+		cand[k] = 1 if _mind[k] > lim else 0
+	# Flood from the map border through candidate cells.
+	var queue := PackedInt32Array()
+	for x in nx:
+		for z in [0, nz - 1]:
+			var k: int = z * nx + x
+			if cand[k] == 1 and sea[k] == 0:
+				sea[k] = 1
+				queue.append(k)
+	for z in nz:
+		for x in [0, nx - 1]:
+			var k: int = z * nx + x
+			if cand[k] == 1 and sea[k] == 0:
+				sea[k] = 1
+				queue.append(k)
+	var head := 0
+	while head < queue.size():
+		var k := queue[head]
+		head += 1
+		var x := k % nx
+		for nb in [k - 1, k + 1, k - nx, k + nx]:
+			if nb < 0 or nb >= total:
+				continue
+			if (nb == k - 1 and x == 0) or (nb == k + 1 and x == nx - 1):
+				continue
+			if cand[nb] == 1 and sea[nb] == 0:
+				sea[nb] = 1
+				queue.append(nb)
+	# Distance (in cells) from the sea, for the beach slope.
+	var ds := PackedInt32Array()
+	ds.resize(total)
+	ds.fill(999)
+	queue = PackedInt32Array()
+	for k in total:
+		if sea[k] == 1:
+			ds[k] = 0
+			queue.append(k)
+	head = 0
+	while head < queue.size():
+		var k := queue[head]
+		head += 1
+		if ds[k] >= 6:
+			continue
+		var x := k % nx
+		for nb in [k - 1, k + 1, k - nx, k + nx]:
+			if nb < 0 or nb >= total:
+				continue
+			if (nb == k - 1 and x == 0) or (nb == k + 1 and x == nx - 1):
+				continue
+			if ds[nb] > ds[k] + 1:
+				ds[nb] = ds[k] + 1
+				queue.append(nb)
+	min_h = 1e9
+	for k in total:
+		if sea[k] == 1:
+			h[k] = sea_y - 3.0 - minf(ds[k], 3) * 0.0
+			far[k] = 0 if _mind[k] < track.width * 0.5 + 420.0 else 1
+		elif beach and ds[k] <= 4:
+			# Sand and grass ease down to the waterline (never above the land around them).
+			var t := float(ds[k]) / 5.0
+			h[k] = minf(h[k], lerpf(sea_y + 0.4, h[k], t * t))
+		elif ds[k] == 1:
+			# Cliff lip: a little raised ragged edge before the drop.
+			h[k] = maxf(h[k] - 0.6, sea_y + 2.0)
+		min_h = minf(min_h, h[k])
+
+
+func is_sea(p: Vector2) -> bool:
+	if sea.is_empty():
+		return false
+	var x := clampi(int(round((p.x - origin.x) / cell)), 0, nx - 1)
+	var z := clampi(int(round((p.y - origin.y) / cell)), 0, nz - 1)
+	return sea[z * nx + x] == 1
 
 
 func build(track: Track, hills: float, seed_v: int, roughness := 1.0) -> void:
@@ -97,6 +193,7 @@ func build(track: Track, hills: float, seed_v: int, roughness := 1.0) -> void:
 	noise.fractal_gain = 0.45 * roughness
 	h.resize(total)
 	far.resize(total)
+	_mind.resize(total)
 	var hw := track.width * 0.5
 	min_h = 1e9
 	max_h = -1e9
@@ -106,6 +203,7 @@ func build(track: Track, hills: float, seed_v: int, roughness := 1.0) -> void:
 		var wx := origin.x + x * cell
 		var wz := origin.y + z * cell
 		var d := mind[k]
+		_mind[k] = d
 		var nv := noise.get_noise_2d(wx, wz)
 		var away := smoothstep(hw + 4.0, hw + 62.0, d)
 		var v := road_e[k] + nv * hills * away + absf(nv) * hills * 0.35 * away
@@ -177,3 +275,45 @@ func build_meshes(parent: Node3D, mat: Material, chunk := 28) -> void:
 			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 			mi.visibility_range_end = 700.0
 			parent.add_child(mi)
+
+
+## Level the ground in a disc (the parc fermé lot), blending out over the rim.
+func flatten_disc(c: Vector2, r: float, height: float) -> void:
+	var r2 := r + 15.0
+	var x0 := maxi(0, int((c.x - r2 - origin.x) / cell))
+	var x1 := mini(nx - 1, int((c.x + r2 - origin.x) / cell) + 1)
+	var z0 := maxi(0, int((c.y - r2 - origin.y) / cell))
+	var z1 := mini(nz - 1, int((c.y + r2 - origin.y) / cell) + 1)
+	for z in range(z0, z1 + 1):
+		for x in range(x0, x1 + 1):
+			var p := Vector2(origin.x + x * cell, origin.y + z * cell)
+			var w := 1.0 - smoothstep(r, r2, p.distance_to(c))
+			var k := z * nx + x
+			h[k] = lerpf(h[k], height, w)
+			if w > 0.0:
+				far[k] = 0
+
+
+## Cut a river channel along segment a-b: water surface at water_y, a gravel bed below it and
+## grassy banks easing back into the land.
+func carve_river(a: Vector2, b: Vector2, water_y: float) -> void:
+	var half := 5.5
+	var bank := 16.0
+	var lo := Vector2(minf(a.x, b.x), minf(a.y, b.y)) - Vector2.ONE * (bank + cell)
+	var hi := Vector2(maxf(a.x, b.x), maxf(a.y, b.y)) + Vector2.ONE * (bank + cell)
+	var x0 := maxi(0, int((lo.x - origin.x) / cell))
+	var x1 := mini(nx - 1, int((hi.x - origin.x) / cell) + 1)
+	var z0 := maxi(0, int((lo.y - origin.y) / cell))
+	var z1 := mini(nz - 1, int((hi.y - origin.y) / cell) + 1)
+	var bed := water_y - 1.1
+	for z in range(z0, z1 + 1):
+		for x in range(x0, x1 + 1):
+			var p := Vector2(origin.x + x * cell, origin.y + z * cell)
+			var d := p.distance_to(Geometry2D.get_closest_point_to_segment(p, a, b))
+			if d > bank:
+				continue
+			var k := z * nx + x
+			var target := lerpf(bed, h[k], smoothstep(half, bank, d))
+			h[k] = minf(h[k], target)
+			far[k] = 0
+			min_h = minf(min_h, h[k])

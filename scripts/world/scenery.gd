@@ -191,6 +191,12 @@ func _place_hazard_props(rng: RandomNumberGenerator) -> void:
 
 
 func _try_add(kind: String, p: Vector2, rng: RandomNumberGenerator, s: float, big: bool) -> void:
+	if p.distance_to(track.point_at(track.length - Stage.PARC_BACK)) < 34.0:
+		return   # keep the parc fermé lot clear
+	if track.river_dist(p) < 12.0:
+		return   # nothing stands in the river
+	if track.terrain.is_sea(p) or track.terrain.height(p) < track.terrain.sea_y + 1.0:
+		return
 	var vars: Array = lib[kind]
 	var vi := rng.randi() % vars.size()
 	var r: float = vars[vi]["r"]
