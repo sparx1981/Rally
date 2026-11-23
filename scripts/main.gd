@@ -113,7 +113,7 @@ func _apply_post() -> void:
 	var h := float(DisplayServer.window_get_size().y)
 	if h <= 0.0:
 		h = 720.0
-	var bonnet := race != null and not race.attract and int(Settings.g("camera")) == ChaseCamera.BONNET
+	var bonnet := race != null and not race.attract and ChaseCamera.is_ground_level(int(Settings.g("camera")))
 	m.set_shader_parameter("taps", 0 if bonnet else [0, 8, 16][clampi(ts, 0, 2)])
 	m.set_shader_parameter("max_blur_px", (10.0 if ts == 1 else 15.0) * h / 1080.0)
 	m.set_shader_parameter("grain", 0.01 if bool(Settings.g("paper_detail")) else 0.0)
@@ -919,6 +919,8 @@ func _parse_args() -> void:
 			Settings.data["popups"] = a.substr(9) == "1"
 		elif a.begins_with("--camera="):
 			Settings.data["camera"] = int(a.substr(9))
+		elif a.begins_with("--tod="):
+			Game.time_of_day = int(a.substr(6))
 		elif a.begins_with("--hazard="):
 			_shot["hazard"] = a.substr(9)
 		elif a.begins_with("--mode="):

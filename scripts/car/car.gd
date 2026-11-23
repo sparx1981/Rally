@@ -58,6 +58,10 @@ var wheel_r := 0.4
 var head_pos := Vector3(0.35, 1.3, 0)
 var lamp_pos := Vector3(0, 0.6, 2.0)
 var model_root: Node3D
+var _model: Dictionary
+var _mat: Material
+var _cockpit: Dictionary = {}
+var _lights: Array = []
 var _prev_gh := 0.0
 var _has_prev_gh := false
 
@@ -87,6 +91,8 @@ func setup(car_stats: Dictionary, num: int, stg: Stage, mat: Material) -> void:
 	head_pos = m["head"]
 	lamp_pos = m["lamp"]
 	model_root = m["root"]
+	_model = m
+	_mat = mat
 	_make_contact(mat)
 	_make_dust()
 	if not is_player:
@@ -158,6 +164,74 @@ func spray(v: float) -> void:
 ## A puff of exhaust smoke (backfires, launches).
 func exhaust_puff(dur := 0.25) -> void:
 	_smoke_t = maxf(_smoke_t, dur)
+
+
+## Headlights (and a little red tail glow) for dusk and night. Only the player's beam casts
+## shadows, to keep phones fast.
+func enable_lights(shadows: bool) -> void:
+	var lamp: Vector3 = _model["lamp"]
+	for xs in ([0.0] if not shadows else [-0.45, 0.45]):
+		var sl := SpotLight3D.new()
+		sl.light_color = Color("#ffe9c2")
+		sl.light_energy = 5.0 if shadows else 6.0
+		sl.spot_range = 48.0
+		sl.spot_angle = 30.0
+		sl.spot_attenuation = 0.8
+		sl.shadow_enabled = shadows and xs > 0.0
+		sl.shadow_bias = 0.08
+		sl.position = lamp + Vector3(xs, 0.1, 0.1)
+		sl.rotation = Vector3(-0.1, PI, 0.0)
+		_body.add_child(sl)
+		_lights.append(sl)
+	var tail := OmniLight3D.new()
+	tail.light_color = Color("#ff5a3a")
+	tail.light_energy = 0.8
+	tail.omni_range = 4.0
+	tail.position = Vector3(0, lamp.y, -half_len - 0.4)
+	_body.add_child(tail)
+	_lights.append(tail)
+	# A faint beam of light in the night air.
+	var beam := MeshInstance3D.new()
+	var cm := CylinderMesh.new()
+	cm.top_radius = 0.25
+	cm.bottom_radius = 5.5
+	cm.height = 22.0
+	cm.radial_segments = 10
+	cm.rings = 1
+	cm.cap_top = false
+	cm.cap_bottom = false
+	beam.mesh = cm
+	var bm := StandardMaterial3D.new()
+	bm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	bm.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	bm.cull_mode = BaseMaterial3D.CULL_DISABLED
+	bm.albedo_color = Color(0.07, 0.06, 0.045, 1.0)
+	bm.no_depth_test = false
+	beam.material_override = bm
+	beam.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	beam.position = lamp + Vector3(0, -0.6, 11.0)
+	beam.rotation = Vector3(-PI * 0.5 - 0.05, 0, 0)
+	_body.add_child(beam)
+	_lights.append(beam)
+
+
+## The in-car view rig (dashboard, wheel, rev needle), shown only in the cockpit camera.
+func cockpit(show: bool) -> void:
+	if show and _cockpit.is_empty():
+		_cockpit = CarModel.build_cockpit(stats, _model, _mat)
+		_body.add_child(_cockpit["root"])
+	if not _cockpit.is_empty():
+		_cockpit["root"].visible = show
+	var body_mesh: Node3D = _body.get_child(0)
+	body_mesh.visible = not show
+	for wnode in _wheels:
+		(wnode as Node3D).visible = not show
+
+
+## Where the driver's eyes are (for the cockpit camera).
+func eye_transform() -> Transform3D:
+	var hp: Vector3 = _model["head"]
+	return global_transform * _body.transform * Transform3D(Basis(Vector3.UP, PI), hp + Vector3(0, 0.05, 0.05))
 
 
 func place_at(s_pos: float, lateral: float) -> void:
@@ -374,6 +448,9 @@ func _sync_visual(delta: float) -> void:
 	_pitch = lerpf(_pitch, pitch_t, clampf(delta * 5.0, 0.0, 1.0))
 	_body.rotation = Vector3(_pitch, 0.0, _roll)
 	_spin += v_long * delta / wheel_r
+	if not _cockpit.is_empty() and _cockpit["root"].visible:
+		(_cockpit["wheel"] as Node3D).rotation.z = steer * 1.6
+		(_cockpit["needle"] as Node3D).rotation.z = 2.2 - clampf(rpm / 7500.0, 0.0, 1.0) * 4.0
 	for i in _wheels.size():
 		var wnode: Node3D = _wheels[i]
 		if i < 2:

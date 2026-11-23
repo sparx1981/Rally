@@ -170,7 +170,7 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 		spin.add_child(wmi)
 		root.add_child(steer)
 		wheels.append(steer)
-	var head := Vector3(0.35, top_y + cab_h * 0.55, cab_z + cab_l * 0.12)
+	var head := Vector3(0.36, top_y + cab_h * 0.22, cab_z - cab_l * 0.05)
 	if style == "buggy":
 		head = Vector3(0.0, y0 + 1.0, 0.0)
 	return {"root": root, "body": body, "wheels": wheels, "length": L, "width": W, "wheel_r": wr, "head": head,
@@ -240,3 +240,86 @@ static func _wheel_mesh(hub: Color, r: float, width: float) -> ArrayMesh:
 	b.card(hub_p, side * Transform3D(Basis(), Vector3(0, 0, width * 0.5 + 0.01)), hub, {"thick": 0.02, "edge": 0.025, "lip": 0.03})
 	b.card(PaperKit.circle(r * 0.18, 0, 0, 8), side * Transform3D(Basis(), Vector3(0, 0, width * 0.5 + 0.03)), PaperKit.CREAM, {"thick": 0.01, "edge": 0.0, "lip": 0.0})
 	return b.mesh()
+
+
+
+## In-car view: dashboard, A-pillars, roof edge, steering wheel and a rev dial whose needle moves.
+## Returns {"root", "wheel" (rotates with steering), "needle" (rotates with rpm)}.
+static func build_cockpit(car: Dictionary, model: Dictionary, mat: Material) -> Dictionary:
+	var style: String = car.get("style", "saloon")
+	var P: Dictionary = STYLES.get(style, STYLES["saloon"])
+	var head: Vector3 = model["head"]
+	var W: float = P["W"]
+	var L: float = P["L"]
+	var top_y: float = float(P["ride"]) + float(P["low"])
+	var cab_h: float = P["cab_h"]
+	var cab_z: float = P["cab_z"]
+	var cab_l: float = P["cab_l"]
+	var body_c: Color = car["body"]
+	var dark := Color("#3a3430")
+	var b := PaperKit.Builder.new(21)
+	var I := Transform3D()
+	var dash_z := head.z + 0.62
+	if style != "buggy":
+		# Bonnet seen through the screen, dashboard, pillars and roof edge.
+		var front_z := cab_z + cab_l * 0.5
+		b.box(Vector3(0, top_y - 0.05, (front_z + L * 0.5) * 0.5), Vector3(W, 0.1, L * 0.5 - front_z), I, body_c, body_c.lightened(0.05))
+		b.box(Vector3(0, top_y - 0.04, dash_z + 0.12), Vector3(W * 0.82, 0.16, 0.36), I, dark, Color("#4a423c"))
+		var roof_y := top_y + cab_h
+		for xs in [-1.0, 1.0]:
+			var a := Vector3(xs * W * 0.41, top_y + 0.12, front_z - 0.05)
+			var c := Vector3(xs * W * 0.38, roof_y, front_z - 0.45)
+			var mid := (a + c) * 0.5
+			b.box(Vector3.ZERO, Vector3(0.09, 0.09, (c - a).length()), Transform3D(Basis.looking_at((c - a).normalized(), Vector3.UP), mid), body_c.darkened(0.2))
+		b.box(Vector3(0, roof_y + 0.02, front_z - 0.5), Vector3(W * 0.8, 0.08, 0.14), I, body_c.darkened(0.2))
+		b.box(Vector3(0.0, roof_y - 0.08, front_z - 0.5), Vector3(0.28, 0.06, 0.04), I, dark)
+		# Door panels and window frames down both sides.
+		for xs in [-1.0, 1.0]:
+			b.box(Vector3(xs * W * 0.46, top_y - 0.12, (front_z + head.z - 0.8) * 0.5), Vector3(0.08, 0.36, front_z - head.z + 0.8), I, body_c.darkened(0.25), body_c.darkened(0.15))
+			b.box(Vector3(xs * W * 0.44, top_y + cab_h - 0.02, head.z - 0.1), Vector3(0.07, 0.07, 1.0), I, body_c.darkened(0.2))
+			b.box(Vector3(xs * W * 0.43, top_y + cab_h * 0.5, head.z - 0.55), Vector3(0.08, cab_h, 0.12), I, body_c.darkened(0.2))
+		# Roll-cage bar across the door line.
+		b.box(Vector3(0, top_y + 0.04, head.z - 0.1), Vector3(W * 0.8, 0.06, 0.06), I, Color("#b8b2a8"))
+	else:
+		b.box(Vector3(0, float(P["ride"]) + 0.55, dash_z), Vector3(W * 0.5, 0.12, 0.25), I, dark)
+	# Rev dial on the dash.
+	var dial_pos := Vector3(head.x, top_y + 0.06, dash_z - 0.07)
+	b.card(PaperKit.circle(0.09, 0, 0, 14), Transform3D(Basis(Vector3.RIGHT, -0.5) * Basis(Vector3.UP, PI), dial_pos), PaperKit.CREAM, {"thick": 0.01, "edge": 0.015, "lip": 0.0})
+	var root := Node3D.new()
+	var mi := MeshInstance3D.new()
+	mi.mesh = b.mesh()
+	mi.material_override = mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(mi)
+	# Steering wheel (its own node so it turns).
+	var wheel := Node3D.new()
+	wheel.position = Vector3(head.x, head.y - 0.2, head.z + 0.42)
+	wheel.rotation.x = -0.5
+	var wb := PaperKit.Builder.new(22)
+	var ring := PackedVector2Array()
+	for i in 14:
+		var ang := TAU * i / 14.0
+		ring.append(Vector2(cos(ang), sin(ang)) * 0.19)
+	var face := Transform3D(Basis(Vector3.UP, PI), Vector3.ZERO)
+	wb.card(ring, face, dark, {"thick": 0.03, "edge": 0.0, "lip": 0.0})
+	wb.card(PaperKit.circle(0.15, 0, 0, 14), face * Transform3D(Basis(), Vector3(0, 0, -0.005)), Color("#5a524c"), {"thick": 0.032, "edge": 0.0, "lip": 0.0})
+	wb.card(PaperKit.rect(0.36, 0.05, 0, -0.025), face * Transform3D(Basis(), Vector3(0, 0, -0.02)), dark, {"thick": 0.02, "edge": 0.0, "lip": 0.0})
+	wb.card(PaperKit.rect(0.04, 0.05, 0, 0.15), face * Transform3D(Basis(), Vector3(0, 0, -0.02)), car["accent"], {"thick": 0.02, "edge": 0.0, "lip": 0.0})
+	var wmi := MeshInstance3D.new()
+	wmi.mesh = wb.mesh()
+	wmi.material_override = mat
+	wheel.add_child(wmi)
+	root.add_child(wheel)
+	var needle := Node3D.new()
+	needle.position = dial_pos + Vector3(0, 0, -0.012)
+	needle.rotation.x = -0.5
+	var nb := PaperKit.Builder.new(23)
+	nb.card(PaperKit.rect(0.012, 0.08, 0, 0), Transform3D(Basis(Vector3.UP, PI), Vector3.ZERO), Color("#c8553d"), {"thick": 0.004, "edge": 0.0, "lip": 0.0})
+	var nmi := MeshInstance3D.new()
+	nmi.mesh = nb.mesh()
+	nmi.material_override = mat
+	var npiv := Node3D.new()
+	npiv.add_child(nmi)
+	needle.add_child(npiv)
+	root.add_child(needle)
+	return {"root": root, "wheel": wheel, "needle": npiv}

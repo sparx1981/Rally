@@ -386,7 +386,8 @@ func solids_near(p: Vector2) -> Array:
 	return out
 
 
-var _chimneys: Array = []   # [CPUParticles3D, world position, piece index or -1]
+var _chimneys: Array = []   # [emitter or light, world position, piece index or -1]
+var lights_on := false
 
 
 func _add_chimneys() -> void:
@@ -395,6 +396,18 @@ func _add_chimneys() -> void:
 	for i in placements.size():
 		var pl: Dictionary = placements[i]
 		var info: Dictionary = lib[pl["kind"]][pl["var"]]
+		if lights_on and pl["kind"] == "lamp":
+			var lp: Vector2 = pl["pos"]
+			var ol := OmniLight3D.new()
+			ol.light_color = Color("#ffb070")
+			ol.light_energy = 2.2
+			ol.omni_range = 11.0
+			ol.omni_attenuation = 1.2
+			ol.position = Vector3(lp.x, _ground(lp) + 3.6, lp.y)
+			ol.visible = false
+			_content.add_child(ol)
+			_chimneys.append([ol, ol.position, -1])
+			continue
 		if not info.has("chimney"):
 			continue
 		var p: Vector2 = pl["pos"]
@@ -417,8 +430,13 @@ func update_chimneys(center: Vector2, radius: float) -> void:
 	for c in _chimneys:
 		var wp: Vector3 = c[1]
 		var near := Vector2(wp.x, wp.z).distance_to(center) < radius + 50.0
-		var up = c[2] < 0 or _springs[c[2]].p > 0.9
-		(c[0] as CPUParticles3D).emitting = near and up
+		var up: bool = c[2] < 0 or _springs[c[2]].p > 0.9
+		if not is_instance_valid(c[0]):
+			continue
+		if c[0] is CPUParticles3D:
+			(c[0] as CPUParticles3D).emitting = near and up
+		else:
+			(c[0] as Node3D).visible = Vector2(wp.x, wp.z).distance_to(center) < radius + 30.0
 
 
 func rebuild_visuals(use_popups: bool) -> void:

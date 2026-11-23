@@ -77,6 +77,7 @@ func build(stage_def: Dictionary, time_of_day := -1) -> void:
 	_make_gantries()
 	scenery = Scenery.new()
 	scenery.name = "Scenery"
+	scenery.lights_on = bool(wx.get("headlights", false))
 	add_child(scenery)
 	scenery.setup(track, def, paper_mat, float(Settings.g("density")), float(Settings.g("draw_distance")), bool(Settings.g("popups")))
 	_make_puddles()

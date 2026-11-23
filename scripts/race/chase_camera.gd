@@ -11,8 +11,14 @@ const VIEWS := [
 	{"name": "High overhead", "dist": 74.0, "pitch": 62.0, "fov": 30.0, "lead": 6.0},
 	{"name": "Top-down", "dist": 82.0, "pitch": 82.0, "fov": 30.0, "lead": 4.0},
 	{"name": "Bonnet", "dist": 0.0, "pitch": 6.0, "fov": 62.0, "lead": 0.0},
+	{"name": "Cockpit", "dist": 0.0, "pitch": 4.0, "fov": 72.0, "lead": 0.0},
 ]
 const BONNET := 5
+const COCKPIT := 6
+
+
+static func is_ground_level(v: int) -> bool:
+	return v == BONNET or v == COCKPIT
 
 var target: Car
 var _yaw := 0.0
@@ -56,7 +62,7 @@ func view_focus() -> Array:
 		return [global_position, 40.0]
 	var fw := Vector3(sin(_yaw), 0, cos(_yaw))
 	match v:
-		BONNET: return [target.position + fw * 34.0, 46.0]
+		BONNET, COCKPIT: return [target.position + fw * 34.0, 46.0]
 		1: return [target.position + fw * 9.0, 25.0]
 		2: return [target.position + fw * 14.0, 40.0]
 		3: return [target.position + fw * 10.0, 38.0]
@@ -73,6 +79,17 @@ func follow(dt: float) -> void:
 		_last_view = vi
 		_init_done = false
 	fov = v["fov"]
+	if vi == COCKPIT:
+		var et := target.eye_transform()
+		var sh2 := Vector3.ZERO
+		if _shake > 0.001:
+			sh2 = Vector3(randf_range(-1, 1), randf_range(-1, 1), 0) * _shake * 0.05
+			_shake = move_toward(_shake, 0.0, dt * 3.0)
+		global_transform = Transform3D(et.basis, et.origin + sh2)
+		near = 0.05
+		_yaw = target.h
+		return
+	near = 0.3
 	var car_yaw := target.h
 	if target.vel.length() > 4.0 and target.v_long > 0.0 and vi != BONNET:
 		# Follow the direction of travel when sliding, so drifts read clearly.

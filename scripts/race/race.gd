@@ -83,6 +83,9 @@ func setup(stage_i: int, mode_v: int, entrants: Array, attract_v := false, tod :
 	camera.current = true
 	if attract:
 		camera.force_view = 0
+	if stage.wx.get("headlights", false):
+		for c in cars:
+			c.enable_lights(c == player and int(Settings.g("shadows")) > 0)
 	camera.follow(0.016)
 	var st: Dictionary = player.stats
 	var mu := Car.BASE_MU * float(st["grip"]) * stage.grip()
@@ -199,7 +202,11 @@ func _process(delta: float) -> void:
 		print("TRACE s=%.1f lat=%.2f v=%.1f y=%.2f air=%s steer=%.2f slip=%.2f h=%.2f" % [player.s, player.lat, player.v_long, player.y, player.airborne, player.steer, player.slip, player.h])
 	_check_finish()
 	camera.follow(dt)
-	stage.set_bonnet(camera.view_index() == ChaseCamera.BONNET)
+	var vi := camera.view_index()
+	stage.set_bonnet(ChaseCamera.is_ground_level(vi))
+	if vi != _last_view:
+		_last_view = vi
+		player.cockpit(vi == ChaseCamera.COCKPIT)
 	var vf: Array = camera.view_focus()
 	stage.update(dt, vf[0], float(vf[1]), player.s, camera)
 	var threats: Array = []
@@ -386,6 +393,7 @@ func _on_impact(c: Car, strength: float, at: Vector2 = Vector2.INF, paper := fal
 
 
 var _cheered := {}
+var _last_view := -1
 var _debris_pool: Array[CPUParticles3D] = []
 var _debris_i := 0
 
