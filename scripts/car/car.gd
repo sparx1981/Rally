@@ -6,6 +6,8 @@ extends Node3D
 
 signal gear_changed(gear: int)
 signal impact(strength: float)
+signal landed(strength: float)
+signal splashed(strength: float)
 
 const BASE_TOP := 33.0
 const BASE_ACC := 14.5
@@ -13,6 +15,7 @@ const BASE_MU := 17.0
 const BRAKE := 28.0
 const RADIUS := 1.55
 const GEARS := [0.0, 8.0, 14.0, 20.0, 26.0, 31.0]
+const GRAVITY := 22.0
 
 var stats: Dictionary
 var driver_name := ""
@@ -43,6 +46,14 @@ var finished := false
 var finish_time := -1.0
 var surface := 1.0
 var in_puddle := false
+var in_water := false
+var patch_kind := ""
+var y := 0.0
+var vy := 0.0
+var airborne := false
+var air_time := 0.0
+var half_len := 2.0
+var half_wid := 0.95
 
 var _body: Node3D
 var _wheels: Array = []
@@ -51,6 +62,8 @@ var _roll := 0.0
 var _pitch := 0.0
 var _dust: CPUParticles3D
 var _last_puddle := false
+var _contact: MeshInstance3D
+var _eng3d: AudioStreamPlayer3D
 
 
 func setup(car_stats: Dictionary, num: int, stg: Stage, mat: Material) -> void:
@@ -62,8 +75,21 @@ func setup(car_stats: Dictionary, num: int, stg: Stage, mat: Material) -> void:
 	add_child(m["root"])
 	_body = m["body"]
 	_wheels = m["wheels"]
+	half_len = float(m["length"]) * 0.5
+	half_wid = float(m["width"]) * 0.5
 	_make_contact(mat)
 	_make_dust()
+	if not is_player:
+		# AI engines are positional: you hear rivals close behind and alongside.
+		_eng3d = AudioStreamPlayer3D.new()
+		_eng3d.stream = Sfx.engine_loop()
+		_eng3d.bus = "Engine"
+		_eng3d.unit_size = 10.0
+		_eng3d.max_distance = 90.0
+		_eng3d.volume_db = -8.0
+		_eng3d.position = Vector3(0, 0.6, 0)
+		add_child(_eng3d)
+		_eng3d.play()
 
 
 func _make_contact(mat: Material) -> void:
@@ -76,6 +102,7 @@ func _make_contact(mat: Material) -> void:
 	mi.material_override = mat
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
+	_contact = mi
 
 
 func _make_dust() -> void:
@@ -114,6 +141,41 @@ func _make_dust() -> void:
 	add_child(_dust)
 
 
+var _spray: CPUParticles3D
+
+
+## A big burst of water when driving through a splash.
+func spray(v: float) -> void:
+	if _spray == null:
+		_spray = CPUParticles3D.new()
+		_spray.one_shot = true
+		_spray.emitting = false
+		_spray.amount = 60
+		_spray.lifetime = 1.1
+		_spray.explosiveness = 0.85
+		_spray.direction = Vector3(0, 1, 0.3)
+		_spray.spread = 75.0
+		_spray.initial_velocity_min = 4.0
+		_spray.initial_velocity_max = 9.0
+		_spray.gravity = Vector3(0, -16, 0)
+		_spray.scale_amount_min = 0.6
+		_spray.scale_amount_max = 1.5
+		_spray.local_coords = false
+		var qm := QuadMesh.new()
+		qm.size = Vector2(0.35, 0.35)
+		var m := StandardMaterial3D.new()
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+		m.albedo_color = Color("#d8e4ea")
+		qm.material = m
+		_spray.mesh = qm
+		_spray.position = Vector3(0, 0.3, 0.6)
+		add_child(_spray)
+	_spray.amount = clampi(int(v * 2.5), 20, 80)
+	_spray.initial_velocity_max = 4.0 + v * 0.3
+	_spray.restart()
+
+
 func place_at(s_pos: float, lateral: float) -> void:
 	var i := track.index_at(s_pos)
 	pos = track.pts[i] + track.nrm[i] * lateral
@@ -122,6 +184,10 @@ func place_at(s_pos: float, lateral: float) -> void:
 	yaw_rate = 0.0
 	track_i = i
 	s = s_pos
+	lat = lateral
+	y = track.height_at(s_pos, lateral)
+	vy = 0.0
+	airborne = false
 	_sync_visual(0.0)
 
 
@@ -156,6 +222,45 @@ func step(dt: float) -> void:
 	surface = wgrip * (1.0 if on_road else 0.82)
 	if not on_road and stats["id"] == "badger":
 		surface = wgrip * 0.95
+	# Loose surface patches (gravel / mud / ice / deep snow).
+	var patch := track.patch_at(s, lat)
+	var patch_drag := 0.0
+	patch_kind = ""
+	if not patch.is_empty():
+		patch_kind = patch["kind"]
+		surface *= float(patch["grip"])
+		patch_drag = float(patch["drag"])
+		if stats["id"] == "badger":
+			patch_drag *= 0.5
+	# Water splash: heavy drag, a burst of spray.
+	var water := absf(lat) < track.width * 0.5 + 16.0 and not track.feature_at(s, "splash").is_empty()
+	if water and not in_water:
+		splashed.emit(absf(vel.dot(fwd())))
+	in_water = water
+	# Vertical: follow the road over crests and ramps; leave it when it falls away faster than gravity.
+	var gh := track.height_at(s, lat)
+	if airborne:
+		air_time += dt
+		vy -= GRAVITY * dt
+		y += vy * dt
+		if y <= gh:
+			var hit_v := -vy
+			y = gh
+			vy = 0.0
+			airborne = false
+			if air_time > 0.12:
+				landed.emit(hit_v)
+	else:
+		var vy_ground := (gh - y) / dt
+		if vy_ground < vy - GRAVITY * dt * 1.5 and vy > -1.0 and y > 0.05:
+			airborne = true
+			air_time = 0.0
+			vy -= GRAVITY * dt
+			y += vy * dt
+		else:
+			vy = vy_ground
+			y = gh
+	var grounded := 0.0 if airborne else 1.0
 	var f := fwd()
 	var r := right_axis()
 	var vl := vel.dot(f)
@@ -165,10 +270,10 @@ func step(dt: float) -> void:
 	var brk := 0.0 if frozen else brake
 	var hb := 1.0 if frozen else handbrake
 	var a := 0.0
-	if thr > 0.0 and vl < top:
+	if thr > 0.0 and vl < top and grounded > 0.0:
 		var acc := BASE_ACC * float(stats["accel"]) * lerpf(1.0, surface, 0.45)
 		a += acc * thr * clampf(1.0 - pow(maxf(vl, 0.0) / top, 2.0), 0.0, 1.0)
-	if brk > 0.0:
+	if brk > 0.0 and grounded > 0.0:
 		if vl > 0.6:
 			a -= brk * BRAKE * lerpf(1.0, surface, 0.5)
 		elif vl > -9.0:
@@ -180,6 +285,9 @@ func step(dt: float) -> void:
 		a -= vl * (0.55 if stats["id"] != "badger" else 0.3)
 	if in_puddle:
 		a -= vl * 0.5
+	if water:
+		a -= vl * 1.1
+	a -= vl * patch_drag
 	var nvl := vl + a * dt
 	if vl != 0.0 and signf(nvl) != signf(vl):
 		nvl = 0.0
@@ -194,7 +302,7 @@ func step(dt: float) -> void:
 	var target_w := -steer * lim * sf * (1.0 if vl >= 0.0 else -1.0)
 	if hb > 0.0 and not frozen:
 		target_w *= 1.4
-	var resp := clampf(dt * (5.0 + 4.0 * surface), 0.0, 1.0)
+	var resp := clampf(dt * (5.0 + 4.0 * surface), 0.0, 1.0) * grounded
 	yaw_rate = lerpf(yaw_rate, target_w, resp)
 	h += yaw_rate * dt
 	# Lateral friction (limited) in the new frame.
@@ -203,7 +311,7 @@ func step(dt: float) -> void:
 	vl = vel.dot(f)
 	vt = vel.dot(r)
 	var mu := BASE_MU * float(stats["grip"]) * surface * (0.42 if (hb > 0.0 and not frozen) else 1.0)
-	var max_dv := mu * dt
+	var max_dv := mu * dt * grounded
 	var removed := clampf(vt, -max_dv, max_dv)
 	vt -= removed
 	vt *= 1.0 - clampf(dt * 0.6, 0.0, 1.0)
@@ -242,18 +350,26 @@ func _update_gear(vl: float, thr: float) -> void:
 
 func _process(delta: float) -> void:
 	_sync_visual(delta)
+	if _eng3d:
+		_eng3d.pitch_scale = 0.62 + clampf((rpm - 900.0) / 6200.0, 0.0, 1.0) * 1.25
 
 
 func _sync_visual(delta: float) -> void:
-	var y := Stage.ROAD_Y if on_road else 0.0
-	position = Vector3(pos.x, y, pos.y)
+	position = Vector3(pos.x, y + (Stage.ROAD_Y if on_road else 0.0), pos.y)
 	rotation.y = h
+	if _contact:
+		# The printed contact shadow stays on the road / ground while the car flies.
+		_contact.position.y = track.height_at(s, lat) - y
 	if _body == null:
 		return
 	# Paper-toy body roll and pitch.
 	var lat_acc := yaw_rate * v_long
 	_roll = lerpf(_roll, clampf(lat_acc * 0.006, -0.07, 0.07), clampf(delta * 6.0, 0.0, 1.0))
 	var pitch_t := (throttle - brake) * -0.025
+	if airborne:
+		pitch_t = clampf(-vy * 0.03, -0.25, 0.25)
+	elif absf(vy) > 0.5 and absf(v_long) > 1.0:
+		pitch_t = clampf(-vy / maxf(absf(v_long), 1.0), -0.3, 0.3)
 	_pitch = lerpf(_pitch, pitch_t, clampf(delta * 5.0, 0.0, 1.0))
 	_body.rotation = Vector3(_pitch, 0.0, _roll)
 	_spin += v_long * delta / CarModel.WHEEL_R

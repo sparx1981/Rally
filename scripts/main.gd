@@ -100,6 +100,8 @@ func _start_race() -> void:
 	race.setup(Game.stage_index, Game.mode, entrants, false)
 	race.finished.connect(_on_race_finished)
 	race.pause_requested.connect(_pause)
+	if _shot.has("hazard"):
+		race.skip_to_hazard(_shot["hazard"])
 	_apply_post()
 	_clear_menu()
 	_back = Callable()
@@ -111,7 +113,8 @@ func _apply_post() -> void:
 	var h := float(DisplayServer.window_get_size().y)
 	if h <= 0.0:
 		h = 720.0
-	m.set_shader_parameter("taps", [0, 8, 16][clampi(ts, 0, 2)])
+	var bonnet := race != null and not race.attract and int(Settings.g("camera")) == ChaseCamera.BONNET
+	m.set_shader_parameter("taps", 0 if bonnet else [0, 8, 16][clampi(ts, 0, 2)])
 	m.set_shader_parameter("max_blur_px", (10.0 if ts == 1 else 15.0) * h / 1080.0)
 	m.set_shader_parameter("grain", 0.01 if bool(Settings.g("paper_detail")) else 0.0)
 	if race and race.stage:
@@ -636,13 +639,13 @@ func _settings() -> void:
 			list.add_child(_choice("Touch steering", ["Buttons", "Tilt the phone"], int(Settings.g("touch_mode")), func(i): Settings.set_value("touch_mode", i)))
 			list.add_child(_slider("Tilt sensitivity", 0.5, 2.0, 0.1, float(Settings.g("tilt_sens")), func(v): Settings.set_value("tilt_sens", v), "%.1fx", 1.0))
 			list.add_child(_choice("Invert tilt", ["Off", "On"], 1 if Settings.g("tilt_invert") else 0, func(i): Settings.set_value("tilt_invert", i == 1)))
-			list.add_child(_choice("Camera distance", ["Near", "Normal", "Far"], int(Settings.g("camera")), func(i): Settings.set_value("camera", i)))
+			list.add_child(_choice("Camera view", ChaseCamera.VIEWS.map(func(v): return v["name"]), int(Settings.g("camera")), func(i): Settings.set_value("camera", i)))
 			list.add_child(_choice("Speed units", ["km/h", "mph"], int(Settings.g("units")), func(i): Settings.set_value("units", i)))
 			list.add_child(_choice("AI difficulty", ["Easy", "Medium", "Hard"], int(Settings.g("ai_difficulty")), func(i): Settings.set_value("ai_difficulty", i)))
 			list.add_child(_choice("Opponents (Race / Championship)", ["3", "5"], 1 if int(Settings.g("opponents")) == 5 else 0, func(i): Settings.set_value("opponents", 5 if i == 1 else 3)))
 			var pads := Input.get_connected_joypads()
 			var pad_txt := "No controller connected." if pads.is_empty() else "Connected: " + ", ".join(pads.map(func(d): return Input.get_joy_name(d)))
-			list.add_child(_note(pad_txt + "  Controller: RT/A accelerate, LT/X brake, B/RB handbrake, Y reset, Start pause, Back/LB camera."))
+			list.add_child(_note(pad_txt + "  Controller: RT/A accelerate, LT/X brake, B/RB handbrake, Y reset, Start pause, Back/LB or the camera icon cycles camera views."))
 			list.add_child(_note("Keyboard: W/S or arrows, Space handbrake, R reset, C camera, Esc pause."))
 		2:
 			list.add_child(_choice("Haptics", ["Off", "On"], 1 if Settings.g("haptics") else 0, func(i): Settings.set_value("haptics", i == 1)))
@@ -693,7 +696,7 @@ func _choice(label: String, options: Array, current: int, on_change: Callable) -
 	var change := func(d: int):
 		state["i"] = (state["i"] + d + options.size()) % options.size()
 		b.text = "<  %s  >" % options[state["i"]]
-		Sfx.click()
+		Sfx.toggle()
 		on_change.call(state["i"])
 	b.pressed.connect(func(): change.call(1))
 	b.gui_input.connect(func(ev: InputEvent):
@@ -862,6 +865,7 @@ func _champ_results(r: Dictionary) -> void:
 func _parse_args() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--shot="):
+			Game.no_save = true
 			_shot["path"] = a.substr(7)
 		elif a.begins_with("--stage="):
 			_shot["stage"] = int(a.substr(8))
@@ -873,6 +877,10 @@ func _parse_args() -> void:
 			Settings.apply_preset(a.substr(9))
 		elif a.begins_with("--popups="):
 			Settings.data["popups"] = a.substr(9) == "1"
+		elif a.begins_with("--camera="):
+			Settings.data["camera"] = int(a.substr(9))
+		elif a.begins_with("--hazard="):
+			_shot["hazard"] = a.substr(9)
 		elif a.begins_with("--mode="):
 			Game.mode = int(a.substr(7))
 
@@ -935,6 +943,9 @@ func _run_shot() -> void:
 	print("SHOT fps_avg=%.1f frames=%d" % [frames / t, frames])
 	if race and race.player:
 		print("SHOT player s=%.1f speed=%.1f lat=%.1f" % [race.player.s, race.player.speed(), race.player.lat])
+	if DisplayServer.get_name() == "headless":
+		get_tree().quit()
+		return
 	await RenderingServer.frame_post_draw
 	var img := get_viewport().get_texture().get_image()
 	img.save_png(_shot["path"])

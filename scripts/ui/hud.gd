@@ -1,5 +1,7 @@
 class_name Hud
 extends Control
+
+signal camera_pressed
 ## In-race overlay drawn as small paper tags: stage time, position, speed and gear, a co-driver
 ## pace-note card for the next bend, a stage progress strip and big countdown / finish cards.
 
@@ -41,7 +43,16 @@ func _ready() -> void:
 	pos_tag.anchor_right = 1.0
 	pos_tag.offset_left = -260
 	pos_tag.offset_right = -130
-	pos_tag.offset_top = 20
+	pos_tag.offset_top = 96
+	var cam := CameraButton.new()
+	add_child(cam)
+	cam.anchor_left = 1.0
+	cam.anchor_right = 1.0
+	cam.offset_left = -228
+	cam.offset_right = -132
+	cam.offset_top = 18
+	cam.offset_bottom = 88
+	cam.pressed.connect(func(): camera_pressed.emit())
 	pace = PaceNote.new()
 	add_child(pace)
 	pace.anchor_left = 0.5
@@ -121,6 +132,14 @@ func show_center(text: String, dur := 1.0, size := 72) -> void:
 	tw.tween_property(center_card, "rotation", 0.0, 0.1)
 
 
+var _hint_t := 0.0
+
+
+func show_hint_timed(text: String, dur: float) -> void:
+	show_hint(text)
+	_hint_t = dur
+
+
 func show_hint(text: String) -> void:
 	hint_tag.visible = text != ""
 	_txt(hint_tag, text)
@@ -131,6 +150,10 @@ func _process(delta: float) -> void:
 		_center_t -= delta
 		if _center_t <= 0.0:
 			center_card.visible = false
+	if _hint_t > 0.0:
+		_hint_t -= delta
+		if _hint_t <= 0.0:
+			show_hint("")
 	fps_label.visible = bool(Settings.g("show_fps"))
 	if fps_label.visible:
 		fps_label.text = "%d fps" % Engine.get_frames_per_second()
@@ -143,18 +166,21 @@ class PaceNote:
 	var sev := 0
 	var hairpin := false
 	var dist := 0.0
+	var kind := ""
 
 	func set_note(c: Dictionary, s: float) -> void:
 		if c.is_empty():
-			if sev != 0:
-				sev = 0
+			if kind != "":
+				kind = ""
 				queue_redraw()
 			return
+		var nk: String = c.get("kind", "corner")
 		var nd: float = c["dir"]
 		var ns: int = c["sev"]
 		var nh: bool = c["hairpin"]
 		var ndist := maxf(float(c["s0"]) - s, 0.0)
-		if nd != dir or ns != sev or nh != hairpin or absf(ndist - dist) > 4.0:
+		if nk != kind or nd != dir or ns != sev or nh != hairpin or absf(ndist - dist) > 4.0:
+			kind = nk
 			dir = nd
 			sev = ns
 			hairpin = nh
@@ -162,11 +188,14 @@ class PaceNote:
 			queue_redraw()
 
 	func _draw() -> void:
-		if sev == 0:
+		if kind == "":
 			return
 		var r := Rect2(Vector2.ZERO, size)
 		var sb := PaperTheme.box(PaperTheme.CREAM, PaperTheme.EDGE, 3, 10, 6)
 		draw_style_box(sb, r)
+		if kind != "corner":
+			_draw_hazard(r)
+			return
 		var c := Vector2(r.size.x * 0.25, r.size.y * 0.45)
 		var col := PaperTheme.ACCENT if sev <= 2 else PaperTheme.INK
 		# Arrow: a chunky bent shape pointing left or right.
@@ -183,6 +212,74 @@ class PaceNote:
 		draw_string(font, Vector2(r.size.x * 0.73 - ts.x * 0.5, r.size.y * 0.45 + fs * 0.35), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
 		var dt := "%dm" % int(dist)
 		draw_string(font, Vector2(r.size.x * 0.5 - 22, r.size.y - 8), dt, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, PaperTheme.INK)
+
+
+	func _draw_hazard(r: Rect2) -> void:
+		var font := get_theme_default_font()
+		var ink := PaperTheme.INK
+		var red := PaperTheme.ACCENT
+		var c := Vector2(r.size.x * 0.5, r.size.y * 0.36)
+		match kind:
+			"jump":
+				draw_colored_polygon(PackedVector2Array([c + Vector2(-46, 18), c + Vector2(10, 18), c + Vector2(10, -6)]), red)
+				draw_arc(c + Vector2(28, 14), 22.0, PI * 1.05, PI * 1.85, 10, ink, 4.0)
+			"crest":
+				var pts := PackedVector2Array()
+				for k in 17:
+					var x := -48.0 + k * 6.0
+					pts.append(c + Vector2(x, 18.0 - 26.0 * pow(cos(x / 48.0 * PI * 0.5), 2.0)))
+				pts.append(c + Vector2(48, 20))
+				pts.append(c + Vector2(-48, 20))
+				draw_colored_polygon(pts, red)
+			"splash":
+				for row in 2:
+					var pts := PackedVector2Array()
+					for k in 13:
+						pts.append(c + Vector2(-48.0 + k * 8.0, -4.0 + row * 16.0 + sin(k * 1.4) * 5.0))
+					draw_polyline(pts, Color("#3f6fa8"), 5.0)
+			"chicane":
+				draw_polyline(PackedVector2Array([c + Vector2(-10, 24), c + Vector2(-10, 6), c + Vector2(12, -4), c + Vector2(12, -22)]), red, 7.0)
+				draw_rect(Rect2(c + Vector2(-44, -8), Vector2(22, 14)), Color("#e3c06a"))
+				draw_rect(Rect2(c + Vector2(24, 2), Vector2(22, 14)), Color("#e3c06a"))
+			_:
+				for k in 9:
+					draw_circle(c + Vector2(-36 + (k % 5) * 18, -8 + (k / 5) * 16 + (k % 2) * 4), 5.0, ink if kind != "ice" else Color("#6c84b0"))
+		var label: String = {"jump": "JUMP", "crest": "CREST", "splash": "SPLASH", "chicane": "CHICANE"}.get(kind, kind.to_upper())
+		var fs := 24
+		var ts := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs)
+		draw_string(font, Vector2(r.size.x * 0.5 - ts.x * 0.5, r.size.y * 0.78), label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, red if kind in ["jump", "chicane", "ice"] else ink)
+		draw_string(font, Vector2(r.size.x - 50, r.size.y - 8), "%dm" % int(dist), HORIZONTAL_ALIGNMENT_LEFT, -1, 16, ink)
+
+
+class CameraButton:
+	extends Control
+	## A paper camera icon: tap / click to cycle camera views.
+	signal pressed
+	var _down := false
+
+	func _ready() -> void:
+		mouse_filter = Control.MOUSE_FILTER_STOP
+		tooltip_text = "Change camera view"
+
+	func _gui_input(event: InputEvent) -> void:
+		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+			_down = event.pressed
+			if not event.pressed:
+				pressed.emit()
+			queue_redraw()
+			accept_event()
+
+	func _draw() -> void:
+		var r := Rect2(Vector2.ZERO, size)
+		var bg := PaperTheme.CREAM_DOWN if _down else PaperTheme.CREAM
+		draw_style_box(PaperTheme.box(bg, PaperTheme.EDGE, 3, 12, 0 if _down else 5), r)
+		var c := r.get_center()
+		var ink := PaperTheme.INK
+		draw_rect(Rect2(c + Vector2(-26, -14), Vector2(52, 32)), ink)
+		draw_rect(Rect2(c + Vector2(-12, -22), Vector2(22, 10)), ink)
+		draw_circle(c + Vector2(0, 2), 11.0, PaperTheme.CREAM)
+		draw_circle(c + Vector2(0, 2), 6.5, ink)
+		draw_circle(c + Vector2(17, -8), 3.0, PaperTheme.ACCENT)
 
 
 class ProgressStrip:

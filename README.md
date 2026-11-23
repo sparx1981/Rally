@@ -18,6 +18,10 @@ screenshots.
 | ![](docs/screenshots/race_dry.png) | ![](docs/screenshots/race_harbour.png) |
 | **Snow: Alpine Pass** | **Snow at dusk: Twilight Taiga** |
 | ![](docs/screenshots/race_snow.png) | ![](docs/screenshots/race_taiga.png) |
+| **Jump with taped-off crowd** | **Water splash in Race vs AI** |
+| ![](docs/screenshots/jump.png) | ![](docs/screenshots/splash.png) |
+| **Bonnet view** | **High overhead view** |
+| ![](docs/screenshots/bonnet.png) | ![](docs/screenshots/overhead.png) |
 | **Title (live diorama behind the menu)** | **Settings: presets, individual options, pop-up toggle** |
 | ![](docs/screenshots/title.png) | ![](docs/screenshots/settings.png) |
 
@@ -29,12 +33,16 @@ screenshots.
 | **Stages** | 9 procedurally generated point-to-point stages: 3 dry (Meadow Run, Sandstone Canyon, Autumn Ridge), 3 rain (Moorland Mire, Pinewood Deluge, Harbour Lanes), 3 snow (Alpine Pass, Frozen Lakes, Twilight Taiga). Each one has its own palette, scenery set, light set and grip |
 | **Weather** | Rain: wet roads, puddles that splash and drag, paper rain streaks, about 72 % grip. Snow: paper snowflakes, cold lilac shadows, 49-56 % grip. Dry: dust trails |
 | **Cars** | 6 cars with different speed, acceleration, grip and handling: Pip 1300, Kestrel GT, Badger 4x4, Marten RS, Lynx Turbo, Otter Estate |
-| **Co-driver** | Pace-note cards for each upcoming bend (direction, severity 1-6, hairpins) |
+| **Hazards** | Built paper ramps for **crests and jumps** (real airtime, landing thud and rumble), **water splashes** (drag, spray, splash sound), **hay-bale chicanes**, **loose surfaces** (gravel, mud, ice, deep snow patches with less grip), and **roadside obstacles**: marker posts, plus rocks, logs and bales on the inside of tight bends to punish corner cutting. Crowds stand behind tape at jumps and splashes and cheer as you pass |
+| **Co-driver** | Pace-note cards for each upcoming bend (direction, severity 1-6, hairpins) and for every hazard (JUMP, CREST, SPLASH, CHICANE, GRAVEL, MUD, ICE, DEEP SNOW) |
+| **Camera views** | Tap the **camera icon** (top right), press Back/LB on a controller or C on a keyboard to cycle: Chase, Close chase, Far chase, High overhead, Top-down and Bonnet. Bonnet is a low, wide view with a paper sky and fog |
+| **Living world** | Flocks of paper birds perch at fixed spots, pecking. They scatter when a car comes near, circle with flap-and-glide wingbeats while banking, then glide back down and land |
+| **Collisions** | Each car collides as its real box-shaped body, not a circle, so contact happens where the bodywork touches. Paper scraps burst from the contact point, and glancing blows nudge the car's yaw |
 | **Controllers** | Any Bluetooth or USB-C game controller (Xbox, PlayStation, 8BitDo and similar), with analog steering and triggers. All menus can be driven from the controller |
 | **Touch** | On-screen paper buttons or tilt steering. They hide automatically when a controller is connected |
 | **Haptics** | Controller rumble for road texture, sliding, off-road, gear shifts, impacts, puddles, the countdown and the finish. Short, rate-limited phone vibration when no controller is connected. Strength slider and on/off toggles |
 | **Graphics settings** | Low / Medium / High presets plus individual options: render resolution, shadows, tilt-shift blur, MSAA, scenery density, draw distance, weather particles, paper fibre detail, 30/60 fps cap, FPS counter |
-| **Pop-up toggle** | *Settings → Graphics → Pop-up scenery animation*. **On**: scenery lies folded flat and springs up on a paper-flap spring as you approach, then folds away behind you. **Off**: the same paper scenery stands still and is batched into chunked MultiMeshes (far fewer draw calls). Switch it mid-race from the pause menu to compare |
+| **Pop-up toggle** | *Settings → Graphics → Pop-up scenery animation*. **On**: every piece of scenery lies folded flat until it comes into the camera's view, then unfolds in staggered waves on a paper-flap spring, and folds away again once it is out of view. **Off**: the same paper scenery stands still and is batched into chunked MultiMeshes (far fewer draw calls). Switch it mid-race from the pause menu to compare |
 
 ## Controls
 
@@ -45,7 +53,7 @@ screenshots.
 | Steer | Left stick / D-pad | A D / Left Right | `<` `>` buttons or tilt |
 | Handbrake | B / RB | Space | HAND |
 | Reset to road | Y | R | |
-| Camera (chase / high) | Back / LB | C | |
+| Camera view | Back / LB | C | camera icon |
 | Pause | Start | Esc / P | II |
 | Settings tabs | LB / RB | Q / E | tap |
 
@@ -80,15 +88,23 @@ scripts/paper/pieces.gd     scenery kit: pines, trees, birches, rocks, mesas, ca
 scripts/paper/flap_spring.gd  the papercraft skill's latched paper-flap spring (rise, overshoot, 4.5 Hz quiver, soft fall)
 scripts/world/track.gd      seeded stage generator, projection queries, pace notes, ideal-speed profile
 scripts/world/scenery.gd    clustered placement; pop-up (animated) vs batched (static) scenery
-scripts/world/stage.gd      lights, ground, road, gantries, puddles, rain/snow particles, birds
+scripts/world/stage.gd      lights, ground, road and ramps, gantries, hazards, puddles, rain/snow particles
+scripts/world/birds.gd      world-anchored bird flocks (perch, scatter, circle, land)
+audio/kenney/               CC0 recorded sounds
 scripts/car/                paper car model, arcade rally physics, AI driver, player input
 scripts/race/               race controller (fixed 120 Hz physics, collisions, timing), chase camera
 scripts/ui/                 paper UI theme, HUD with pace notes, touch controls
 shaders/                    paper.gdshader, ground, road, post (tilt-shift + grade)
 ```
 
-No image or audio files are shipped. Card prints, ground washes and fibre are procedural, and every sound
-(engine, paper flaps, splashes, skids, rain and wind) is synthesised at start-up.
+No image files are shipped: card prints, ground washes and fibre are procedural.
+
+**Sound.** The engine loop, tyre skid, impacts, landing thud, nature ambience and UI clicks are CC0
+(public domain) recordings by [Kenney](https://kenney.nl), taken from Kenney's open-source Godot
+starter kits; see `audio/kenney/LICENSE.txt`. The engine is pitched by rpm, and rival cars have their
+own positional engines. Everything else is synthesised on a background thread at start-up: surface
+roll loops (gravel crackle, wet hiss, snow crunch, cobbles), stones pinging the underbody, exhaust pops
+on lift-off, water splashes, rain, wind, paper flaps, bird flutters and crowd cheers.
 
 ## Notes on performance
 

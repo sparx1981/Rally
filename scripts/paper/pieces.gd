@@ -33,7 +33,17 @@ static func make(kind: String, pal: Dictionary, seed_v: int) -> Dictionary:
 		"lamp": return lamp(pal, rng)
 		"snowbank": return snowbank(pal, rng)
 		"spectators": return spectators(pal, rng)
+		"post": return marker_post(pal, rng)
+		"tape": return tape(pal, rng)
 	return bush(pal, rng)
+
+
+## A flat lobed crown lying across the top of a slotted tree, so overhead views read as foliage
+## rather than an X of two cards.
+static func _crown(b: PaperKit.Builder, r: float, y: float, col: Color, col2: Color, seed_v: int) -> void:
+	var lay := Transform3D(Basis(Vector3.RIGHT, -PI * 0.5), Vector3(0, y, 0))
+	b.card(PaperKit.blob(r, 0, 0, 6, 0.12, seed_v, 22), lay, col, {"thick": 0.05, "edge": 0.04, "lip": 0.05})
+	b.card(PaperKit.blob(r * 0.6, -r * 0.15, r * 0.12, 5, 0.14, seed_v + 1, 18), lay * Transform3D(Basis(), Vector3(0, 0, 0.04)), col2, {"thick": 0.02, "edge": 0.03, "lip": 0.0})
 
 
 static func _out(b: PaperKit.Builder, r: float, solid: bool, h: float, size: float) -> Dictionary:
@@ -80,6 +90,7 @@ static func pine(pal: Dictionary, rng: RandomNumberGenerator, snow: bool) -> Dic
 				for d in 3:
 					var dot := PaperKit.circle(w * 0.045, rng.randf_range(-tw * 0.25, tw * 0.25), y0 + th * rng.randf_range(0.15, 0.4), 9)
 					b.card(dot, xf * Transform3D(Basis(), Vector3(0, 0, 0.1)), pal["f_light"], {"thick": 0.02, "edge": 0.02, "lip": 0.0})
+	_crown(b, w * 0.3, h * 0.62, pal["f_dark"], Color("#f3f4f7") if snow else pal["f_mid"], rng.randi())
 	return _out(b, w * 0.18 + 0.3, true, h, 0.5)
 
 
@@ -106,6 +117,7 @@ static func tree(pal: Dictionary, rng: RandomNumberGenerator) -> Dictionary:
 				var rr := rng.randf_range(0.3, 0.75) * r
 				var dot := PaperKit.circle(r * 0.08, cos(a) * rr, cy + sin(a) * rr, 9)
 				b.card(dot, lx * Transform3D(Basis(), Vector3(0, 0, 0.045 * side)), dot_c, {"thick": 0.02, "edge": 0.02, "lip": 0.0})
+	_crown(b, r * 0.8, cy + r * 0.15, pal["f_dark"], pal["f_mid"], rng.randi())
 	return _out(b, r * 0.25 + 0.3, true, h, 0.5)
 
 
@@ -127,6 +139,7 @@ static func birch(pal: Dictionary, rng: RandomNumberGenerator) -> Dictionary:
 		var lay := PaperKit.blob(r * 0.6, -r * 0.2, cy + r * 0.3, 5, 0.12, rng.randi(), 20, 1.3)
 		for side in [1.0, -1.0]:
 			b.card(lay, xf * Transform3D(Basis(), Vector3(0, 0, 0.065 * side)), pal["f_light"], {"thick": 0.03})
+	_crown(b, r * 0.75, cy + r * 0.2, pal["f_mid"], pal["f_light"], rng.randi())
 	return _out(b, 0.45, true, h, 0.5)
 
 
@@ -146,6 +159,7 @@ static func bush(pal: Dictionary, rng: RandomNumberGenerator) -> Dictionary:
 			for d in 3:
 				var dot := PaperKit.circle(r * 0.09, rng.randf_range(-r * 0.6, r * 0.6), rng.randf_range(r * 0.3, r * 0.9), 8)
 				b.card(dot, xf * Transform3D(Basis(), Vector3(0, 0, 0.085 * side)), pal["flower"], {"thick": 0.02, "edge": 0.02, "lip": 0.0})
+	_crown(b, r * 0.7, r * 0.75, pal["f_dark"], pal["f_mid"], rng.randi())
 	return _out(b, r * 0.6, false, r * 1.1, 0.3)
 
 
@@ -425,6 +439,7 @@ static func snowbank(pal: Dictionary, rng: RandomNumberGenerator) -> Dictionary:
 		var top := PaperKit.blob(w * 0.4, -w * 0.05, w * 0.05, 4, 0.12, rng.randi(), 20, 0.4)
 		for side in [1.0, -1.0]:
 			b.card(top, xf * Transform3D(Basis(), Vector3(0, 0, 0.05 * side)), snow, {"thick": 0.03, "edge": 0.03})
+	_crown(b, w * 0.32, w * 0.12, shade, snow, rng.randi())
 	return _out(b, w * 0.3, false, w * 0.25, 0.3)
 
 
@@ -454,6 +469,33 @@ static func spectators(pal: Dictionary, rng: RandomNumberGenerator) -> Dictionar
 
 
 # --- functional track furniture ------------------------------------------------------------------
+
+## Road-edge marker post: chunky red-and-cream striped card post with a reflector dot.
+static func marker_post(pal: Dictionary, rng: RandomNumberGenerator) -> Dictionary:
+	var b := PaperKit.Builder.new(rng.randi())
+	var h := 1.1
+	for k in 2:
+		var xf := _y(k * PI * 0.5 + 0.4)
+		b.card(PaperKit.rrect(0.26, h, 0.06), xf, PaperKit.CREAM, {"thick": 0.05, "edge": 0.03, "lip": 0.0})
+		for side in [1.0, -1.0]:
+			b.card(PaperKit.rect(0.24, 0.2, 0, h * 0.62), xf * Transform3D(Basis(), Vector3(0, 0, 0.03 * side)), Color("#c8553d"), {"thick": 0.01, "edge": 0.0, "lip": 0.0})
+			b.card(PaperKit.circle(0.06, 0, h * 0.85, 8), xf * Transform3D(Basis(), Vector3(0, 0, 0.035 * side)), Color("#e8b04a"), {"thick": 0.01, "edge": 0.0, "lip": 0.0, "sides": false})
+	return _out(b, 0.22, true, h, 0.25)
+
+
+## Spectator tape: two stakes and a red-and-cream ribbon card between them (6 units long).
+static func tape(pal: Dictionary, rng: RandomNumberGenerator) -> Dictionary:
+	var b := PaperKit.Builder.new(rng.randi())
+	for x in [-3.0, 0.0, 3.0]:
+		for k in 2:
+			b.card(PaperKit.rect(0.12, 1.0, 0, 0), Transform3D(Basis(Vector3.UP, k * PI * 0.5), Vector3(x, 0, 0)), Color("#6a4a32"), {"thick": 0.04, "edge": 0.0, "lip": 0.0})
+	for i in 12:
+		var x0 := -3.0 + i * 0.5
+		var sag := sin(float(i % 6) / 6.0 * PI) * 0.06
+		var c := Color("#c8553d") if i % 2 == 0 else PaperKit.CREAM
+		b.card(PaperKit.rect(0.5, 0.14, x0 + 0.25, 0.8 - sag), Transform3D(), c, {"thick": 0.01, "edge": 0.0, "lip": 0.0})
+	return _out(b, 0.3, false, 1.0, 0.3)
+
 
 ## Chevron board pointing the way of the bend (dir +1 = arrows point to the card's +X).
 static func chevron(dir: float) -> ArrayMesh:

@@ -20,6 +20,12 @@ var grid := {}
 var start_s := 14.0
 var finish_s := 0.0
 
+# Hazards (rally-game staples: crests, jumps, water splashes, hay-bale chicanes, loose surfaces).
+var heights := PackedFloat32Array()  # road height per sample (crests and jump ramps are built paper ramps)
+var features: Array = []             # {type: jump|crest|splash|chicane, s0, s1, s (centre), side}
+var patches: Array = []              # {s0, s1, lat0, lat1, kind, grip, drag}
+var notes: Array = []                # pace notes: corners + features, sorted by s0
+
 
 func generate(seed_v: int, target_len: float, twist: float, w: float) -> void:
 	width = w
@@ -135,7 +141,10 @@ func _finalize() -> void:
 			m = maxf(m, absf(curv[j]))
 		curv_abs[i] = m
 	finish_s = length - 30.0
+	heights.resize(n)
+	heights.fill(0.0)
 	_find_corners()
+	notes = corners.duplicate()
 
 
 func _find_corners() -> void:
@@ -160,7 +169,7 @@ func _find_corners() -> void:
 						sev = lim[1]
 						break
 				# Positive curvature turns the heading toward +X, which is screen-left behind the car.
-				corners.append({"s0": dist[i], "s1": dist[mini(j, n - 1)], "dir": -sgn, "sev": sev,
+				corners.append({"kind": "corner", "s0": dist[i], "s1": dist[mini(j, n - 1)], "dir": -sgn, "sev": sev,
 					"hairpin": absf(turn) > deg_to_rad(140.0), "apex": (i + j) / 2})
 			i = j + 1
 		else:
@@ -264,6 +273,18 @@ func speed_profile(a_lat: float, a_brake: float, a_acc: float, v_top: float) -> 
 	v.resize(n)
 	for i in n:
 		v[i] = minf(v_top, sqrt(a_lat / maxf(curv_abs[i], 0.0005)))
+	# Hazards: slow for chicanes, splashes and jump take-offs; loose surfaces cost grip.
+	for f in features:
+		var cap := 99.0
+		match f["type"]:
+			"chicane": cap = 13.0
+			"splash": cap = 17.0
+			"jump": cap = 26.0
+		for i in range(index_at(float(f["s0"]) - 6.0), index_at(float(f["s1"]) + 4.0) + 1):
+			v[i] = minf(v[i], cap)
+	for p in patches:
+		for i in range(index_at(p["s0"]), index_at(p["s1"]) + 1):
+			v[i] *= sqrt(float(p["grip"]))
 	for i in range(n - 2, -1, -1):
 		v[i] = minf(v[i], sqrt(v[i + 1] * v[i + 1] + 2.0 * a_brake * STEP))
 	v[0] = 0.0
@@ -285,6 +306,166 @@ func ideal_time(a_lat: float, a_brake: float, a_acc: float, v_top: float) -> flo
 ## Pace note for the next corner within `ahead` units of s, or {}.
 func next_corner(s: float, ahead: float) -> Dictionary:
 	for c in corners:
+		if c["s1"] < s:
+			continue
+		if c["s0"] - s > ahead:
+			return {}
+		return c
+	return {}
+
+
+# --- hazards ---------------------------------------------------------------------------------------
+
+## Adds crests, jumps, water splashes, chicanes and loose-surface patches on straight sections.
+func build_hazards(seed_v: int, kind: String, twist: float) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_v * 7 + 3
+	var n := pts.size()
+	# Candidates: jumps and crests need a straight run-off; splashes and chicanes tolerate mild bends.
+	var strict := _candidates(-12, 24, 1.0 / 90.0)
+	var loose := _candidates(-6, 14, 1.0 / 60.0)
+	var used: Array = []
+	var want := ["jump", "splash", "chicane", "crest", "jump", "crest", "splash"]
+	if twist > 0.55:
+		want = ["jump", "chicane", "splash", "crest", "crest", "chicane"]
+	for t in want:
+		var pool: Array = strict if t in ["jump", "crest"] else loose
+		if pool.is_empty():
+			pool = loose
+		for ci in pool:
+			var sc: float = dist[ci]
+			var free := true
+			for u in used:
+				if absf(u - sc) < 110.0:
+					free = false
+					break
+			if not free:
+				continue
+			used.append(sc)
+			match t:
+				"jump":
+					features.append({"type": "jump", "s": sc, "s0": sc - 12.0, "s1": sc + 3.0, "h": rng.randf_range(1.5, 1.9)})
+				"crest":
+					features.append({"type": "crest", "s": sc, "s0": sc - 14.0, "s1": sc + 14.0, "h": rng.randf_range(0.9, 1.2)})
+				"splash":
+					features.append({"type": "splash", "s": sc, "s0": sc - 3.5, "s1": sc + 3.5})
+				"chicane":
+					features.append({"type": "chicane", "s": sc, "s0": sc - 2.0, "s1": sc + 18.0, "side": -1.0 if rng.randf() < 0.5 else 1.0})
+			break
+	features.sort_custom(func(a, b): return a["s"] < b["s"])
+	for f in features:
+		if f["type"] == "jump" or f["type"] == "crest":
+			for i in range(index_at(f["s0"]) - 1, index_at(f["s1"]) + 2):
+				if i < 0 or i >= n:
+					continue
+				heights[i] = maxf(heights[i], _bump(f, dist[i]))
+	# Loose-surface patches on the road (gravel / mud / ice / deep snow).
+	var pk := {"dry": ["gravel", 0.78, 0.1], "rain": ["mud", 0.62, 0.45], "snow": ["ice", 0.55, 0.0]}
+	for k in 6:
+		var sc := rng.randf_range(120.0, length - 120.0)
+		var near := false
+		for f in features:
+			if absf(f["s"] - sc) < 40.0:
+				near = true
+		if near:
+			continue
+		var info: Array = pk.get(kind, pk["dry"])
+		var pkind: String = info[0]
+		if kind == "snow" and k % 2 == 1:
+			info = ["deep snow", 0.72, 0.55]
+			pkind = "deep snow"
+		var half := rng.randf() < 0.5
+		var side := -1.0 if rng.randf() < 0.5 else 1.0
+		var l0 := -width * 0.5 if not half else (0.0 if side > 0 else -width * 0.5)
+		var l1 := width * 0.5 if not half else (width * 0.5 if side > 0 else 0.0)
+		patches.append({"s0": sc, "s1": sc + rng.randf_range(14.0, 30.0), "lat0": l0, "lat1": l1, "kind": pkind, "grip": info[1], "drag": info[2]})
+	patches.sort_custom(func(a, b): return a["s0"] < b["s0"])
+	# Pace notes for the hazards.
+	for f in features:
+		notes.append({"s0": f["s0"], "s1": f["s1"], "kind": f["type"], "dir": 0.0, "sev": 0, "hairpin": false})
+	for p in patches:
+		notes.append({"s0": p["s0"], "s1": p["s1"], "kind": p["kind"], "dir": 0.0, "sev": 0, "hairpin": false})
+	notes.sort_custom(func(a, b): return a["s0"] < b["s0"])
+
+
+func _candidates(from_k: int, to_k: int, kmax: float) -> Array:
+	var out: Array = []
+	var n := pts.size()
+	for i in range(int(90.0 / STEP), n - int(110.0 / STEP), 3):
+		var ok := true
+		for j in range(i + from_k, i + to_k):
+			if curv_abs[j] > kmax:
+				ok = false
+				break
+		if ok:
+			out.append(i)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = n * 31 + out.size()
+	for i in range(out.size() - 1, 0, -1):
+		var j := rng.randi_range(0, i)
+		var tmp = out[i]
+		out[i] = out[j]
+		out[j] = tmp
+	return out
+
+
+func _bump(f: Dictionary, s: float) -> float:
+	var h: float = f["h"]
+	if f["type"] == "crest":
+		var x := (s - float(f["s"])) / 14.0
+		return h * 0.5 * (1.0 + cos(PI * clampf(x, -1.0, 1.0))) if absf(x) < 1.0 else 0.0
+	# Jump: a long built ramp up to the lip, then a short steep drop.
+	var s0: float = f["s0"]
+	var sc: float = f["s"]
+	if s < s0 or s > float(f["s1"]):
+		return 0.0
+	if s <= sc:
+		var t := (s - s0) / (sc - s0)
+		return h * t * t * (3.0 - 2.0 * t)
+	return h * (1.0 - (s - sc) / (float(f["s1"]) - sc))
+
+
+func height_at(s: float, lat: float) -> float:
+	if absf(lat) > width * 0.5 + 0.1:
+		return 0.0
+	var f := clampf(s / STEP, 0.0, pts.size() - 1.001)
+	var i := int(f)
+	return lerpf(heights[i], heights[i + 1], f - i)
+
+
+func patch_at(s: float, lat: float) -> Dictionary:
+	for p in patches:
+		if s < p["s0"]:
+			return {}
+		if s <= p["s1"] and lat >= p["lat0"] and lat <= p["lat1"]:
+			return p
+	return {}
+
+
+func feature_at(s: float, type: String, margin := 0.0) -> Dictionary:
+	for f in features:
+		if f["type"] == type and s >= float(f["s0"]) - margin and s <= float(f["s1"]) + margin:
+			return f
+	return {}
+
+
+## Lane the AI should take through a chicane, or NAN.
+func forced_lane(s: float) -> float:
+	for f in features:
+		if f["type"] != "chicane":
+			continue
+		var sc: float = f["s"]
+		var side: float = f["side"]
+		if s > sc - 26.0 and s < sc + 6.0:
+			return -side * width * 0.3
+		if s >= sc + 6.0 and s < sc + 24.0:
+			return side * width * 0.3
+	return NAN
+
+
+## Next pace note (corner or hazard) within `ahead` units of s, or {}.
+func next_note(s: float, ahead: float) -> Dictionary:
+	for c in notes:
 		if c["s1"] < s:
 			continue
 		if c["s0"] - s > ahead:

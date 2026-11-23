@@ -66,6 +66,8 @@ func setup(stage_i: int, mode_v: int, entrants: Array, attract_v := false) -> vo
 		var lat := 0.0 if n == 1 else (-2.2 if i % 2 == 0 else 2.2)
 		car.place_at(tr.start_s - 5.0 - row * 8.0, lat)
 		cars.append(car)
+		car.landed.connect(func(v): _on_landed(car, v))
+		car.splashed.connect(func(v): _on_splashed(car, v))
 		if car.is_player:
 			player = car
 			car.gear_changed.connect(_on_gear)
@@ -79,6 +81,8 @@ func setup(stage_i: int, mode_v: int, entrants: Array, attract_v := false) -> vo
 	add_child(camera)
 	camera.target = player
 	camera.current = true
+	if attract:
+		camera.force_view = 0
 	camera.follow(0.016)
 	var st: Dictionary = player.stats
 	var mu := Car.BASE_MU * float(st["grip"]) * stage.grip()
@@ -88,10 +92,36 @@ func setup(stage_i: int, mode_v: int, entrants: Array, attract_v := false) -> vo
 		for c in cars:
 			c.frozen = false
 		state = State.RACING
-		stage.scenery.raise_all()
 	else:
 		_make_hud()
 		Sfx.engine_start()
+
+
+## Test helper: start the cars just before the first hazard of a type, countdown skipped.
+func skip_to_hazard(type: String) -> void:
+	var f: Dictionary = {}
+	for x in stage.track.features:
+		if x["type"] == type:
+			f = x
+			break
+	if f.is_empty():
+		return
+	var s0: float = float(f["s0"]) - 70.0
+	for i in cars.size():
+		cars[i].place_at(s0 - 9.0 * (i / 2) + (0.0 if cars[i] == player else 4.0), (-2.0 if i % 2 == 0 else 2.0) if cars.size() > 1 else 0.0)
+		cars[i].vel = cars[i].fwd() * 22.0
+		cars[i].frozen = false
+	_count = 0.0
+	state = State.RACING
+	camera.snap()
+
+
+func cycle_camera() -> void:
+	var v := (ChaseCamera.VIEWS.size() + camera.view_index() + 1) % ChaseCamera.VIEWS.size()
+	Settings.set_value("camera", v)
+	Sfx.toggle()
+	if hud:
+		hud.show_hint_timed(ChaseCamera.view_name(v), 1.2)
 
 
 func _make_hud() -> void:
@@ -104,6 +134,7 @@ func _make_hud() -> void:
 	_hud_layer.add_child(touch)
 	touch.visible = touch.should_show()
 	touch.pause_pressed.connect(func(): pause_requested.emit())
+	hud.camera_pressed.connect(cycle_camera)
 	input.touch = touch
 	hud.pos_tag.visible = mode != Game.Mode.TIME_TRIAL
 	if mode == Game.Mode.TIME_TRIAL:
@@ -127,7 +158,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		pause_requested.emit()
 		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed("camera"):
-		camera.view = 1 - camera.view
+		cycle_camera()
 	elif event.is_action_pressed("reset_car") and state == State.RACING and _reset_cd <= 0.0:
 		player.reset_to_track()
 		_reset_cd = 1.5
@@ -158,7 +189,13 @@ func _process(delta: float) -> void:
 			race_time += FIXED
 	_check_finish()
 	camera.follow(dt)
-	stage.update(dt, player.position + Vector3(sin(player.h), 0, cos(player.h)) * 10.0, player.s, camera)
+	stage.set_bonnet(camera.view_index() == ChaseCamera.BONNET)
+	var vf: Array = camera.view_focus()
+	stage.update(dt, vf[0], float(vf[1]), player.s, camera)
+	var threats: Array = []
+	for c in cars:
+		threats.append(c.position)
+	stage.birds.update(dt, threats, vf[0])
 	if not attract:
 		_feedback(dt)
 		_update_hud()
@@ -209,49 +246,182 @@ func _check_finish() -> void:
 				Sfx.play("go", -2.0, 0.8)
 
 
+## Collisions use each car's oriented box (its real paper body), not a circle: props are circles,
+## car-vs-car uses the separating-axis test, and impulses act at the contact point so a clipped
+## corner also nudges the car's yaw.
+const INERTIA := 1.6
+const RESTITUTION := 0.25
+
+
+func _corner_support(c: Car, n: Vector2) -> Vector2:
+	var f := c.fwd()
+	var r := c.right_axis()
+	return c.pos + r * (c.half_wid * signf(r.dot(n))) + f * (c.half_len * signf(f.dot(n)))
+
+
+func _apply_contact(c: Car, n: Vector2, cp: Vector2, other_vel: Vector2, other: Car) -> float:
+	var rc := cp - c.pos
+	var perp_a := Vector2(rc.y, -rc.x)
+	var va := c.vel + perp_a * c.yaw_rate
+	var vb := other_vel
+	var cb := 0.0
+	var perp_b := Vector2.ZERO
+	if other:
+		var rb := cp - other.pos
+		perp_b = Vector2(rb.y, -rb.x)
+		vb = other.vel + perp_b * other.yaw_rate
+		cb = perp_b.dot(n)
+	var vn := (va - vb).dot(n)
+	if vn >= 0.0:
+		return 0.0
+	var ca := perp_a.dot(n)
+	var denom := 1.0 + ca * ca / INERTIA
+	if other:
+		denom += 1.0 + cb * cb / INERTIA
+	var j := -(1.0 + RESTITUTION) * vn / denom
+	c.vel += n * j
+	c.yaw_rate = clampf(c.yaw_rate + j * ca / INERTIA * 0.6, -4.0, 4.0)
+	# Tangential scrub at the contact.
+	var t := Vector2(-n.y, n.x)
+	c.vel -= t * (c.vel - vb).dot(t) * 0.12
+	if other:
+		other.vel -= n * j
+		other.yaw_rate = clampf(other.yaw_rate - j * cb / INERTIA * 0.6, -4.0, 4.0)
+	return -vn
+
+
 func _collide() -> void:
 	for c in cars:
+		var f := c.fwd()
+		var r := c.right_axis()
 		for o in stage.scenery.solids_near(c.pos):
 			var op := Vector2(o[0], o[1])
-			var d := c.pos - op
-			var min_d := Car.RADIUS + float(o[2])
-			var dl := d.length()
-			if dl < min_d and dl > 0.001:
-				var nrm := d / dl
-				c.pos = op + nrm * min_d
-				var vn := c.vel.dot(nrm)
-				if vn < 0.0:
-					c.vel -= nrm * vn * 1.35
-					c.vel *= 0.82
-					_on_impact(c, -vn)
+			var rad := float(o[2])
+			var d := op - c.pos
+			var lx := clampf(d.dot(r), -c.half_wid, c.half_wid)
+			var lz := clampf(d.dot(f), -c.half_len, c.half_len)
+			var closest := c.pos + r * lx + f * lz
+			var sep := op - closest
+			var dl := sep.length()
+			var n: Vector2
+			var pen: float
+			if dl > 0.0001:
+				if dl >= rad:
+					continue
+				n = -sep / dl
+				pen = rad - dl
+			else:
+				# Prop centre inside the body: push out along the shallower axis.
+				var px := c.half_wid - absf(d.dot(r))
+				var pz := c.half_len - absf(d.dot(f))
+				n = -r * signf(d.dot(r)) if px < pz else -f * signf(d.dot(f))
+				pen = minf(px, pz) + rad
+			c.pos += n * pen
+			var hit := _apply_contact(c, n, closest, Vector2.ZERO, null)
+			_on_impact(c, hit, closest, true)
 	for i in cars.size():
 		for j in range(i + 1, cars.size()):
 			var a := cars[i]
 			var b := cars[j]
 			var d := a.pos - b.pos
-			var dl := d.length()
-			var min_d := Car.RADIUS * 1.7
-			if dl < min_d and dl > 0.001:
-				var nrm := d / dl
-				var push := (min_d - dl) * 0.5
-				a.pos += nrm * push
-				b.pos -= nrm * push
-				var rel := (a.vel - b.vel).dot(nrm)
-				if rel < 0.0:
-					var imp := nrm * rel * 0.6
-					a.vel -= imp
-					b.vel += imp
-					_on_impact(a, -rel * 0.6)
-					_on_impact(b, -rel * 0.6)
+			if d.length_squared() > 30.0:
+				continue
+			var axes := [a.fwd(), a.right_axis(), b.fwd(), b.right_axis()]
+			var best := INF
+			var bn := Vector2.ZERO
+			var sep_found := false
+			for ax in axes:
+				var ra := a.half_wid * absf(a.right_axis().dot(ax)) + a.half_len * absf(a.fwd().dot(ax))
+				var rb := b.half_wid * absf(b.right_axis().dot(ax)) + b.half_len * absf(b.fwd().dot(ax))
+				var ov: float = ra + rb - absf(d.dot(ax))
+				if ov <= 0.0:
+					sep_found = true
+					break
+				if ov < best:
+					best = ov
+					bn = ax if d.dot(ax) >= 0.0 else -ax
+			if sep_found:
+				continue
+			a.pos += bn * best * 0.5
+			b.pos -= bn * best * 0.5
+			# Contact point: midway between the two bodies' deepest corners along the normal.
+			var cp := (_corner_support(a, -bn) + _corner_support(b, bn)) * 0.5
+			var hit := _apply_contact(a, bn, cp, Vector2.ZERO, b)
+			_on_impact(a, hit, cp)
+			_on_impact(b, hit, cp)
 
 
-func _on_impact(c: Car, strength: float) -> void:
-	if c != player or attract or strength < 1.5:
+func _on_impact(c: Car, strength: float, at: Vector2 = Vector2.INF, paper := false) -> void:
+	if strength < 1.5:
+		return
+	if at != Vector2.INF and strength > 2.5:
+		_debris(Vector3(at.x, c.y + 0.6, at.y), strength)
+	if c != player or attract:
 		return
 	var k := clampf(strength / 14.0, 0.15, 1.0)
 	Haptics.impulse(k, 0.08 + k * 0.12)
-	Sfx.play("thump", linear_to_db(clampf(k, 0.2, 1.0)) - 2.0, randf_range(0.9, 1.1))
+	Sfx.impact(k, paper)
 	camera.kick(k)
+
+
+var _cheered := {}
+var _debris_pool: Array[CPUParticles3D] = []
+var _debris_i := 0
+
+
+## Paper scraps burst from the exact point where bodywork touches.
+func _debris(p: Vector3, strength: float) -> void:
+	if _debris_pool.is_empty():
+		for k in 4:
+			var cp := CPUParticles3D.new()
+			cp.one_shot = true
+			cp.emitting = false
+			cp.amount = 14
+			cp.lifetime = 0.8
+			cp.explosiveness = 0.95
+			cp.direction = Vector3.UP
+			cp.spread = 70.0
+			cp.initial_velocity_min = 2.5
+			cp.initial_velocity_max = 6.0
+			cp.gravity = Vector3(0, -14, 0)
+			cp.angular_velocity_min = -400.0
+			cp.angular_velocity_max = 400.0
+			var qm := QuadMesh.new()
+			qm.size = Vector2(0.22, 0.16)
+			var m := StandardMaterial3D.new()
+			m.albedo_color = PaperKit.CREAM
+			m.cull_mode = BaseMaterial3D.CULL_DISABLED
+			m.roughness = 1.0
+			qm.material = m
+			cp.mesh = qm
+			cp.local_coords = false
+			add_child(cp)
+			_debris_pool.append(cp)
+	var e := _debris_pool[_debris_i]
+	_debris_i = (_debris_i + 1) % _debris_pool.size()
+	e.global_position = p
+	e.amount = clampi(int(strength * 1.5), 6, 24)
+	e.restart()
+
+
+func _on_landed(c: Car, v: float) -> void:
+	if sim_dt > 0.0 and c == player:
+		print("TEST landed v=%.1f air=%.2fs s=%.0f" % [v, c.air_time, c.s])
+	if c != player or attract:
+		return
+	var k := clampf(v / 12.0, 0.2, 1.0)
+	Haptics.impulse(k, 0.1 + k * 0.15)
+	Sfx.land(k)
+	camera.kick(k * 0.8)
+
+
+func _on_splashed(c: Car, v: float) -> void:
+	c.spray(v)
+	if c != player or attract:
+		return
+	Sfx.splash(true, clampf(v / 25.0, 0.3, 1.0))
+	Haptics.impulse(clampf(v / 25.0, 0.3, 0.9), 0.25)
+	camera.kick(0.4)
 
 
 func _on_gear(_g: int) -> void:
@@ -276,7 +446,20 @@ func _feedback(dt: float) -> void:
 		strong = maxf(strong, 0.3)
 	Haptics.rumble(weak, strong)
 	Sfx.set_engine(p.rpm, p.throttle if not p.frozen or state == State.COUNTDOWN else 0.0)
-	Sfx.set_skid(clampf((p.slip - 0.1) * 2.0, 0.0, 1.0) * sf if p.on_road else 0.0)
+	Sfx.set_skid((clampf((p.slip - 0.1) * 2.0, 0.0, 1.0) * sf if p.on_road else 0.0) * (0.0 if p.airborne else 1.0), kind)
+	var surf := kind
+	if p.patch_kind != "":
+		surf = p.patch_kind
+	elif not p.on_road:
+		surf = "snow" if kind == "snow" else "gravel"
+	elif stage.def["id"] == "harbour":
+		surf = "cobble"
+	Sfx.set_surface(surf, 0.0 if p.airborne else sp)
+	# The crowd cheers as you fly past them at jumps and splashes.
+	for f in stage.track.features:
+		if f["type"] in ["jump", "splash"] and absf(p.s - float(f["s"]) - 6.0) < 1.5 and sp > 8.0 and not _cheered.has(f["s"]):
+			_cheered[f["s"]] = true
+			Sfx.cheer()
 	# Puddles: a splash, a jolt and a little drag.
 	var in_p := false
 	for pd in stage.scenery.puddles:
@@ -284,7 +467,7 @@ func _feedback(dt: float) -> void:
 			in_p = true
 			break
 	if in_p and not p.in_puddle and sp > 4.0:
-		Sfx.play("splash", -3.0, randf_range(0.9, 1.1))
+		Sfx.splash(false, clampf(sp / 20.0, 0.3, 1.0))
 		Haptics.impulse(0.35 + sf * 0.3, 0.12)
 	p.in_puddle = in_p
 
@@ -303,7 +486,7 @@ func _positions() -> Array:
 func _update_hud() -> void:
 	hud.set_time(race_time if state != State.DONE else player.finish_time)
 	hud.set_speed(player.speed(), player.gear)
-	hud.pace.set_note(stage.track.next_corner(player.s, 70.0), player.s)
+	hud.pace.set_note(stage.track.next_note(player.s, 70.0), player.s)
 	var tr := stage.track
 	var marks: Array = []
 	for c in cars:

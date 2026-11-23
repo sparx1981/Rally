@@ -20,7 +20,7 @@ var data := {
 	"particles": 0.7, "paper_detail": true,
 	"popups": true,            # pop-up / unfolding scenery animation (test toggle)
 	"fps": 60, "show_fps": false,
-	"ai_difficulty": 1, "opponents": 5, "camera": 1, "units": 0,
+	"ai_difficulty": 1, "opponents": 5, "camera": 0, "units": 0,
 	"touch_mode": 0, "tilt_sens": 1.0, "tilt_invert": false, "touch_controls": 0,
 	"haptics": true, "haptic_strength": 1.0, "phone_vibration": true,
 	"master_vol": 0.8, "sfx_vol": 0.8, "engine_vol": 0.7,

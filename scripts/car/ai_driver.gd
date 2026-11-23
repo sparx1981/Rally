@@ -39,7 +39,10 @@ func update(dt: float, others: Array, t: float) -> void:
 		if ds > 0.0 and ds < 9.0 and absf(o.lat - car.lat - _offset * 0.0) < 2.4:
 			want = o.lat + (2.8 if o.lat < 0.0 else -2.8)
 	want += sin(t * 0.3 + _wobble_seed) * 0.6
-	_offset = lerpf(_offset, clampf(want, -tr.width * 0.38, tr.width * 0.38), clampf(dt * 1.5, 0.0, 1.0))
+	var lane := tr.forced_lane(car.s + 6.0)
+	if not is_nan(lane):
+		want = lane
+	_offset = lerpf(_offset, clampf(want, -tr.width * 0.38, tr.width * 0.38), clampf(dt * (5.0 if not is_nan(lane) else 1.5), 0.0, 1.0))
 	var target := tr.pts[j] + tr.nrm[j] * _offset
 	var d := (target - car.pos).normalized()
 	var f := car.fwd()
@@ -56,7 +59,7 @@ func update(dt: float, others: Array, t: float) -> void:
 		car.brake = clampf(-dv * 0.22, 0.0, 1.0)
 	car.handbrake = 1.0 if (absf(ang) > 0.9 and vl > 8.0) else 0.0
 	# Recover if stuck.
-	if not car.frozen and absf(vl) < 1.0:
+	if not car.frozen and absf(vl) < 1.0 and not car.airborne:
 		_stuck += dt
 		if _stuck > 2.5:
 			car.reset_to_track()

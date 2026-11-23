@@ -23,7 +23,7 @@ var fill_light: DirectionalLight3D
 var env: Environment
 var weather_fx: Node3D
 var _particles: CPUParticles3D
-var _birds: Array = []
+var birds: Birds
 var _time := 0.0
 
 
@@ -61,6 +61,7 @@ func build(stage_def: Dictionary) -> void:
 	def = stage_def
 	wx = Catalog.weather(def["weather"])
 	track.generate(int(def["seed"]), float(def["length"]), float(def["twist"]), float(def["width"]))
+	track.build_hazards(int(def["seed"]), wx["kind"], float(def["twist"]))
 	_make_materials()
 	_make_lights()
 	_make_ground()
@@ -71,6 +72,7 @@ func build(stage_def: Dictionary) -> void:
 	add_child(scenery)
 	scenery.setup(track, def, paper_mat, float(Settings.g("density")), float(Settings.g("draw_distance")), bool(Settings.g("popups")))
 	_make_puddles()
+	_make_hazards()
 	_make_weather()
 	_make_birds()
 	apply_settings()
@@ -194,13 +196,16 @@ func _make_road() -> void:
 			var r := p - track.nrm[i] * hw
 			var vv := track.dist[i] / track.width
 			var base := v.size()
-			# top-left, top-right, bottom-left, bottom-right
-			v.append(Vector3(l.x, ROAD_Y, l.y)); nn.append(Vector3.UP); uv.append(Vector2(0, vv)); col.append(Color.WHITE)
-			v.append(Vector3(r.x, ROAD_Y, r.y)); nn.append(Vector3.UP); uv.append(Vector2(1, vv)); col.append(Color.WHITE)
+			var hy := ROAD_Y + track.heights[i]
+			var slope := (track.heights[mini(i + 1, n - 1)] - track.heights[maxi(i - 1, 0)]) / (2.0 * Track.STEP)
+			var tn := Vector3(-slope * track.tang[i].x, 1.0, -slope * track.tang[i].y).normalized()
+			# top-left, top-right, then the side skirts (a built paper ramp where the road rises)
+			v.append(Vector3(l.x, hy, l.y)); nn.append(tn); uv.append(Vector2(0, vv)); col.append(Color.WHITE)
+			v.append(Vector3(r.x, hy, r.y)); nn.append(tn); uv.append(Vector2(1, vv)); col.append(Color.WHITE)
 			var on := Vector3(track.nrm[i].x, 0, track.nrm[i].y)
-			v.append(Vector3(l.x, ROAD_Y, l.y)); nn.append(on); uv.append(Vector2(0, vv)); col.append(Color.BLACK)
+			v.append(Vector3(l.x, hy, l.y)); nn.append(on); uv.append(Vector2(0, vv)); col.append(Color.BLACK)
 			v.append(Vector3(l.x, -0.01, l.y)); nn.append(on); uv.append(Vector2(0, vv)); col.append(Color.BLACK)
-			v.append(Vector3(r.x, ROAD_Y, r.y)); nn.append(-on); uv.append(Vector2(1, vv)); col.append(Color.BLACK)
+			v.append(Vector3(r.x, hy, r.y)); nn.append(-on); uv.append(Vector2(1, vv)); col.append(Color.BLACK)
 			v.append(Vector3(r.x, -0.01, r.y)); nn.append(-on); uv.append(Vector2(1, vv)); col.append(Color.BLACK)
 			if i > i0:
 				var pb := base - 6
@@ -279,6 +284,93 @@ func _make_puddles() -> void:
 		add_child(mi)
 
 
+## Visuals for the hazards: water splashes, chicane bales (solid), surface patches, ramp struts.
+func _make_hazards() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(def["seed"]) + 501
+	var lay := Transform3D(Basis(Vector3.RIGHT, -PI * 0.5), Vector3.ZERO)
+	for f in track.features:
+		var i := track.index_at(f["s"])
+		var p := track.pts[i]
+		var hd := track.heading_at(i)
+		match f["type"]:
+			"splash":
+				# A stream crossing the road: stepped water tones, wobbly banks, cream ripple dashes.
+				var b := PaperKit.Builder.new(rng.randi())
+				var wl := track.width * 0.5 + 16.0
+				var stream := PackedVector2Array()
+				for k in 25:
+					var x := lerpf(-wl, wl, k / 24.0)
+					stream.append(Vector2(x, 3.6 + sin(k * 0.9) * 0.5))
+				for k in 25:
+					var x := lerpf(wl, -wl, k / 24.0)
+					stream.append(Vector2(x, -3.6 + sin(k * 1.3 + 1.0) * 0.5))
+				b.card(stream, lay, Color("#7f98a6"), {"thick": 0.03, "edge": 0.06, "lip": 0.08})
+				var inner := PackedVector2Array()
+				for q in stream:
+					inner.append(Vector2(q.x * 0.97, q.y * 0.55))
+				b.card(inner, lay * Transform3D(Basis(), Vector3(0, 0, 0.02)), Color("#6a8494"), {"thick": 0.01, "edge": 0.0, "lip": 0.0})
+				for k in 10:
+					var dx := rng.randf_range(-wl * 0.8, wl * 0.8)
+					b.card(PaperKit.rrect(rng.randf_range(0.8, 1.6), 0.12, 0.05, dx, rng.randf_range(-2.0, 2.0)), lay * Transform3D(Basis(), Vector3(0, 0, 0.035)), Color("#e6ecee"), {"thick": 0.01, "edge": 0.0, "lip": 0.0, "sides": false})
+				var mi := MeshInstance3D.new()
+				mi.mesh = b.mesh()
+				mi.material_override = paper_mat
+				mi.position = Vector3(p.x, ROAD_Y + 0.02, p.y)
+				mi.rotation.y = hd
+				mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				add_child(mi)
+			"jump", "crest":
+				# Posts under the ramp edges so it reads as a built paper ramp.
+				for s_off in range(int(f["s0"]) + 2, int(f["s1"]), 3):
+					var j := track.index_at(s_off)
+					var h := track.heights[j]
+					if h < 0.25:
+						continue
+					for side in [1.0, -1.0]:
+						var q = track.pts[j] + track.nrm[j] * side * (track.width * 0.5 - 0.15)
+						var post := MeshInstance3D.new()
+						var bm := BoxMesh.new()
+						bm.size = Vector3(0.18, h, 0.18)
+						post.mesh = bm
+						post.material_override = _flat_mat(Color("#6a4a32"))
+						post.position = Vector3(q.x, h * 0.5, q.y)
+						add_child(post)
+	for pt in track.patches:
+		var b := PaperKit.Builder.new(rng.randi())
+		var len_s: float = float(pt["s1"]) - float(pt["s0"])
+		var wdt: float = float(pt["lat1"]) - float(pt["lat0"])
+		var col: Color = {"gravel": Color(def["pal"]["road"]).lightened(0.18), "mud": Color("#5e4632"), "ice": Color("#c9dcea"), "deep snow": Color("#f4f5f8")}[pt["kind"]]
+		# Built as several overlapping blobs along the patch so it follows the bend.
+		var steps := maxi(2, int(len_s / 6.0))
+		for k in steps:
+			var sm := lerpf(float(pt["s0"]) + 3.0, float(pt["s1"]) - 3.0, float(k) / maxf(steps - 1, 1))
+			var j := track.index_at(sm)
+			var latc := (float(pt["lat0"]) + float(pt["lat1"])) * 0.5
+			var q := track.pts[j] + track.nrm[j] * latc
+			var blob := PaperKit.blob(minf(wdt * 0.48, 4.0), 0, 0, 5, 0.12, rng.randi(), 18, 0.9)
+			var xf := Transform3D(Basis(Vector3.UP, track.heading_at(j)), Vector3(q.x, ROAD_Y + track.heights[j] + 0.012, q.y)) * lay
+			b.card(blob, xf, col, {"thick": 0.015, "edge": 0.04, "lip": 0.05})
+			if pt["kind"] == "ice":
+				b.card(PaperKit.rrect(2.0, 0.1, 0.05, rng.randf_range(-1, 1), rng.randf_range(-1, 1)), xf * Transform3D(Basis(), Vector3(0, 0, 0.012)), Color("#f2f6f8"), {"thick": 0.005, "edge": 0.0, "lip": 0.0, "sides": false})
+		var mi := MeshInstance3D.new()
+		mi.mesh = b.mesh()
+		mi.material_override = paper_mat
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(mi)
+
+
+var _flat_mats := {}
+func _flat_mat(c: Color) -> Material:
+	if not _flat_mats.has(c):
+		var m := StandardMaterial3D.new()
+		m.albedo_color = c
+		m.roughness = 1.0
+		m.metallic_specular = 0.0
+		_flat_mats[c] = m
+	return _flat_mats[c]
+
+
 func _make_weather() -> void:
 	weather_fx = Node3D.new()
 	add_child(weather_fx)
@@ -336,49 +428,37 @@ func _make_weather() -> void:
 
 
 func _make_birds() -> void:
-	if wx["kind"] == "rain":
-		return
-	var body := Pieces.bird_body()
-	var wing := Pieces.bird_wing()
-	for i in 3:
-		var bird := Node3D.new()
-		bird.scale = Vector3.ONE * 0.8
-		var bmi := MeshInstance3D.new()
-		bmi.mesh = body
-		bmi.material_override = paper_mat
-		bird.add_child(bmi)
-		var wings: Array = []
-		for side in [1.0, -1.0]:
-			var wp := Node3D.new()
-			var wmi := MeshInstance3D.new()
-			wmi.mesh = wing
-			wmi.material_override = paper_mat
-			wmi.scale = Vector3(side, 1, 1)
-			wp.add_child(wmi)
-			bird.add_child(wp)
-			wings.append(wp)
-		add_child(bird)
-		_birds.append({"node": bird, "wings": wings, "phase": i * 1.7, "rad": 7.0 + i * 2.5, "h": 7.5 + i * 0.8, "spd": 0.35 + i * 0.07})
+	birds = Birds.new()
+	birds.name = "Birds"
+	add_child(birds)
+	birds.setup(track, paper_mat, int(def["seed"]), wx["kind"] == "rain")
 
 
 ## Per-frame: keep weather and birds around the focus, aim the frontal fill along the camera.
-func update(dt: float, focus: Vector3, player_s: float, cam: Camera3D) -> void:
+var _bonnet := false
+
+
+## Bonnet view looks at the horizon: give it a pale paper sky and a soft fog so the edge of the
+## printed ground never shows.
+func set_bonnet(on: bool) -> void:
+	if on == _bonnet:
+		return
+	_bonnet = on
+	var sky: Color = Color(def["pal"]["ground"]).lerp(Color(wx["fill"]), 0.35).lightened(0.12)
+	env.background_color = sky if on else Color(def["pal"]["ground"])
+	env.fog_enabled = on
+	env.fog_light_color = sky
+	env.fog_density = 0.011
+	env.fog_sky_affect = 1.0
+
+
+func update(dt: float, focus: Vector3, radius: float, player_s: float, cam: Camera3D) -> void:
 	_time += dt
 	if scenery:
-		scenery.update(player_s, dt)
+		scenery.update(Vector2(focus.x, focus.z), radius, dt)
 	weather_fx.position = Vector3(focus.x, 0, focus.z)
 	if cam:
 		fill_light.global_basis = cam.global_basis
-	for bd in _birds:
-		var a: float = _time * float(bd["spd"]) + float(bd["phase"])
-		var r: float = bd["rad"]
-		var center := focus + Vector3(6.0, 0, 6.0)
-		var n: Node3D = bd["node"]
-		n.position = center + Vector3(cos(a) * r, float(bd["h"]) + sin(a * 2.0) * 0.4, sin(a) * r)
-		n.rotation.y = -a
-		var flap := sin(_time * 7.0 + float(bd["phase"])) * 0.6
-		bd["wings"][0].rotation.z = flap
-		bd["wings"][1].rotation.z = -flap
 
 
 func grip() -> float:

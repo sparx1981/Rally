@@ -1,0 +1,6 @@
+Sound effects in this folder are by Kenney (www.kenney.nl), taken from Kenney's open-source
+Godot starter kits on GitHub (Starter-Kit-Racing, Starter-Kit-FPS, Starter-Kit-City-Builder,
+Starter-Kit-3D-Platformer). Their READMEs state: "Assets included in this package (2D sprites,
+3D models and sound effects) are CC0 licensed" - Creative Commons Zero, public domain:
+https://creativecommons.org/publicdomain/zero/1.0/
+Attribution is not required; credited here with thanks.

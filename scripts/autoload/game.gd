@@ -16,6 +16,7 @@ var champ_points := {}       # driver name -> points
 var champ_entrants: Array = []   # [{name, car, skill, player}]
 var champ_last_results: Array = []
 
+var no_save := false         # test / screenshot runs never touch the player's progress
 var best_times := {}         # "stage_id" -> {time, car}
 var cups := {}               # "series_id" -> best finishing position
 
@@ -127,6 +128,8 @@ static func fmt_time(t: float) -> String:
 
 
 func save() -> void:
+	if no_save:
+		return
 	var cf := ConfigFile.new()
 	cf.set_value("progress", "best_times", best_times)
 	cf.set_value("progress", "cups", cups)
