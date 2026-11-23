@@ -175,7 +175,7 @@ func enable_lights(shadows: bool) -> void:
 	for xs in [-0.5, 0.5]:
 		var sl := SpotLight3D.new()
 		sl.light_color = Color("#ffe6c0")
-		sl.light_energy = 1.6
+		sl.light_energy = 2.4
 		sl.spot_range = 38.0
 		sl.spot_angle = 52.0
 		sl.spot_angle_attenuation = 2.6

@@ -1047,6 +1047,17 @@ func _run_shot() -> void:
 	var stage_i: int = _shot.get("stage", 0)
 	Game.stage_index = stage_i
 	_shot["autopilot"] = true
+	if view == "results":
+		await _start_race()
+		for k in 60:
+			await get_tree().process_frame
+		_on_race_finished({"rows": [{"name": "You", "time": 35.3, "car": Game.car_index, "player": true}], "player_time": 35.3, "medal": 0,
+			"medals": [42.38, 47.91, 54.54], "stage": Game.stage_index})
+		await get_tree().create_timer(0.5).timeout
+		await RenderingServer.frame_post_draw
+		get_viewport().get_texture().get_image().save_png(_shot["path"])
+		get_tree().quit()
+		return
 	if view == "race":
 		if Game.mode == Game.Mode.CHAMPIONSHIP:
 			Game.start_championship(0)
