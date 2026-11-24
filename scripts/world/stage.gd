@@ -1474,13 +1474,20 @@ func _marshal_post(s: float, role: String) -> void:
 	var side := preferred
 	var xy := Vector2.ZERO
 	var supported := false
-	for offset: float in [0, -6, 6, -12, 12, -18, 18, -24, 24]:
+	var stations := PackedFloat32Array([0.0])
+	for distance in range(4, 49, 4):
+		stations.append(-distance)
+		stations.append(distance)
+	for offset in stations:
 		i = track.index_at(clampf(s + offset, 0.0, track.dist[-1]))
-		for bank: float in [preferred, -preferred]:
-			xy = track.pts[i] + track.nrm[i] * bank * (track.width * 0.5 + 4.2)
-			if track.terrain.supports_prop(xy, 2.0) and not track.overlaps_water(xy, 2.0):
-				side = bank
-				supported = true
+		for setback: float in [4.2, 2.8, 6.5, 9.0, 12.0]:
+			for bank: float in [preferred, -preferred]:
+				xy = track.pts[i] + track.nrm[i] * bank * (track.width * 0.5 + setback)
+				if track.terrain.supports_prop(xy, 2.0) and not track.overlaps_water(xy, 2.0):
+					side = bank
+					supported = true
+					break
+			if supported:
 				break
 		if supported:
 			break
