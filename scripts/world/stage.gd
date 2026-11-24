@@ -99,9 +99,6 @@ func build(stage_def: Dictionary, time_of_day := -1) -> void:
 		else:
 			landmark.free()
 			landmark = null
-	_make_ground()
-	_make_road()
-	_make_gantries()
 	scenery = Scenery.new()
 	scenery.name = "Scenery"
 	scenery.landmark = landmark
@@ -109,6 +106,11 @@ func build(stage_def: Dictionary, time_of_day := -1) -> void:
 	add_child(scenery)
 	if def.loc_id in ["alpine", "gorge"]:
 		_overhead_crossing()
+	if def.loc_id == "alpine":
+		_avalanche_gallery()
+	_make_ground()
+	_make_road()
+	_make_gantries()
 	scenery.setup(track, def, paper_mat, float(Settings.g("density")), float(Settings.g("draw_distance")), bool(Settings.g("popups")))
 	_make_puddles()
 	_make_parc_ferme()
@@ -345,6 +347,7 @@ func _make_gantries() -> void:
 		mi.position = Vector3(p.x, track.elev[i], p.y)
 		mi.rotation.y = track.heading_at(i)
 		add_child(mi)
+		_marshal_post(s, "finish" if pair[1] else "start")
 		# Painted line across the road.
 		var line := MeshInstance3D.new()
 		var bm := BoxMesh.new()
@@ -409,6 +412,7 @@ func _make_gantries() -> void:
 					sign_text.position = Vector3(0, 4.5, -0.18)
 					sign_text.rotation.y = PI
 					gantry.add_child(sign_text)
+					_marshal_post(split,"split")
 					break
 				split += 10.0
 
@@ -1402,9 +1406,151 @@ func _overhead_crossing() -> void:
 				for sleeper in 3:
 					var at := left.lerp(right,sleeper/3.0)
 					_structural_member(b,at-along*rail*1.6,at+along*rail*0.4,0.28,0.16,Color("#916e53"))
+	var uphill := 1.0 if track.terrain.height(center+Vector2(span.x,span.z)*half) > track.terrain.height(center-Vector2(span.x,span.z)*half) else -1.0
+	var at := span*half*uphill+along*4.6
+	var xy := center+Vector2(at.x,at.z)
+	at.y = track.terrain.height(xy)-origin.y
+	var frame := Transform3D(Basis(along,Vector3.UP,along.cross(Vector3.UP)),at)
+	if ski:
+		b.box(Vector3(0,1.18,0),Vector3(3.7,2.36,3.2),frame,Color("#a25d4d"))
+		b.box(Vector3(0,2.47,0),Vector3(4.1,0.27,3.7),frame,PaperKit.CREAM)
+		b.box(Vector3(0,1.48,-uphill*1.62),Vector3(1.32,0.92,0.09),frame,Color("#cbd6b7"))
+		for k in 3:
+			b.box(Vector3((k-1)*0.27,1.47+(k%2)*0.15,-uphill*1.68),Vector3(0.21,0.09,0.035),frame,Color("#4d807c"))
+		for rail: float in [-1,1]:
+			var pulley := span*uphill*half+along*rail*1.6+Vector3.UP*(deck-0.04)
+			b.card(PaperKit.circle(0.43,0,0,12),Transform3D(frame.basis.rotated(Vector3.UP,PI/2),pulley),Color("#484f51"),{"thick":0.18})
+		for k in 3:
+			var q := at+along*(2.6+k*1.2)-span*uphill*1.0
+			q.y = track.terrain.height(center+Vector2(q.x,q.z))-origin.y
+			_structural_member(b,q,q+Vector3.UP*1.0,0.09,0.09,steel)
+			if k < 2:
+				var next := q+along*1.2
+				next.y = track.terrain.height(center+Vector2(next.x,next.z))-origin.y
+				_structural_member(b,q+Vector3.UP*0.82,next+Vector3.UP*0.82,0.055,0.055,Color("#aa6144"))
+	else:
+		# The disused platform and ballast follow the railway off the deck.
+		for k in 12:
+			var off := half+0.65+k*1.2
+			var p := span*uphill*off
+			var rail_xy := center+Vector2(p.x,p.z)
+			var ground := track.terrain.height(rail_xy)-origin.y
+			if ground > deck+0.4 and track.clearance(rail_xy)>track.width*0.5+5.5:
+				var cut := minf(ground,deck+0.4)
+				track.terrain.flatten_disc(rail_xy,2.15,origin.y+cut,2.5)
+				ground = cut
+			p.y = lerpf(deck,ground+0.18,smoothstep(half,half+11.0,off))
+			var bed := Transform3D(frame.basis,p)
+			b.box(Vector3.ZERO,Vector3(3.6,0.32,1.26),bed,STONE_DARK)
+			b.box(Vector3(0,0.20,0),Vector3(2.4,0.13,0.24),bed,Color("#76604d"))
+			for rail: float in [-0.78,0.78]:
+				b.box(Vector3(rail,0.30,0),Vector3(0.09,0.13,1.28),bed,steel)
+			if k < 7:
+				b.box(Vector3(2.45,0.52,0),Vector3(1.8,0.9,1.25),bed,Color("#948678"))
+				var landing := center+Vector2(p.x+along.x*2.45,p.z+along.z*2.45)
+				scenery.fixed_supports.append(Vector3(landing.x,landing.y,0.97))
+	if ski:
+		scenery.fixed_supports.append(Vector3(xy.x,xy.y,2.1))
 	var mi := MeshInstance3D.new()
 	mi.name = "Chairlift" if ski else "RailOverpass"
 	mi.mesh = b.mesh()
 	mi.position = origin
 	mi.material_override = paper_mat
+	add_child(mi)
+
+
+func _marshal_post(s: float, role: String) -> void:
+	var i := track.index_at(s)
+	var side := -1.0 if role == "finish" else 1.0
+	var xy := track.pts[i]+track.nrm[i]*side*(track.width*0.5+4.2)
+	if track.terrain.is_sea(xy) or track.overlaps_water(xy,2):
+		xy = track.pts[i]-track.nrm[i]*side*(track.width*0.5+4.2)
+		side = -side
+	var b := PaperKit.Builder.new(i)
+	var frame := Transform3D.IDENTITY
+	var cover := Vector3(side*1.0,0.48,0)
+	var steel := Color("#505c61")
+	b.box(cover,Vector3(0.4,0.96,3.1),frame,Color("#a99c83"))
+	var tripod := Vector3(side*0.42,1.28,-0.8)
+	for k in 3:
+		var dir := Vector2.from_angle(k*TAU/3)
+		_structural_member(b,tripod,Vector3(tripod.x+dir.x*0.4,0,tripod.z+dir.y*0.4),0.055,0.055,steel)
+	b.box(tripod+Vector3.UP*0.12,Vector3(0.31,0.27,0.33),frame,steel)
+	for coil in 3:
+		var xf := Transform3D(Basis(Vector3.RIGHT,-PI/2),Vector3(0.84,0.06+coil*0.06,-1.1))
+		b.card(PaperKit.circle(0.27,0,0,12),xf,steel,{"thick":0.035})
+		b.card(PaperKit.circle(0.17,0,0,12),xf.translated_local(Vector3.BACK*0.025),STONE_DARK,{"thick":0.015})
+	for k in 3:
+		b.box(Vector3(0.85,0.37,0.55+k*0.14),Vector3(0.68,0.09,0.12),frame,PaperKit.CREAM if k%2 else Color("#bf6b49"))
+	var person := Vector3(0,0,0.32)
+	for leg: float in [-0.12,0.12]:
+		b.box(person+Vector3(leg,0.39,0),Vector3(0.15,0.76,0.21),frame,steel)
+	b.box(person+Vector3.UP*1.06,Vector3(0.49,0.64,0.28),frame,Color("#d58344"))
+	b.box(person+Vector3.UP*1.03,Vector3(0.51,0.08,0.29),frame,PaperKit.CREAM)
+	b.box(person+Vector3.UP*1.54,Vector3(0.27,0.32,0.24),frame,Color("#ae8369"))
+	b.box(person+Vector3.UP*1.71,Vector3(0.31,0.10,0.31),frame,steel)
+	var hand := person+Vector3(-0.39,1.6 if role=="start" else 1.08,0.21)
+	_structural_member(b,person+Vector3(-0.22,1.30,0),hand,0.14,0.14,Color("#b47244"))
+	_structural_member(b,person+Vector3(0.22,1.30,0),person+Vector3(0.16,1.04,0.23),0.13,0.13,Color("#b47244"))
+	if role == "start":
+		b.box(hand+Vector3.UP*0.2,Vector3(0.038,0.48,0.038),frame,steel)
+		b.box(hand+Vector3(0.13,0.4,0),Vector3(0.26,0.21,0.035),frame,Color("#72935a"))
+	elif role == "finish":
+		b.box(hand,Vector3(0.32,0.08,0.38),frame,PaperKit.CREAM)
+	else:
+		b.box(hand,Vector3(0.09,0.23,0.1),frame,steel)
+	var mi := MeshInstance3D.new()
+	mi.name = "Marshal_"+role
+	mi.mesh = b.mesh()
+	mi.material_override = paper_mat
+	mi.position = Vector3(xy.x,track.terrain.height(xy),xy.y)
+	mi.rotation.y = track.heading_at(i)
+	mi.visibility_range_end = 135
+	add_child(mi)
+	scenery.fixed_supports.append(Vector3(xy.x,xy.y,1.55))
+
+
+func _avalanche_gallery() -> void:
+	var best := -INF
+	var chosen := 0
+	var side := 1.0
+	for i in range(track.index_at(track.finish_s*0.12),track.index_at(track.finish_s*0.25),4):
+		if not track.bridge_at(track.dist[i],24).is_empty() or absf(track.heights[i]) > 0.05:
+			continue
+		var offset := track.nrm[i]*12
+		var slope := track.terrain.height(track.pts[i]+offset)-track.terrain.height(track.pts[i]-offset)
+		var score := absf(slope)-100*track.curv_abs[i]
+		if score > best:
+			best = score
+			chosen = i
+			side = signf(slope) if slope else 1.0
+	if not chosen:
+		return
+	var b := PaperKit.Builder.new(chosen)
+	var origin := track.pts[chosen]
+	var prev: Array[Vector3] = []
+	for bay in 7:
+		var i := chosen+(bay-3)*2
+		var p := track.pts[i]-origin
+		var ends: Array[Vector3] = []
+		for flank: float in [-1,1]:
+			var offset := track.nrm[i]*flank*side*(track.width*0.5+1.7)
+			var xy := track.pts[i]+offset
+			var top := Vector3(p.x+offset.x,track.road_h_i(i)+5.6+flank*0.20,p.y+offset.y)
+			var base := Vector3(top.x,minf(track.terrain.height(xy)-0.45,top.y-1),top.z)
+			_structural_member(b,base,top,0.55,0.55,STONE_DARK)
+			scenery.fixed_supports.append(Vector3(xy.x,xy.y,0.43))
+			ends.append(top)
+		if bay:
+			b.slab(prev[0],prev[1],ends[1],ends[0],0.32,PaperKit.CREAM)
+			b.slab(prev[1],ends[1],ends[1]-Vector3.UP*5.9,prev[1]-Vector3.UP*5.9,0.32,STONE_DARK)
+			var mid := (prev[1]+ends[1])*0.5
+			scenery.fixed_supports.append(Vector3(origin.x+mid.x,origin.y+mid.z,1.88))
+		prev = ends
+	var mi := MeshInstance3D.new()
+	mi.name = "AvalancheGallery"
+	mi.mesh = b.mesh()
+	mi.material_override = paper_mat
+	mi.position = Vector3(origin.x,0,origin.y)
+	mi.visibility_range_end = 220
 	add_child(mi)
