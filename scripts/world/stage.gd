@@ -91,11 +91,20 @@ func build(stage_def: Dictionary, time_of_day := -1) -> void:
 	track.terrain.flatten_disc(parc_center(), 26.0, track.road_h_i(track.index_at(track.length - PARC_BACK)) - 0.1)
 	_make_materials()
 	_make_lights()
+	var landmark: RegionalLandmark
+	if def["loc_id"] in RegionalLandmark.REGIONS:
+		landmark = RegionalLandmark.new()
+		if landmark.build(def["loc_id"], track, paper_mat):
+			add_child(landmark)
+		else:
+			landmark.free()
+			landmark = null
 	_make_ground()
 	_make_road()
 	_make_gantries()
 	scenery = Scenery.new()
 	scenery.name = "Scenery"
+	scenery.landmark = landmark
 	scenery.lights_on = bool(wx.get("headlights", false))
 	add_child(scenery)
 	scenery.setup(track, def, paper_mat, float(Settings.g("density")), float(Settings.g("draw_distance")), bool(Settings.g("popups")))

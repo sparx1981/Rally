@@ -1,0 +1,229 @@
+class_name RegionalLandmark
+extends MeshInstance3D
+## One recognisable, terrain-fitted roadside scene per route in these five regions.
+const REGIONS := ["harbour", "alpine", "pinewood", "lakes", "moor"]
+const TIMBER := Color("#8c6849")
+const STEEL := Color("#50595b")
+const RUBBER := Color("#353537")
+
+var track: Track
+var station := 0.0
+var obstacles: Array[Vector3] = [] # world X, world Z and collision radius
+var _origin := Vector2.ZERO
+var _out := Vector2.RIGHT
+var _base := 0.0
+var _builder := PaperKit.Builder.new(41)
+
+
+func build(region: String, course: Track, mat: Material) -> bool:
+	track = course
+	var best := -INF
+	# Score both verges. Prefer sea access, the uphill side of a tight bend, or level working ground.
+	for i in range(track.index_at(170), track.index_at(track.finish_s - 150), 11):
+		var s := track.dist[i]
+		for side: float in [-1, 1]:
+			var axis := track.nrm[i] * side
+			var p := track.pts[i] + axis * (track.width * 0.5 + 16.0)
+			if track.clearance(p) < track.width * 0.5 + 12.0 or track.overlaps_water(p, 11) or track.terrain.is_sea(p):
+				continue
+			var y := track.terrain.height(p)
+			var slope := track.terrain.height(p + axis * 7) - track.terrain.height(p - axis * 7)
+			var score := -absf(slope) - absf(s / track.finish_s - 0.3)
+			if region == "harbour":
+				if not track.terrain.is_sea(p + axis * 20) or track.terrain.is_sea(p - axis * 4):
+					continue
+				score -= absf(y - track.terrain.sea_y - 1.8)
+			elif region == "alpine":
+				score = minf(slope, 6.0) + 8.0 * (1.0 - track.tang[i-9].dot(track.tang[i+9]))
+			if score > best:
+				best = score
+				_origin = p
+				_out = axis
+				station = s
+	if best == -INF:
+		return false
+	_base = track.terrain.height(_origin)
+	position = Vector3(_origin.x, _base, _origin.y)
+	rotation.y = atan2(-_out.y, _out.x)
+	match region:
+		"harbour": _boatyard()
+		"alpine": _snow_fences()
+		"pinewood": _loading_bay()
+		"lakes": _ice_camp()
+		"moor": _sheepfold()
+	mesh = _builder.mesh()
+	material_override = mat
+	visibility_range_end = 200.0
+	_builder = null
+	return true
+
+
+func overlaps(p: Vector2, radius: float) -> bool:
+	var offset := p - _origin
+	var bounds := mesh.get_aabb()
+	var local := Vector2(offset.dot(_out), offset.dot(Vector2(-_out.y, _out.x)))
+	return Rect2(Vector2(bounds.position.x,bounds.position.z),Vector2(bounds.size.x,bounds.size.z)).grow(radius).has_point(local)
+
+
+func _world(x: float, z: float) -> Vector2:
+	return _origin + _out * x + Vector2(-_out.y, _out.x) * z
+
+
+func _foot(x: float, z: float) -> Vector3:
+	return Vector3(x, track.terrain.height(_world(x, z)) - _base, z)
+
+
+func _solid(x: float, z: float, radius: float) -> void:
+	var p := _world(x, z)
+	obstacles.append(Vector3(p.x, p.y, radius))
+
+
+func _beam(a: Vector3, b: Vector3, width: float, thickness: float, color: Color) -> void:
+	var d := b - a
+	var up := Vector3.UP if absf(d.normalized().y) < 0.98 else Vector3.BACK
+	_builder.box(Vector3.ZERO, Vector3(width, thickness, d.length()), Transform3D(Basis.looking_at(d.normalized(), up), (a + b) * 0.5), color)
+
+
+func _boatyard() -> void:
+	var end := 12.0
+	while end < 26 and not track.terrain.is_sea(_world(end, 0)):
+		end += 1.0
+	var toe := Vector3(end, track.terrain.sea_y - _base - 0.25, 0)
+	var head := _foot(-3, 0) + Vector3.UP * 0.12
+	_builder.slab(head + Vector3.FORWARD*2.2, head + Vector3.BACK*2.2, toe + Vector3.BACK*2.2, toe + Vector3.FORWARD*2.2, 0.18, Color("#a99d87"))
+	for side: float in [-1, 1]:
+		var rail := Vector3(0, 0.10, side * 1.15)
+		_beam(head + rail, toe + rail, 0.11, 0.12, STEEL)
+	var stand := _foot(-3, 4)
+	for z: float in [-2, 2]:
+		for x: float in [-1, 1]:
+			_beam(stand + Vector3(1.4*x,0,z), stand + Vector3(0.65*x,1.15,z), 0.19, 0.19, TIMBER)
+	_builder.prism(PackedVector2Array([Vector2(-3,1.65),Vector2(-2.5,0.82),Vector2(2.0,0.82),Vector2(3.4,1.95)]), -0.84, 0.84, Transform3D(Basis(), stand), Color("#477b78"))
+	_solid(-3, 4, 1.9)
+	for k in 5:
+		var pot := _foot(-2 + k % 3 * 1.1, -3.8) + Vector3.UP * (0.28 + floori(k / 3.0)*0.58)
+		_builder.box(pot, Vector3(0.97,0.54,0.7), Transform3D(), Color("#565247"))
+		for hoop in 4:
+			_builder.box(pot + Vector3((hoop-1.5)*0.24,0,0),Vector3(0.035,0.57,0.73),Transform3D(),TIMBER)
+
+
+func _snow_fences() -> void:
+	for row in 2:
+		var x := float(row * 5)
+		for span in 4:
+			var a := _foot(x, -8 + span*4)
+			var b := _foot(x, -4 + span*4)
+			for z in ([a,b] if span == 3 else [a]):
+				_beam(z, z + Vector3(0.4,2.2,0), 0.16,0.16,TIMBER)
+				_beam(z + Vector3(1.4,0,0), z + Vector3(0.4,1.8,0), 0.12,0.12,TIMBER)
+			for slat in 5:
+				var lift := Vector3(0.065*slat,0.36+0.34*slat,0)
+				_beam(a+lift,b+lift,0.13,0.20,Color("#936e51"))
+		for z: float in [-7,0,7]:
+			_solid(x, z, 1.0)
+	for z: float in [-18,-12,-6,0,6]:
+		var p := _foot(-11,z)
+		for band in 5:
+			_builder.box(p + Vector3.UP*(0.2+band*0.4),Vector3(0.085,0.4,0.085),Transform3D(),Color("#ce5f41") if band%2 else PaperKit.CREAM)
+
+
+func _loading_bay() -> void:
+	# A compact gravel landing beneath the loader and its bunk.
+	track.terrain.flatten_disc(_origin, 4.8, _base, 4.0)
+	var pad := Transform3D(Basis(Vector3.RIGHT,-PI/2), Vector3.UP*0.045)
+	_builder.card(PaperKit.rrect(7.2,9.6,0.9,0,-4.8),pad,Color("#ac987a"),{"thick":0.035,"lip":0.0})
+	var p := _foot(0,0)
+	var xf := Transform3D(Basis(),p)
+	var paint := Color("#ba9139")
+	_builder.box(Vector3(0,1.05,0),Vector3(2.15,0.52,5.5),xf,paint)
+	_builder.box(Vector3(0,2.13,1.35),Vector3(1.65,1.6,1.65),xf,Color("#516b70"))
+	_builder.box(Vector3(0,1.70,1.35),Vector3(1.74,0.39,1.70),xf,paint)
+	_builder.box(Vector3(0,2.40,2.19),Vector3(1.32,0.62,0.035),xf,Color("#94aeb1"))
+	for side: float in [-1,1]:
+		_builder.box(Vector3(side*0.83,2.37,1.36),Vector3(0.045,0.64,1.26),xf,Color("#82969a"))
+		_builder.box(Vector3(side*0.72,1.48,2.35),Vector3(0.23,0.13,0.12),xf,PaperKit.CREAM)
+		for bunk in [-2.62,-0.48]:
+			_builder.box(Vector3(side*0.92,1.88,bunk),Vector3(0.08,1.35,0.12),xf,STEEL)
+	_builder.box(Vector3(0,3.0,1.35),Vector3(1.93,0.19,1.9),xf,paint)
+	for z: float in [-2.15,-1.1,1.1,2.15]:
+		for x: float in [-1.08,1.08]:
+			var axle := xf * Transform3D(Basis(Vector3.UP, signf(x)*PI/2),Vector3(x,0.66,z))
+			_builder.card(PaperKit.circle(0.68,0,0,12),axle,RUBBER,{"thick":0.37,"lip":0.0})
+			_builder.card(PaperKit.circle(0.31,0,0,10),axle.translated_local(Vector3.BACK*0.20),paint,{"thick":0.035})
+	var elbow := p + Vector3(0.45,4.1,-0.6)
+	_beam(p+Vector3(0,1.4,0),elbow,0.24,0.29,STEEL)
+	_beam(elbow,p+Vector3(1.35,2.15,-2.0),0.22,0.22,paint)
+	for k in 5:
+		var x := float(k%3-1)*0.58
+		var stack := xf * Transform3D(Basis(),Vector3(x,1.57+floori(k/3.0)*0.52,-1.55))
+		_builder.card(PaperKit.circle(0.27,0,0,9),stack,TIMBER,{"thick":2.7,"lip":0.0})
+	_solid(0,1.2,1.45)
+	_solid(0,-1.5,1.45)
+	for k in 5:
+		var stump := _foot(3.1+sin(k*3)*1.5,-5+k*2)
+		_builder.card(PaperKit.circle(0.38,0,0,9),Transform3D(Basis(Vector3.RIGHT,-PI/2),stump+Vector3.UP*0.18),TIMBER,{"thick":0.52})
+
+
+func _ice_camp() -> void:
+	# An irregular frozen pond and paired runner grooves conform to the snow sheet.
+	track.terrain.flatten_disc(_origin, 9.2, _base, 4.0)
+	var ice := PaperKit.lin(Color("#deedef"))
+	var rim := PaperKit.lin(Color("#eef4ed"))
+	for k in 32:
+		var a := k * TAU / 32.0
+		var b := (k+1) * TAU / 32.0
+		var shore_a := 1.0 + 0.07*sin(3*a) + 0.09*cos(5*a)
+		var shore_b := 1.0 + 0.07*sin(3*b) + 0.09*cos(5*b)
+		var pa := Vector3(cos(a)*9,0,sin(a)*7) * shore_a
+		var pb := Vector3(cos(b)*9,0,sin(b)*7) * shore_b
+		var lift := Vector3.UP * 0.065
+		_builder.tri3(lift, pa*0.80+lift, pb*0.80+lift, Vector3.UP,ice,ice,ice)
+		_builder.quad4(pa*0.80+lift,pa+lift,pb+lift,pb*0.80+lift,Vector3.UP,ice,rim,rim,ice)
+	for k in 2:
+		var x := -2.4 + k*5.0
+		var z := -1.0 + k*3.7
+		var xf := Transform3D(Basis(Vector3.UP,k*0.32),_foot(x,z))
+		_builder.box(Vector3(0,1.15,0),Vector3(2.1,2.15,2.6),xf,Color("#a75f4d") if k==0 else Color("#718b86"))
+		_builder.prism(PackedVector2Array([Vector2(-1.55,2.20),Vector2(1.55,2.20),Vector2(0,2.92)]),-1.22,1.22,xf,PaperKit.CREAM)
+		_builder.box(Vector3(-1.065,1.30,0.3),Vector3(0.03,0.58,0.70),xf,Color("#536a75"))
+		_builder.box(Vector3(0.67,2.75,0.2),Vector3(0.15,0.85,0.16),xf,STEEL)
+		_solid(x,z,1.25)
+	for side: float in [-0.29,0.29]:
+		for i in 12:
+			var z := -6.0+i*0.8
+			var a := _foot(-5+sin(z*0.23)+side,z)+Vector3.UP*0.085
+			var b := _foot(-5+sin((z+0.8)*0.23)+side,z+0.8)+Vector3.UP*0.085
+			_beam(a,b,0.065,0.02,Color("#829da8"))
+
+
+func _sheepfold() -> void:
+	var stone := Color("#888574")
+	for row in 3:
+		for k in 28:
+			var a := TAU*(k+row%2*0.5)/28
+			if absf(wrapf(a-PI,-PI,PI)) < 0.32:
+				continue
+			var x := cos(a)*4
+			var z := sin(a)*4
+			var xf := Transform3D(Basis(Vector3.UP,-a),_foot(x,z)+Vector3.UP*(0.18+row*0.32))
+			_builder.box(Vector3.ZERO,Vector3(0.58,0.34,0.93),xf,stone.lightened(0.04*(k%4)))
+			if row==0 and k%2==0:
+				_solid(x,z,0.57)
+	var drain := _foot(-9,0)
+	track.terrain.carve_river(_world(-9,-6),_world(-9,6),_base+drain.y-0.26,0.8,0.35,true,3.0)
+	for bed in 12:
+		var z := float(bed-6)
+		var p := _foot(-9+0.18*sin(z*0.8),z)
+		var q := _foot(-9+0.18*sin((z+1)*0.8),z+1)
+		_beam(p+Vector3.UP*0.045,q+Vector3.UP*0.045,0.44*sin((bed+0.5)*PI/12),0.035,Color("#706653"))
+	var a := _foot(-12,0)+Vector3.UP*0.20
+	var b := _foot(-5,0)+Vector3.UP*0.20
+	for side: float in [-0.75,0.75]:
+		var edge := Vector3.BACK*side
+		_beam(a+edge,b+edge,0.15,0.18,TIMBER)
+		_beam(a+edge+Vector3.UP,b+edge+Vector3.UP,0.08,0.10,TIMBER)
+		for end in [a,b]:
+			_beam(end+edge,end+edge+Vector3.UP,0.10,0.10,TIMBER)
+	for plank in 18:
+		var at := a.lerp(b,(plank+0.5)/18.0)
+		_builder.box(at+Vector3.UP*0.09,Vector3(0.39,0.09,1.65),Transform3D(),TIMBER.lightened(0.03*(plank%3)))

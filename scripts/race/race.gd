@@ -244,6 +244,7 @@ func _process(delta: float) -> void:
 	if sim_dt > 0.0 and OS.get_cmdline_user_args().has("--trace") and Engine.get_process_frames() % 10 == 0:
 		print("TRACE s=%.1f lat=%.2f v=%.1f y=%.2f air=%s steer=%.2f slip=%.2f h=%.2f" % [player.s, player.lat, player.v_long, player.y, player.airborne, player.steer, player.slip, player.h])
 	if skids:
+		skids.advance(dt)
 		for c in cars:
 			var hard: bool = not c.in_water and not c.airborne and absf(c.v_long) > 7.0 and (c.slip > 0.18 or c.handbrake > 0.5 or (c.brake > 0.5 and c.v_long > 10.0))
 			skids.feed(c, hard)

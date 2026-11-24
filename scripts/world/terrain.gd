@@ -291,8 +291,8 @@ func build_meshes(parent: Node3D, mat: Material, chunk := 28) -> void:
 
 
 ## Level the ground in a disc (the parc fermé lot), blending out over the rim.
-func flatten_disc(c: Vector2, r: float, height: float) -> void:
-	var r2 := r + 15.0
+func flatten_disc(c: Vector2, r: float, height: float, blend := 15.0) -> void:
+	var r2 := r + blend
 	var x0 := maxi(0, int((c.x - r2 - origin.x) / cell))
 	var x1 := mini(nx - 1, int((c.x + r2 - origin.x) / cell) + 1)
 	var z0 := maxi(0, int((c.y - r2 - origin.y) / cell))
@@ -309,8 +309,8 @@ func flatten_disc(c: Vector2, r: float, height: float) -> void:
 
 ## Cut a river channel along segment a-b: water surface at water_y, a gravel bed below it and
 ## grassy banks easing back into the land.
-func carve_river(a: Vector2, b: Vector2, water_y: float, half := 5.5, depth := 1.65, taper_ends := false) -> void:
-	var bank := half + 10.5
+func carve_river(a: Vector2, b: Vector2, water_y: float, half := 5.5, depth := 1.65, taper_ends := false, bank_width := 10.5) -> void:
+	var bank := half + bank_width
 	var lo := Vector2(minf(a.x, b.x), minf(a.y, b.y)) - Vector2.ONE * (bank + cell)
 	var hi := Vector2(maxf(a.x, b.x), maxf(a.y, b.y)) + Vector2.ONE * (bank + cell)
 	var x0 := maxi(0, int((lo.x - origin.x) / cell))

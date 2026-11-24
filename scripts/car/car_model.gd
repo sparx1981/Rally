@@ -26,8 +26,8 @@ const STYLES := {
 	"impreza": {"L": 4.35, "W": 1.9, "low": 0.62, "nose": 0.48, "bon": 1.2, "tail": 0.58, "deck": 0.7, "cab": 0.56, "cab_f": 0.5, "cab_r": -1.2, "rake": 0.45, "back": 0.4, "ride": 0.34, "wr": 0.41, "wing": "boot_high", "arches": true, "lamps": "rect", "scoop": true, "pod": true},
 	"evo": {"L": 4.35, "W": 1.9, "low": 0.62, "nose": 0.46, "bon": 1.15, "tail": 0.6, "deck": 0.7, "cab": 0.56, "cab_f": 0.5, "cab_r": -1.25, "rake": 0.45, "back": 0.42, "ride": 0.33, "wr": 0.41, "wing": "big", "arches": true, "lamps": "rect", "scoop": true},
 	"wrc": {"L": 4.15, "W": 1.98, "low": 0.62, "nose": 0.46, "bon": 1.05, "tail": 0.58, "deck": 0.15, "cab": 0.58, "cab_f": 0.5, "cab_r": -1.6, "rake": 0.55, "back": 0.22, "ride": 0.33, "wr": 0.41, "wing": "roof_big", "arches": true, "lamps": "rect", "scoop": true},
-	"rally2": {"L": 4.0, "W": 1.9, "low": 0.6, "nose": 0.44, "bon": 1.0, "tail": 0.56, "deck": 0.15, "cab": 0.56, "cab_f": 0.5, "cab_r": -1.55, "rake": 0.55, "back": 0.25, "ride": 0.32, "wr": 0.4, "wing": "roof", "arches": true, "lamps": "rect"},
-	"rally1": {"L": 4.15, "W": 2.0, "low": 0.6, "nose": 0.4, "bon": 1.05, "tail": 0.6, "deck": 0.15, "cab": 0.55, "cab_f": 0.5, "cab_r": -1.6, "rake": 0.6, "back": 0.25, "ride": 0.32, "wr": 0.42, "wing": "huge", "arches": true, "lamps": "rect", "louvres": true},
+	"rally2": {"L": 3.88, "W": 1.9, "low": 0.6, "nose": 0.44, "bon": 1.0, "tail": 0.56, "deck": 0.15, "cab": 0.64, "cab_f": 0.59, "cab_r": -1.51, "rake": 0.55, "back": 0.25, "ride": 0.32, "wr": 0.4, "wing": "roof", "arches": true, "lamps": "rect"},
+	"rally1": {"L": 4.24, "W": 2.0, "low": 0.6, "nose": 0.4, "bon": 1.05, "tail": 0.6, "deck": 0.15, "cab": 0.50, "cab_f": 0.53, "cab_r": -1.64, "rake": 0.6, "back": 0.25, "ride": 0.32, "wr": 0.42, "wing": "twin_roof", "arches": true, "lamps": "rect", "louvres": true},
 	"estate": {"L": 4.4, "W": 1.85, "low": 0.62, "nose": 0.48, "bon": 1.05, "tail": 0.58, "deck": 0.12, "cab": 0.6, "cab_f": 0.5, "cab_r": -2.0, "rake": 0.45, "back": 0.06, "ride": 0.32, "wr": 0.38, "wing": "none", "arches": false, "lamps": "rect", "pod": true},
 	"suv": {"L": 4.1, "W": 2.0, "low": 0.78, "nose": 0.7, "bon": 0.95, "tail": 0.76, "deck": 0.1, "cab": 0.64, "cab_f": 0.6, "cab_r": -1.85, "rake": 0.3, "back": 0.04, "ride": 0.46, "wr": 0.46, "wing": "none", "arches": true, "lamps": "round", "pod": true, "bumpers": true},
 	"truck": {"L": 4.6, "W": 2.15, "low": 0.72, "nose": 0.62, "bon": 1.05, "tail": 0.7, "deck": 1.9, "cab": 0.64, "cab_f": 1.15, "cab_r": -0.35, "rake": 0.4, "back": 0.04, "ride": 0.6, "wr": 0.55, "wing": "none", "arches": true, "lamps": "rect", "pod": true, "bumpers": true},
@@ -169,9 +169,18 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 		var front := Transform3D(Basis(), Vector3(0, 0, L * 0.5 + 0.012))
 		var back := Transform3D(Basis(Vector3.UP, PI), Vector3(0, 0, -L * 0.5 - 0.012))
 		var lamp_y := y0 + (float(P["nose"]) - 0.05) * 0.72
-		var lamps: String = P["lamps"]
+		var lamps: String = {"wrc": "split", "rally1": "blade", "rally2": "taper", "evo": "taper"}.get(style, P["lamps"])
 		for xs in [1.0, -1.0]:
 			match lamps:
+				"blade", "taper":
+					var lamp_x: float = xs * W * 0.32
+					var height := 0.065 if lamps == "blade" else 0.14
+					var lens := PackedVector2Array([Vector2(lamp_x-xs*0.22,lamp_y-height*0.34),Vector2(lamp_x+xs*0.19,lamp_y-height*0.62),
+						Vector2(lamp_x+xs*0.23,lamp_y+height*0.70),Vector2(lamp_x-xs*0.16,lamp_y+height*0.26)])
+					b.card(lens,front,Color("#fff4d4"),{"thick":0.025,"edge":0.025,"glow":true})
+				"split":
+					for segment in 2:
+						b.card(PaperKit.rrect(0.16,0.105,0.028,xs*(W*0.25+segment*0.18),lamp_y-0.032),front,Color("#fff3cc"),{"thick":0.025,"glow":true})
 				"round":
 					b.card(PaperKit.circle(0.12, xs * W * 0.3, lamp_y, 12), front, Color("#fff0c8"), {"thick": 0.02, "edge": 0.025, "lip": 0.0, "glow": true})
 				"quad":
@@ -188,6 +197,17 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 			b.box(Vector3(0, (slat - 1) * 0.030, 0.015), Vector3(W * 0.28, 0.009, 0.009), grille, Color("#78746d"))
 		for sx: float in [-0.18, 0.18]:
 			b.card(PaperKit.circle(0.024, W * sx, 0, 6), grille, Color("#a8a298"), {"thick": 0.025, "edge": 0.0, "lip": 0.0})
+		if style == "rally1":
+			for side: float in [-1, 1]:
+				var cheek := Transform3D(Basis(),Vector3(side*W*0.40,y0+0.08,L*0.5+0.054))
+				b.box(Vector3.ZERO,Vector3(0.27,0.14,0.13),cheek,ink)
+				b.box(Vector3(0,0.012,0.072),Vector3(0.21,0.015,0.018),cheek,acc)
+				for vane in 2:
+					b.box(Vector3(side*(0.26+0.22*vane),y0+0.03,-L*0.5),Vector3(0.034,0.16,0.33),I,ink)
+		elif style == "wrc":
+			for side: float in [-1, 1]:
+				b.prism(PackedVector2Array([Vector2(-0.43,top_y-0.04),Vector2(-0.26,top_y+0.09),Vector2(0.23,top_y+0.09),Vector2(0.42,top_y-0.04)]),
+					side*W*0.50-0.085,side*W*0.50+0.085,Transform3D(Basis(),Vector3(0,0,-L*0.5+0.8)),body_c)
 		# A pressed tail panel and cream rally plate sit between the rear lamps.
 		var plate_y := y0 + float(P["tail"]) * 0.60
 		var plate := Transform3D(back.basis, Vector3(0, plate_y, back.origin.z))
@@ -278,6 +298,30 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 				var fz = zs * (L * 0.5 - 0.8) - wr - 0.12
 				b.card(PaperKit.rrect(0.4, ride + 0.08, 0.04, 0, 0), Transform3D(Basis(), Vector3(xs * (W * 0.5 - 0.22), 0.05, fz)), ink if zs > 0 else acc, {"thick": 0.03, "edge": 0.02, "lip": 0.0})
 
+	# Fold the front and rear overhangs inward beyond the tyres. The design table
+	# sets the narrowing on each side; paint, lamp lenses and trim follow the same fold.
+	var taper: Vector2 = {
+		"classic":Vector2(0.22,0.18), "stratos":Vector2(0.36,0.21), "groups":Vector2(0.31,0.10),
+		"groupb_rwd":Vector2(0.23,0.08), "gt4":Vector2(0.24,0.15), "impreza":Vector2(0.18,0.10),
+		"evo":Vector2(0.07,0.04), "rally1":Vector2(0.23,0.06), "rally2":Vector2(0.16,0.18),
+		"wrc":Vector2(0.075,0.075), "mini":Vector2(0.10,0.10)
+	}.get(style,Vector2.ZERO)
+	if taper != Vector2.ZERO:
+		for i in b.v.size():
+			var point: Vector3 = b.v[i]
+			var tip := taper.x if point.z > 0 else taper.y
+			var t := clampf((absf(point.z) - L*0.5 + 0.42) / 0.42, 0.0, 1.0)
+			if t == 0:
+				continue
+			var width_scale := 1.0 - smoothstep(0.0, 1.0, t) * tip
+			var slope := signf(point.z) * tip * 6.0 * t * (1.0-t) / 0.42
+			var n: Vector3 = b.n[i]
+			n.x /= width_scale
+			n.z += n.x * point.x * slope
+			b.n[i] = n.normalized()
+			point.x *= width_scale
+			b.v[i] = point
+
 	var root := Node3D.new()
 	var body := Node3D.new()
 	root.add_child(body)
@@ -286,7 +330,7 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 	mi.material_override = mat
 	body.add_child(mi)
 	var gold: bool = car.get("gold_wheels", false)
-	var wheel_mesh := _wheel_mesh(Color("#d9b24a") if gold else acc, wr, 0.42 if style in ["buggy", "truck", "suv"] else 0.3)
+	var wheel_mesh := _wheel_mesh(Color("#d9b24a") if gold else acc, wr, 0.42 if style in ["buggy", "truck", "suv"] else 0.3, style)
 	var wheels: Array = []
 	var wx := W * 0.5 - 0.1 + (0.2 if style == "buggy" else 0.0)
 	var wz := L * 0.5 - 0.8
@@ -346,6 +390,17 @@ static func _wing(b: PaperKit.Builder, P: Dictionary, L: float, W: float, top_y:
 	var tail_top := y0 + float(P["tail"])
 	match wing:
 		"none":
+			return
+		"twin_roof":
+			var rz := cab_r + float(P["back"])
+			var ry := top_y + cab_h
+			for flank: float in [-1, 1]:
+				b.prism(PackedVector2Array([Vector2(-0.65,-0.12),Vector2(-0.68,0.19),Vector2(-0.48,0.22),Vector2(0.10,0.02),Vector2(0.08,-0.09)]),
+					flank*W*0.42-0.025,flank*W*0.42+0.025,Transform3D(Basis(),Vector3(0,ry,rz)),ink)
+			for layer in 2:
+				var wy := ry - 0.055 + layer * 0.185
+				var aft := rz - 0.47 - layer * 0.16
+				b.slab(Vector3(-W*0.45,wy,aft),Vector3(W*0.45,wy,aft),Vector3(W*0.43,wy+0.045,aft+0.29),Vector3(-W*0.43,wy+0.045,aft+0.29),0.035,acc if layer else ink)
 			return
 		"roof", "roof_big":
 			# Spoiler off the back of the roof (hatchbacks).
@@ -443,7 +498,7 @@ static func _spare_wheel(b: PaperKit.Builder, mount: Transform3D, radius: float,
 		b.box(Vector3.ZERO, Vector3(0.05, radius * 1.94, 0.016), strap, PaperKit.KRAFT)
 
 
-static func _wheel_mesh(hub: Color, r: float, width: float) -> ArrayMesh:
+static func _wheel_mesh(hub: Color, r: float, width: float, style: String) -> ArrayMesh:
 	var b := PaperKit.Builder.new(5)
 	# Fold a rounded shoulder into each sidewall. The centre tread and the
 	# two shoulder facets shade separately as the wheel turns.
@@ -467,16 +522,23 @@ static func _wheel_mesh(hub: Color, r: float, width: float) -> ArrayMesh:
 	var hub_p := PaperKit.circle(r * 0.5, 0, 0, 10)
 	b.card(hub_p, side * Transform3D(Basis(), Vector3(0, 0, width * 0.5 + 0.01)), hub, {"thick": 0.02, "edge": 0.025, "lip": 0.03})
 	b.card(PaperKit.circle(r * 0.18, 0, 0, 8), side * Transform3D(Basis(), Vector3(0, 0, width * 0.5 + 0.03)), PaperKit.CREAM, {"thick": 0.01, "edge": 0.0, "lip": 0.0})
-	# Five fan-shaped ink apertures leave broad spokes on the coloured wheel face.
+	# Steel road wheels, period competition alloys and fine multi-spoke gravel rims.
 	var face_x := width * 0.5 + 0.025
 	var recess := PaperKit.lin(Color("#403c39"))
+	var holes := 10 if style in ["rally2","impreza","gt4","wrc"] else (8 if style in ["classic","mini","escort","rally1"] else 5)
 	for k in 5:
 		var angle := TAU * k / 5.0
 		var lug := Vector3(face_x + 0.012, sin(angle) * r * 0.18, cos(angle) * r * 0.18)
 		b.card(PaperKit.circle(r * 0.036, 0, 0, 6), Transform3D(side.basis, lug), Color("#9c9890"), {"thick": 0.015, "edge": 0.0, "lip": 0.0})
+	for k in holes:
+		var angle := TAU * k / holes
+		if style in ["classic","mini","escort"]:
+			var at := Vector3(face_x,sin(angle)*r*0.37,cos(angle)*r*0.37)
+			b.card(PaperKit.circle(r*0.067,0,0,7),Transform3D(side.basis,at),Color("#39393a"),{"thick":0.007,"edge":0.0,"lip":0.0})
+			continue
 		var pts := PackedVector3Array()
 		for polar: Vector2 in [Vector2(-0.20, 0.25), Vector2(-0.10, 0.44), Vector2(0.36, 0.44), Vector2(0.19, 0.25)]:
-			pts.append(Vector3(face_x, sin(angle + polar.x) * r * polar.y, cos(angle + polar.x) * r * polar.y))
+			pts.append(Vector3(face_x, sin(angle + polar.x * 5.0 / holes) * r * polar.y, cos(angle + polar.x * 5.0 / holes) * r * polar.y))
 		b.quad(pts[0], pts[1], pts[2], pts[3], Vector3.RIGHT, recess)
 	return b.mesh()
 
