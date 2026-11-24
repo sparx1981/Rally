@@ -12,6 +12,8 @@ var post: ShaderMaterial
 var _yaw := 0.0
 var _pitch := 0.27
 var _dist := 18.0
+var _landmark_view := false
+var _roadside: Button
 var _blur := 1.0
 var _warm := 0.0
 var _focus := 0.55
@@ -52,6 +54,21 @@ func _ready() -> void:
 		b.add_theme_font_size_override("font_size", 20)
 		b.pressed.connect(spec[1])
 		_bar.add_child(b)
+	if target is Car:
+		var car := target as Car
+		var mark := car.stage.scenery.landmark
+		if mark and absf(mark.station-car.s)<=70.0:
+			_roadside = Button.new()
+			_roadside.text = "Roadside view"
+			_roadside.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+			_roadside.offset_left = -215
+			_roadside.offset_right = -20
+			_roadside.offset_top = 20
+			_roadside.pressed.connect(func():
+				_landmark_view = not _landmark_view
+				_roadside.text = "Orbit view" if _landmark_view else "Roadside view"
+				_position_camera())
+			add_child(_roadside)
 	_toast = PaperTheme.tag("Drag to orbit · Pinch or scroll to zoom\nTap the picture or press A to show hidden controls", 20)
 	add_child(_toast)
 	_toast.position = Vector2(20, 20)
@@ -80,6 +97,7 @@ func _hide_ui() -> void:
 	_hidden_by_user = true
 	_restore_tap = Vector2.INF
 	_bar.hide()
+	if _roadside: _roadside.hide()
 	_toast.visible = false
 
 
@@ -87,11 +105,13 @@ func _restore_ui() -> void:
 	_hidden_by_user = false
 	_restore_tap = Vector2.INF
 	_bar.show()
+	if _roadside: _roadside.show()
 	(_bar.get_child(1) as Button).grab_focus()
 
 
 func _save() -> void:
 	_bar.visible = false
+	if _roadside: _roadside.hide()
 	_toast.visible = false
 	await RenderingServer.frame_post_draw
 	await RenderingServer.frame_post_draw
@@ -106,6 +126,7 @@ func _save() -> void:
 		if img.save_png(pics + "/Paper Rally/" + name) == OK:
 			shown = pics + "/Paper Rally/" + name
 	_bar.visible = true
+	if _roadside: _roadside.show()
 	(_bar.get_child(-1) as Button).grab_focus()
 	(_toast.get_child(0) as Label).text = "Saved: " + shown
 	_toast.visible = true
@@ -180,5 +201,17 @@ func _process(delta: float) -> void:
 func _position_camera() -> void:
 	var c := target.global_position + Vector3.UP * 0.8
 	var off := Vector3(sin(_yaw) * cos(_pitch), sin(_pitch), cos(_yaw) * cos(_pitch)) * _dist
-	cam.global_position = c + off
+	var eye := c+off
+	if target is Car:
+		var car := target as Car
+		if _landmark_view:
+			var mark := car.stage.scenery.landmark
+			var site := mark.global_position+Vector3.UP*1.4
+			var delta := Vector2(site.x-c.x,site.z-c.z)
+			var aim := delta.normalized()
+			var xy := car.pos-aim*clampf(delta.length()*0.8,10.0,44.0)+aim.orthogonal()*7.0
+			eye = Vector3(xy.x,c.y+3.2,xy.y)
+			c = c.lerp(site,0.34)
+		eye.y = maxf(eye.y,car.track.terrain.height(Vector2(eye.x,eye.z))+0.75)
+	cam.global_position = eye
 	cam.look_at(c, Vector3.UP)

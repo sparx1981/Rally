@@ -238,6 +238,22 @@ func height(p: Vector2) -> float:
 	return lerpf(a, b, tz)
 
 
+## Test the occupied ground across a footprint. A flat headland may be built on
+## right up to its lip, but a prop must never straddle the drop or the water.
+func supports_prop(p: Vector2, radius: float) -> bool:
+	if is_sea(p):
+		return false
+	var center := height(p)
+	var reach := maxf(1.0,radius)
+	for k in 8:
+		var dir := Vector2.from_angle(k*TAU/8)
+		for r: float in [minf(1.5,reach),reach]:
+			var sample := p+dir*r
+			if is_sea(sample) or absf(height(sample)-center)>0.73*r+0.12:
+				return false
+	return true
+
+
 ## Chunked meshes (each with its own visibility range).
 func build_meshes(parent: Node3D, mat: Material, chunk := 28) -> void:
 	for cz in range(0, nz - 1, chunk):

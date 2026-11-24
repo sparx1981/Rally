@@ -77,7 +77,7 @@ func feed(car: Car, marking: bool) -> void:
 			continue
 		var mid = (a + p) * 0.5
 		var dir = d.normalized()
-		var basis := Basis(Vector3(dir.z, 0, -dir.x).normalized() * 0.3, Vector3.UP, dir * d.length())
+		var basis := Basis(Vector3(dir.z, 0, -dir.x).normalized() * lerpf(0.17,0.34,maxf(car.slip,wet/WET_RUN)), Vector3.UP, dir * d.length())
 		multimesh.set_instance_custom_data(_next, Color(wet / WET_RUN, _clock, 1.0 if wet > 0.0 else 0.0, 0.0))
 		multimesh.set_instance_transform(_next, Transform3D(basis, mid))
 		_next = (_next + 1) % MAX_MARKS

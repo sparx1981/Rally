@@ -206,13 +206,11 @@ func set_low_view(on: bool) -> void:
 	if on == _low_view:
 		return
 	_low_view = on
-	for p in [_dust, _spray]:
-		if p == null:
-			continue
-		var k := 0.45 if on else 1.0 / 0.45
-		p.scale_amount_min *= k
-		p.scale_amount_max *= k
-		p.amount = maxi(4, int(p.amount * (0.6 if on else 1.0 / 0.6)))
+	if _dust:
+		_dust.scale_amount_min = _dust.get_meta("full_min") * (0.45 if on else 1.0)
+		_dust.scale_amount_max = _dust.get_meta("full_max") * (0.45 if on else 1.0)
+		_dust.amount = int(_dust.get_meta("full_count")) * (0.6 if on else 1.0)
+
 
 
 func _make_dust() -> void:
@@ -230,6 +228,9 @@ func _make_dust() -> void:
 	else:
 		col = Color(pal["road"]).lightened(0.5)
 	_dust = Puffs.make(k, col, leak)
+	_dust.set_meta("full_min",_dust.scale_amount_min)
+	_dust.set_meta("full_max",_dust.scale_amount_max)
+	_dust.set_meta("full_count",_dust.amount)
 	_dust.emitting = false
 	_dust.position = Vector3(0, 0.3, -half_len)
 	add_child(_dust)
@@ -241,6 +242,8 @@ func _make_dust() -> void:
 
 var _smoke: CPUParticles3D
 var _spray: CPUParticles3D
+var _bow_wakes: Array[CPUParticles3D] = []
+var _ford_depth := 0.0
 var _smoke_t := 0.0
 
 
@@ -248,9 +251,14 @@ var _smoke_t := 0.0
 func spray(v: float) -> void:
 	if _spray == null:
 		_spray = Puffs.make("splash", Color("#dde7ec"), stage.wx["leak"])
+		_spray.set_meta("full_min", _spray.scale_amount_min)
+		_spray.set_meta("full_max", _spray.scale_amount_max)
 		_spray.position = Vector3(0, 0.3, 0.6)
 		add_child(_spray)
-	_spray.amount = clampi(int(v * 2.0), 20, 60)
+	var puff_scale := 0.45 if _low_view else 1.0
+	_spray.scale_amount_min = _spray.get_meta("full_min") * puff_scale
+	_spray.scale_amount_max = _spray.get_meta("full_max") * puff_scale
+	_spray.amount = roundi(clampi(int(v * 2.0), 20, 60) * (0.6 if _low_view else 1.0))
 	_spray.initial_velocity_max = 4.0 + v * 0.3
 	_spray.restart()
 
@@ -333,6 +341,7 @@ func add_damage(at: Vector2, strength: float) -> void:
 			light.set_meta("undamaged_position", light.position)
 		light.position = _crush_point(light.get_meta("undamaged_position"), light.position, center, outward, radius, crush)
 	arrays[Mesh.ARRAY_VERTEX] = vertices
+	var colors: PackedColorArray = arrays[Mesh.ARRAY_COLOR]
 	var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
 	for i in range(0, vertices.size(), 3):
 		if vertices[i] == before[i] and vertices[i + 1] == before[i + 1] and vertices[i + 2] == before[i + 2]:
@@ -344,6 +353,13 @@ func add_damage(at: Vector2, strength: float) -> void:
 			normals[i] = normal
 			normals[i + 1] = normal
 			normals[i + 2] = normal
+			for v in range(i,i+3):
+				var shift := before[v].distance_to(vertices[v])
+				if shift > 0.035 and normals[v].dot(outward)>0.35:
+					var value := colors[v]
+					var wear := smoothstep(0.035,0.18,shift)*0.30
+					colors[v] = value.lerp(Color(0.28,0.24,0.20,value.a),wear)
+	arrays[Mesh.ARRAY_COLOR] = colors
 	arrays[Mesh.ARRAY_NORMAL] = normals
 	var dented := ArrayMesh.new()
 	dented.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
@@ -450,6 +466,7 @@ func step(dt: float) -> void:
 	if water and not in_water and speed() > 1.0:
 		splashed.emit(absf(vel.dot(fwd())))
 	in_water = water
+	_ford_depth = maxf(0.0,float(track.feature_at(s,"splash",3.0).water_y)-track.surface_height(pos,s,lat)-Stage.ROAD_Y) if water else 0.0
 	# Vertical: follow the road over crests and ramps; leave it when it falls away faster than gravity.
 	var gh := track.surface_height(pos, s, lat)
 	var ground_vy := (gh - _prev_gh) / dt if _has_prev_gh else 0.0
@@ -653,6 +670,19 @@ func _sync_visual(delta: float) -> void:
 		var emit := spd > 6.0 and (slip > 0.12 or not on_road or stage.kind() != "dry" or spd > 18.0)
 		_dust.emitting = emit and not airborne and not in_water
 		_dust.speed_scale = clampf(0.7 + slip, 0.7, 1.6)
+	if in_water and speed()>1.5 and _bow_wakes.is_empty():
+		for side: float in [-1,1]:
+			var wake := Puffs.make("spray",Color("#c8d9dd"),stage.wx.leak)
+			wake.amount = 14
+			wake.lifetime = 0.42
+			wake.position = Vector3(side*(half_wid-0.15),0.16,half_len-0.8)
+			wake.direction = Vector3(side*0.82,0.54,-0.35)
+			add_child(wake)
+			_bow_wakes.append(wake)
+	for wake in _bow_wakes:
+		wake.emitting = in_water and not airborne and speed()>1.5
+		if wake.emitting:
+			wake.initial_velocity_max = clampf(1.0+_ford_depth*speed()*1.2,1.3,5.0)
 	if _smoke:
 		_smoke_t -= delta
 		# Launch smoke and backfire smoke.

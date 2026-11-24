@@ -369,6 +369,8 @@ func _make_gantries() -> void:
 			var j := track.index_at(approach)
 			for side: float in [-1,1]:
 				var xy := track.pts[j] + track.nrm[j]*side*(track.width*0.5+1.4)
+				if not track.terrain.supports_prop(xy, 1.0):
+					continue
 				var flag := MeshInstance3D.new()
 				flag.mesh = Pieces.feather_flag(rng).mesh
 				flag.material_override = paper_mat
@@ -478,20 +480,26 @@ func _make_hazards() -> void:
 	for pt in track.patches:
 		var b := PaperKit.Builder.new(rng.randi())
 		var len_s: float = float(pt["s1"]) - float(pt["s0"])
-		var wdt: float = float(pt["lat1"]) - float(pt["lat0"])
 		var col: Color = {"gravel": Color(def["pal"]["road"]).lightened(0.18), "mud": Color("#86694c"), "ice": Color("#c9dcea"), "deep snow": Color("#f4f5f8")}[pt["kind"]]
-		# Built as several overlapping blobs along the patch so it follows the bend.
-		var steps := maxi(2, int(len_s / 6.0))
-		for k in steps:
-			var sm := lerpf(float(pt["s0"]) + 3.0, float(pt["s1"]) - 3.0, float(k) / maxf(steps - 1, 1))
-			var j := track.index_at(sm)
-			var latc := (float(pt["lat0"]) + float(pt["lat1"])) * 0.5
-			var q := track.pts[j] + track.nrm[j] * latc
-			var blob := PaperKit.blob(minf(wdt * 0.48, 4.0), 0, 0, 5, 0.12, rng.randi(), 18, 0.9)
-			var xf := Transform3D(Basis(Vector3.UP, track.heading_at(j)), Vector3(q.x, ROAD_Y + track.road_h_i(j) + 0.012, q.y)) * lay
-			b.card(blob, xf, col, {"thick": 0.015, "edge": 0.04, "lip": 0.05})
-			if pt["kind"] == "ice":
-				b.card(PaperKit.rrect(2.0, 0.1, 0.05, rng.randf_range(-1, 1), rng.randf_range(-1, 1)), xf * Transform3D(Basis(), Vector3(0, 0, 0.012)), Color("#f2f6f8"), {"thick": 0.005, "edge": 0.0, "lip": 0.0, "sides": false})
+		# Follow the very same longitudinal and lateral limits used by patch_at.
+		var steps := maxi(2,ceili(len_s/2.0))
+		var prev := PackedVector3Array()
+		for k in steps+1:
+			var sm := lerpf(pt.s0,pt.s1,k/float(steps))
+			var n := track.nrm[track.index_at(sm)]
+			var line := PackedVector3Array()
+			for lat: float in [pt.lat0,pt.lat1]:
+				var xy := track.point_at(sm)+n*lat
+				line.append(Vector3(xy.x,track.road_h(sm)+ROAD_Y+0.027,xy.y))
+			if k:
+				var ink := PaperKit.lin(col.lightened(0.018*(k%3)))
+				b.quad(prev[0],line[0],line[1],prev[1],Vector3.UP,ink)
+				if pt.kind == "ice" and k%4 == 2:
+					var a := prev[0].lerp(prev[1],0.27)+Vector3.UP*0.009
+					var z := line[0].lerp(line[1],0.46)+Vector3.UP*0.009
+					var slim := Vector3(n.x,0,n.y)*0.045
+					b.quad(a-slim,a+slim,z+slim,z-slim,Vector3.UP,PaperKit.lin(Color("#e0ebee")))
+			prev = line
 		var mi := MeshInstance3D.new()
 		mi.mesh = b.mesh()
 		mi.material_override = paper_mat
@@ -907,7 +915,7 @@ func _make_coast_dressing() -> void:
 			var land := Vector2.ZERO
 			var found := false
 			for d in [Vector2(tr.cell, 0), Vector2(-tr.cell, 0), Vector2(0, tr.cell), Vector2(0, -tr.cell)]:
-				if not tr.is_sea(p + d * 2.0):
+				if tr.supports_prop(p + d * 2.0,3.0):
 					land = p + d * 2.0
 					found = true
 					break
@@ -1192,15 +1200,12 @@ func _make_weather() -> void:
 		return
 	_particles = CPUParticles3D.new()
 	_particles.local_coords = false
-	var mat := StandardMaterial3D.new()
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	mat.vertex_color_use_as_albedo = true
 	var qm := QuadMesh.new()
 	if kind == "rain":
 		qm.size = Vector2(0.05, 1.1)
-		mat.albedo_color = Color(0.78, 0.82, 0.86)
-		mat.billboard_mode = BaseMaterial3D.BILLBOARD_FIXED_Y
+		var streak := ShaderMaterial.new()
+		streak.shader = preload("res://shaders/rain.gdshader")
+		qm.material = streak
 		_particles.set_meta("base_amount", 900)
 		_particles.lifetime = 0.9
 		_particles.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
@@ -1212,6 +1217,11 @@ func _make_weather() -> void:
 		_particles.initial_velocity_max = 30.0
 		_particles.position = Vector3(0, 22, 0)
 	else:
+		var mat := StandardMaterial3D.new()
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		mat.vertex_color_use_as_albedo = true
+		qm.material = mat
 		qm.size = Vector2(0.2, 0.2)
 		mat.albedo_color = Color(0.97, 0.97, 1.0)
 		mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
@@ -1231,7 +1241,6 @@ func _make_weather() -> void:
 		_particles.scale_amount_min = 0.6
 		_particles.scale_amount_max = 1.3
 		_particles.position = Vector3(0, 16, 0)
-	qm.material = mat
 	_particles.mesh = qm
 	_particles.amount = int(_particles.get_meta("base_amount"))
 	_particles.preprocess = _particles.lifetime
@@ -1461,11 +1470,22 @@ func _overhead_crossing() -> void:
 
 func _marshal_post(s: float, role: String) -> void:
 	var i := track.index_at(s)
-	var side := -1.0 if role == "finish" else 1.0
-	var xy := track.pts[i]+track.nrm[i]*side*(track.width*0.5+4.2)
-	if track.terrain.is_sea(xy) or track.overlaps_water(xy,2):
-		xy = track.pts[i]-track.nrm[i]*side*(track.width*0.5+4.2)
-		side = -side
+	var preferred := -1.0 if role == "finish" else 1.0
+	var side := preferred
+	var xy := Vector2.ZERO
+	var supported := false
+	for offset: float in [0, -6, 6, -12, 12, -18, 18, -24, 24]:
+		i = track.index_at(clampf(s + offset, 0.0, track.dist[-1]))
+		for bank: float in [preferred, -preferred]:
+			xy = track.pts[i] + track.nrm[i] * bank * (track.width * 0.5 + 4.2)
+			if track.terrain.supports_prop(xy, 2.0) and not track.overlaps_water(xy, 2.0):
+				side = bank
+				supported = true
+				break
+		if supported:
+			break
+	if not supported:
+		return
 	var b := PaperKit.Builder.new(i)
 	var frame := Transform3D.IDENTITY
 	var cover := Vector3(side*1.0,0.48,0)

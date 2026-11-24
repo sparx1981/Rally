@@ -11,6 +11,8 @@ var station := 0.0
 var obstacles: Array[Vector3] = [] # world X, world Z and collision radius
 var _origin := Vector2.ZERO
 var _out := Vector2.RIGHT
+var _approach := Vector2.ZERO
+var _departure := Vector2.ZERO
 var _base := 0.0
 var _builder := PaperKit.Builder.new(41)
 
@@ -36,10 +38,15 @@ func build(region: String, course: Track, mat: Material) -> bool:
 			elif region in ["alpine", "canyon"]:
 				score = minf(slope, 6.0) + 8.0 * (1.0 - track.tang[i-9].dot(track.tang[i+9]))
 			if region == "cliffs":
+				if not track.terrain.supports_prop(p,5.0):
+					continue
 				var sea_view := track.terrain.is_sea(p+axis*32) or track.terrain.is_sea(p+axis*55)
 				score += 15.0 if sea_view else 0.0
 			if region == "gorge":
 				score += minf(slope,5.0)
+			var eye := track.point_at(s-34)
+			var ahead := (p-eye).normalized().dot(track.tang[track.index_at(s-34)])
+			score += 2.0*ahead
 			if score > best:
 				best = score
 				_origin = p
@@ -47,6 +54,8 @@ func build(region: String, course: Track, mat: Material) -> bool:
 				station = s
 	if best == -INF:
 		return false
+	_approach = track.point_at(station-34.0)
+	_departure = track.point_at(station+18.0)
 	_base = track.terrain.height(_origin)
 	position = Vector3(_origin.x, _base, _origin.y)
 	rotation.y = atan2(-_out.y, _out.x)
@@ -74,6 +83,16 @@ func build(region: String, course: Track, mat: Material) -> bool:
 	visibility_range_end = 200.0
 	_builder = null
 	return true
+
+
+func blocks_view(p: Vector2, radius: float) -> bool:
+	if p.distance_squared_to(_origin)>pow(60.0+radius,2):
+		return false
+	for eye: Vector2 in [_approach,_departure]:
+		var near := Geometry2D.get_closest_point_to_segment(p,eye,_origin)
+		if near.distance_squared_to(p)<pow(radius+1.15,2):
+			return true
+	return false
 
 
 func overlaps(p: Vector2, radius: float) -> bool:

@@ -18,12 +18,13 @@ static func mesh() -> SphereMesh:
 	return _mesh
 
 
-static func material(leak: Color) -> ShaderMaterial:
-	var key := leak.to_html()
+static func material(leak: Color, tint: Color) -> ShaderMaterial:
+	var key := leak.to_html()+tint.to_html()
 	if not _mats.has(key):
 		var m := ShaderMaterial.new()
 		m.shader = preload("res://shaders/puff.gdshader")
 		m.set_shader_parameter("leak", leak)
+		m.set_shader_parameter("tint", tint)
 		_mats[key] = m
 	return _mats[key]
 
@@ -35,23 +36,16 @@ static func _curve(points: Array) -> Curve:
 	return c
 
 
-static func _ramp(a: Color, b: Color) -> Gradient:
-	var g := Gradient.new()
-	g.set_color(0, a)
-	g.set_color(1, b)
-	return g
-
-
 ## kind: dust | smoke | exhaust | spray | splash | chimney | snow
 static func make(kind: String, color: Color, leak: Color) -> CPUParticles3D:
 	var p := CPUParticles3D.new()
 	p.mesh = mesh()
-	p.material_override = material(leak)
-	p.local_coords = false
+	p.material_override = material(leak,color)
+	p.local_coords = kind == "chimney"
 	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	p.angle_min = 0.0
 	p.angle_max = 360.0
-	p.color_ramp = _ramp(color, color.lerp(Color(1, 1, 1), 0.25))
+
 	match kind:
 		"dust", "snow":
 			p.amount = 48

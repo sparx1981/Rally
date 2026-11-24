@@ -134,7 +134,7 @@ func _follow_low(dt: float, v: Dictionary, sh: Vector3) -> void:
 	var fw := Vector3(sin(_yaw), 0, cos(_yaw))
 	var car_p := target.position
 	var spd := clampf(target.v_long, 0.0, 40.0)
-	var d: float = float(v["dist"]) + spd * 0.04
+	var d: float = float(v["dist"])
 	var hgt := 2.75 + spd * 0.008
 	var want := car_p - fw * d + Vector3.UP * hgt
 	# Keep clear of the ground behind the car (crests, banks, the far side of a dip).
@@ -149,11 +149,11 @@ func _follow_low(dt: float, v: Dictionary, sh: Vector3) -> void:
 		_low_h = want.y
 		_init_done = true
 	# Tight horizontally, softer vertically so jumps and landings read without jolting.
-	var p2 := Vector2(_pos.x, _pos.z).lerp(Vector2(want.x, want.z), clampf(dt * 9.0, 0.0, 1.0))
+	var p2 := Vector2(want.x, want.z)
 	_low_h = lerpf(_low_h, want.y, clampf(dt * 5.0, 0.0, 1.0))
 	_low_h = maxf(_low_h, gh + 1.1)
 	_pos = Vector3(p2.x, _low_h, p2.y)
 	_look = _look.lerp(look, clampf(dt * 10.0, 0.0, 1.0))
-	fov = float(v["fov"]) + spd * 0.25
+	fov = float(v["fov"])
 	global_position = _pos + sh * 0.08
 	look_at(_look + sh * 0.05, Vector3.UP)
