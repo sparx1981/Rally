@@ -1,4 +1,30 @@
-# Paper Rally handling and stage review · 1.0.8
+# Paper Rally handling and stage roadmap
+
+## November 2026 field update · 1.0.10
+
+The favourite Slate Gorge sequence works because the driver can see another part of the route before taking the return bend. The bridge then provides a clear destination. The new sections apply that timing to existing return legs and keep their original centreline and road height.
+
+| Route | Distance from the start | What to look for |
+|---|---:|---|
+| Sandstone Canyon Sprint | 3.77 km | Descend toward a sandstone-coloured tunnel with striped portals and warm wall lights. |
+| Sandstone Canyon Classic | 2.15 km | The return leg crosses a dry ravine on a steel truss. |
+| Autumn Ridge Classic | 4.04 km | The lower return leg follows the wooded cutting into a 40 m tunnel. |
+| Alpine Pass Classic | 0.29 km | The opening switchback descends into a short snow-covered tunnel. |
+
+The high chase and overhead photo angles can see through a tunnel roof when the car is inside. Cockpit and low chase still show the bore. The tunnel walls use the same collision path as roadside barriers. Ghost playback continues to use the recorded centreline and grade.
+
+Regional wildlife moves on tested verges, outside the race line. Meadow Run, Moorland Mire and Coastal Cliffs have hares. Sandstone Canyon and Slate Gorge have lizards. Autumn Ridge has squirrels, Pinewood Deluge and Twilight Taiga have foxes, Harbour Lanes has crabs, Alpine Pass has chamois, and Frozen Lakes has snow hares. Each route has several sightings and animates one animal at a time near the car.
+
+The 11 stage cards now use actual in-game viewpoints. The compositions include Meadow's hay rows, Harbour's waterfront, the Alpine lift, the Frozen Lakes camp, the Taiga lantern approach and Gorge's truss. Most show their Sprint route. Autumn Ridge shows the new tunnel in Classic. The contact shadow under each car now follows its footprint and the ground beneath the tyres. It softens as the car lifts away from the ground. The brake samples each connected controller's current trigger and X button, with separate engage and release thresholds around the trigger's rest position.
+
+### Next tests and designs
+
+1. **Controller release on Android.** Record the Godot axis value while pressing and releasing the trigger, after a pause and on reconnect. Compare one USB-C and one Bluetooth pad at the same stage start. After each release, hold full throttle and compare the next one second of speed against touch. Preserve partial braking and low-speed reverse.
+2. **Readability through a tunnel.** Drive the first Alpine portal in both chase modes and the cockpit. Check whether the wall stripes give enough warning before the left edge enters the view. Try the same entrance at dusk. Test an interior lamp rhythm with fewer, brighter pools if drivers struggle to spot the bend.
+3. **A true stacked road crossing.** Prototype a road that passes beneath its own bridge and drives across the same footprint later. Model the two road heights separately and keep projection, collisions, camera, pace notes and ghost playback on the correct road segment. Exercise resets and overtaking from both decks before authoring a full stage around it.
+4. **Shadow calibration.** Compare a narrow deck, a steep bank, wet tarmac and a slow jump in the same light. Check tyre contact from low chase and roof clearance from photo mode. Measure the shadow update and wet-stage GPU frame times on a representative phone.
+5. **Wildlife at driving speed.** Confirm each regional silhouette reads from low chase before adding more species. Try an animal pausing and retreating at the sound of a car. Keep its entire route outside the road, water and steep cliff faces.
+6. **Variant-specific previews.** Trial a second shot for locations with distinct Sprint and Classic features. Use the same camera aspect ratio as the menu and check whether a player can pick out the feature at thumbnail size.
 
 ## Implemented in 1.0.9
 

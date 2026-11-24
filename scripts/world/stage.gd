@@ -7,6 +7,12 @@ const PAPER_SHADER := preload("res://shaders/paper.gdshader")
 const GROUND_SHADER := preload("res://shaders/ground.gdshader")
 const ROAD_SHADER := preload("res://shaders/road.gdshader")
 const ROAD_Y := 0.07
+const SWITCHBACK_TUNNELS := {
+	"canyon_sprint": Vector2(3804, 16),
+	"autumn_classic": Vector2(4074, 20),
+	"alpine_classic": Vector2(318, 16)
+}
+const SWITCHBACK_BRIDGES := {"canyon_classic": 2190.0}
 
 static var _noise_tex: NoiseTexture2D
 static var _fibre_tex: NoiseTexture2D
@@ -24,6 +30,8 @@ var env: Environment
 var weather_fx: Node3D
 var _particles: CPUParticles3D
 var birds: Birds
+var wildlife: Wildlife
+var _tunnel_roof: MeshInstance3D
 var _time := 0.0
 
 
@@ -69,6 +77,11 @@ func build(stage_def: Dictionary, time_of_day := -1) -> void:
 	track.build_elevation(ep, int(def["seed"]))
 	track.build_hazards(int(def["seed"]), wx["kind"], float(def["twist"]))
 	track.build_bridges(int(def["seed"]), def.get("bridges", []))
+	var tunnel: Vector2 = SWITCHBACK_TUNNELS.get(def.id, Vector2.ZERO)
+	if tunnel != Vector2.ZERO:
+		track.add_switchback_tunnel(tunnel.x, tunnel.y)
+	if SWITCHBACK_BRIDGES.has(def.id):
+		track.add_switchback_bridge(SWITCHBACK_BRIDGES[def.id])
 	track.index_watercourses()
 	track.build_barriers(int(def["seed"]), def.get("barriers", []))
 	track.terrain = Terrain.new()
@@ -115,11 +128,15 @@ func build(stage_def: Dictionary, time_of_day := -1) -> void:
 	_make_puddles()
 	_make_parc_ferme()
 	_make_bridges()
+	_make_switchback_tunnel()
 	_make_hazards()
 	_make_barriers()
 	_make_weather()
 	_make_mist()
 	_make_birds()
+	wildlife = Wildlife.new()
+	add_child(wildlife)
+	wildlife.setup(track, scenery, paper_mat, def)
 	apply_settings()
 	Settings.changed.connect(_on_settings_changed)
 
@@ -523,7 +540,7 @@ func _make_barriers() -> void:
 		var s0: float = bar["s0"]
 		var s1: float = bar["s1"]
 		var side: float = bar["side"]
-		if bar["kind"] == "parapet":
+		if bar["kind"] in ["parapet", "tunnel"]:
 			continue   # drawn with its bridge
 		var armco: bool = bar["kind"] == "armco"
 		var s := s0
@@ -1321,8 +1338,11 @@ func update(dt: float, focus: Vector3, radius: float, player_s: float, cam: Came
 	if scenery:
 		scenery.update(Vector2(focus.x, focus.z), radius, dt)
 	weather_fx.position = focus
+	if is_instance_valid(wildlife):
+		wildlife.update(dt, focus, player_s)
 	if cam:
 		fill_light.global_basis = cam.global_basis
+		update_tunnel_roof(cam, player_s)
 
 
 func grip() -> float:
@@ -1590,3 +1610,71 @@ func _avalanche_gallery() -> void:
 	mi.position = Vector3(origin.x,0,origin.y)
 	mi.visibility_range_end = 220
 	add_child(mi)
+
+## Keep the bore open to the driving and photo cameras when viewed from above.
+func update_tunnel_roof(cam: Camera3D, station: float) -> void:
+	if not _tunnel_roof:
+		return
+	var overhead := cam.global_position.y > track.road_h(station) + 4.9
+	_tunnel_roof.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY if overhead and track.tunnel_at(station, 3.0) else GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+
+
+func _make_switchback_tunnel() -> void:
+	if track.tunnels.is_empty():
+		return
+	var extent := track.tunnels[0]
+	var walls := PaperKit.Builder.new(int(extent.s0))
+	var roof := PaperKit.Builder.new(int(extent.s0) + 31)
+	var entry_ink := Color("#ad865e") if def.loc_id == "canyon" else Color("#9a9da2")
+	var wall_ink := entry_ink.darkened(0.24)
+	var cap_ink: Color = def.pal.ground2
+	var mouth := track.width * 0.5 + 0.9
+	var past := PackedVector3Array()
+	var first := track.index_at(extent.s0)
+	var last := track.index_at(extent.s1)
+	for i in range(first, last + 1):
+		var p := track.pts[i]
+		var lateral := track.nrm[i]
+		var y := track.road_h_i(i) + ROAD_Y
+		var ring := PackedVector3Array()
+		# A straight lower wall and angled shoulders leave 4.6 m over the lanes.
+		for point: Vector2 in [Vector2(-mouth, -0.3), Vector2(-mouth, 3.4),
+				Vector2(-mouth + 1.35, 4.6), Vector2(mouth - 1.35, 4.6), Vector2(mouth, 3.4), Vector2(mouth, -0.3)]:
+			var xy := p + lateral * point.x
+			ring.append(Vector3(xy.x, y + point.y, xy.y))
+		if not past.is_empty():
+			for j in range(5):
+				var builder := walls if j in [0, 4] else roof
+				builder.slab(past[j], past[j+1], ring[j+1], ring[j], 0.28, wall_ink.lightened((i % 4) * 0.016))
+			for side: float in [-1, 1]:
+				var back := p + lateral * side * (mouth + 5.2)
+				var last_back := track.pts[i-1] + track.nrm[i-1] * side * (mouth + 5.2)
+				var slope := Vector3(back.x, track.terrain.height(back) + 0.06, back.y)
+				var last_slope := Vector3(last_back.x, track.terrain.height(last_back) + 0.06, last_back.y)
+				var j := 1 if side < 0.0 else 4
+				roof.slab(past[j] + Vector3.UP * 0.16, last_slope, slope, ring[j] + Vector3.UP * 0.16, 0.17, cap_ink)
+		if i == first or i == last:
+			for j in 5:
+				_structural_member(walls, ring[j], ring[j+1], 0.56, 0.56, entry_ink.lightened(0.16))
+			for side: float in [-1, 1]:
+				var xy := p + lateral * side * (mouth + 0.48)
+				var face := Transform3D(Basis(Vector3.UP, track.heading_at(i)), Vector3(xy.x, y, xy.y))
+				for band in 6:
+					walls.box(Vector3(0, 0.30 + band * 0.22, 0), Vector3(0.27, 0.225, 0.74), face,
+						PaperKit.CREAM if band % 2 else Color("#aa6245"))
+		if (i - first) % 5 == 2:
+			for side: float in [-1, 1]:
+				var xy := p + lateral * side * (mouth - 0.20)
+				var lamp := Vector3(xy.x, y + 2.9, xy.y)
+				walls.box(lamp, Vector3(0.35, 0.14, 0.42), Transform3D.IDENTITY, Color("#e4b86e"), Color(-1, 0, 0), true)
+		past = ring
+	var lining := MeshInstance3D.new()
+	lining.name = "TunnelPortalsAndWalls"
+	lining.mesh = walls.mesh()
+	lining.material_override = paper_mat
+	add_child(lining)
+	_tunnel_roof = MeshInstance3D.new()
+	_tunnel_roof.name = "TunnelRoof"
+	_tunnel_roof.mesh = roof.mesh()
+	_tunnel_roof.material_override = paper_mat
+	add_child(_tunnel_roof)

@@ -312,6 +312,8 @@ func _add(kind: String, vi: int, p: Vector2, yaw: float, s: float, rng: RandomNu
 		return
 	# Fold direction: away from the road.
 	var hit: Array = track.project(p, track.index_at(s))
+	if track.tunnel_at(float(hit[1]), r + 3.0) and absf(float(hit[2])) < track.width * 0.5 + 6.0 + r:
+		return
 	var tg: Vector2 = hit[3]
 	var lat: float = hit[2]
 	var away := Vector2(-tg.y, tg.x) * signf(lat if lat != 0.0 else 1.0)

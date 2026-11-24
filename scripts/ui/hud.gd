@@ -287,6 +287,11 @@ class PaceNote:
 				draw_polyline(PackedVector2Array([c + Vector2(-10, 24), c + Vector2(-10, 6), c + Vector2(12, -4), c + Vector2(12, -22)]), red, 7.0)
 				draw_rect(Rect2(c + Vector2(-44, -8), Vector2(22, 14)), Color("#e3c06a"))
 				draw_rect(Rect2(c + Vector2(24, 2), Vector2(22, 14)), Color("#e3c06a"))
+			"tunnel":
+				draw_polyline(PackedVector2Array([c + Vector2(-38, 17), c + Vector2(-38, -5),
+					c + Vector2(-25, -21), c + Vector2(25, -21), c + Vector2(38, -5), c + Vector2(38, 17)]), ink, 5.0)
+				draw_line(c + Vector2(-12, 17), c + Vector2(-5, -9), red, 3.0)
+				draw_line(c + Vector2(12, 17), c + Vector2(5, -9), red, 3.0)
 			_:
 				for k in 9:
 					draw_circle(c + Vector2(-36 + (k % 5) * 18, -8 + (k / 5) * 16 + (k % 2) * 4), 5.0, ink if kind != "ice" else Color("#6c84b0"))

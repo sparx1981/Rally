@@ -221,3 +221,5 @@ func _position_camera() -> void:
 		eye.y = maxf(eye.y,car.track.terrain.height(Vector2(eye.x,eye.z))+0.75)
 	cam.global_position = eye
 	cam.look_at(c, Vector3.UP)
+	if target is Car:
+		target.stage.update_tunnel_roof(cam, target.s)

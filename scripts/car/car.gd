@@ -102,7 +102,7 @@ func setup(car_stats: Dictionary, num: int, stg: Stage, mat: Material) -> void:
 	model_root = m["root"]
 	_model = m
 	_mat = mat
-	_make_contact(mat)
+	_make_contact()
 	_make_dust()
 	_make_rear_lamps()
 	if not is_player:
@@ -118,17 +118,64 @@ func setup(car_stats: Dictionary, num: int, stg: Stage, mat: Material) -> void:
 		_eng3d.play()
 
 
-func _make_contact(mat: Material) -> void:
-	var b := PaperKit.Builder.new(2)
-	var leak: Color = stage.wx["leak"]
-	var lay := Transform3D(Basis(Vector3.RIGHT, -PI * 0.5), Vector3(0, 0.012, 0))
-	b.card(PaperKit.rrect(2.0, 3.9, 0.7, 0, -1.95), lay, leak.darkened(0.55), {"thick": 0.004, "edge": 0.0, "lip": 0.0, "sides": false})
-	var mi := MeshInstance3D.new()
-	mi.mesh = b.mesh()
-	mi.material_override = mat
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(mi)
-	_contact = mi
+const SHADOW_DIVISIONS := 4
+var _contact_mesh: ImmediateMesh
+var _contact_ink: ShaderMaterial
+var _shadow_pos := Vector2.INF
+var _shadow_heading := INF
+
+
+func _make_contact() -> void:
+	_contact_mesh = ImmediateMesh.new()
+	_contact_ink = ShaderMaterial.new()
+	_contact_ink.shader = preload("res://shaders/contact_shadow.gdshader")
+	_contact_ink.set_shader_parameter("ink", Color(stage.wx.leak).lerp(Color("#403d44"), 0.72))
+	var axle: Vector3 = _wheels[0].position
+	_contact_ink.set_shader_parameter("wheel_center", Vector2(axle.x / (half_wid * 2.36), axle.z / (half_len * 2.16)))
+	_contact = MeshInstance3D.new()
+	_contact.mesh = _contact_mesh
+	_contact.material_override = _contact_ink
+	_contact.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(_contact)
+	_contact.top_level = true
+
+
+func _update_contact() -> void:
+	var ground := track.surface_height(pos, s, lat)
+	var lift := maxf(0.0, y - ground)
+	_contact.visible = not in_water and not in_puddle and (on_road or not track.overlaps_water(pos, 0.0)) and ground > track.terrain.sea_y and lift < 2.1
+	if not _contact.visible:
+		return
+	_contact_ink.set_shader_parameter("opacity", 0.26 * (1.0 - smoothstep(0.12, 2.1, lift)))
+	if pos.distance_squared_to(_shadow_pos) < 0.035 and absf(angle_difference(_shadow_heading, h)) < 0.045:
+		return
+	_shadow_pos = pos
+	_shadow_heading = h
+	_contact.global_position = Vector3(pos.x, ground, pos.y)
+	var forward := fwd()
+	var right := right_axis()
+	var course := track.tang[track_i]
+	var normal := track.nrm[track_i]
+	var vertices := PackedVector3Array()
+	for row in SHADOW_DIVISIONS + 1:
+		for col in SHADOW_DIVISIONS + 1:
+			var uv := Vector2(col, row) / SHADOW_DIVISIONS
+			var offset := right * (uv.x - 0.5) * half_wid * 2.36 + forward * (uv.y - 0.5) * half_len * 2.16
+			var station := s + offset.dot(course)
+			var lateral := lat + offset.dot(normal)
+			var on_deck := absf(lateral) <= track.road_half_width(station) + 0.1
+			var surface_y := track.surface_height(pos + offset, station, lateral)
+			vertices.append(Vector3(offset.x, surface_y - ground + (Stage.ROAD_Y if on_deck else 0.0) + 0.035, offset.y))
+	_contact_mesh.clear_surfaces()
+	_contact_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
+	var stride := SHADOW_DIVISIONS + 1
+	for row in SHADOW_DIVISIONS:
+		for col in SHADOW_DIVISIONS:
+			var i := row * stride + col
+			for vertex: int in [i, i + stride, i + 1, i + 1, i + stride, i + stride + 1]:
+				_contact_mesh.surface_set_uv(Vector2(vertex % stride, vertex / stride) / SHADOW_DIVISIONS)
+				_contact_mesh.surface_add_vertex(vertices[vertex])
+	_contact_mesh.surface_end()
 
 
 ## Brake lights (bright red) and reversing lights (white): glowing lamp faces on the tail plus a
@@ -709,9 +756,7 @@ func _sync_visual(delta: float) -> void:
 		_update_rear_lamps()
 	position = Vector3(pos.x, y + (Stage.ROAD_Y if on_road else 0.0), pos.y)
 	if _contact:
-		# The printed contact shadow stays on the road / ground while the car flies.
-		_contact.visible = not in_water and not in_puddle and (on_road or not track.overlaps_water(pos, 0.0)) and y > track.terrain.sea_y
-		_contact.position.y = track.surface_height(pos, s, lat) - y
+		_update_contact()
 	if _body == null:
 		return
 	# The whole car (body and wheels together) follows the slope, so nothing separates on hills.

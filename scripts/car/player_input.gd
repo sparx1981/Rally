@@ -5,11 +5,26 @@ extends RefCounted
 var touch: TouchControls
 var _steer := 0.0
 var _trigger_down := false
+var _brake_down := false
 
 
 # Ignore rest noise and allow a slightly short physical throw to reach full pedal.
 static func pedal(travel: float) -> float:
 	return clampf((travel - 0.08) / (0.90 - 0.08), 0.0, 1.0)
+
+
+## Poll the current mapped Android axes and buttons. InputMap can retain an
+## old action strength across a pad disconnect. Negative and near-rest
+## axis values both clear the brake.
+func controller_brake(devices: PackedInt32Array) -> float:
+	var pressure := 0.0
+	var button := false
+	for device in devices:
+		pressure = maxf(pressure, Input.get_joy_axis(device, JOY_AXIS_TRIGGER_LEFT))
+		button = button or Input.is_joy_button_pressed(device, JOY_BUTTON_X)
+	_brake_down = pressure > (0.12 if _brake_down else 0.17)
+	var analog := clampf((pressure - 0.12) / 0.78, 0.0, 1.0) if _brake_down else 0.0
+	return maxf(analog, float(button))
 
 
 func apply(car: Car, dt: float) -> void:
@@ -18,7 +33,7 @@ func apply(car: Car, dt: float) -> void:
 	_trigger_down = travel > (0.10 if _trigger_down else 0.18)
 	var trigger := pedal(travel) if Settings.g("progressive_trigger") else float(_trigger_down)
 	var thr := maxf(Input.get_action_strength("accelerate"), trigger)
-	var brk := maxf(Input.get_action_strength("brake"), pedal(Input.get_action_raw_strength("brake_trigger")))
+	var brk := maxf(Input.get_action_strength("brake"), controller_brake(Input.get_connected_joypads()))
 	var hb := Input.get_action_strength("handbrake")
 	if touch and touch.visible:
 		thr = maxf(thr, touch.throttle)

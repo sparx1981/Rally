@@ -31,6 +31,8 @@ var notes: Array = []                # pace notes: corners + features, sorted by
 var barriers: Array = []             # {s0, s1, side (+1 = +nrm side), kind: armco | fence | parapet}
 var gate_distances := PackedFloat32Array()
 var bridges: Array = []              # {s, kind: stone | covered, half, a, b (river ends), water_y}
+var tunnels: Array[Dictionary] = []
+
 
 
 ## Pre-generated layouts ship in res://data/tracks (same seed and settings = same road), so phones
@@ -687,6 +689,10 @@ func next_note(s: float, ahead: float) -> Dictionary:
 ## farm and moor stretches. kinds: which barrier kinds this location uses.
 func build_barriers(seed_v: int, kinds: Array) -> void:
 	barriers = []
+	for tunnel in tunnels:
+		for side: float in [-1, 1]:
+			barriers.append({"s0": tunnel.s0, "s1": tunnel.s1, "side": side,
+				"kind": "tunnel", "wall": width * 0.5 + 0.90})
 	if kinds.is_empty():
 		add_bridge_barriers()
 		return
@@ -704,6 +710,10 @@ func build_barriers(seed_v: int, kinds: Array) -> void:
 			if absf(k) > 1.0 / 200.0:
 				side = 1.0 if k > 0.0 else -1.0   # outside of the bend
 		var clear := true
+		for tunnel in tunnels:
+			if s + run > tunnel.s0 - 12.0 and s < tunnel.s1 + 12.0:
+				clear = false
+				break
 		for f in features:
 			if s + run > float(f["s0"]) - 25.0 and s < float(f["s1"]) + 25.0:
 				clear = false
@@ -722,6 +732,34 @@ func build_barriers(seed_v: int, kinds: Array) -> void:
 
 ## Bridges over rivers that cross the road at right angles: English stone humpback arches and
 ## covered wooden bridges. The deck has a parapet (or wall) each side that the cars bounce off.
+## Authored crossing on an existing return leg. Keep its original grade and
+## stop the cutting before it encounters another part of the route.
+func add_switchback_bridge(station: float) -> void:
+	var i := index_at(station)
+	var ends := PackedVector2Array()
+	for side: float in [-1, 1]:
+		var reach := 18.0
+		while reach < 80.0 and clearance(pts[i] + nrm[i] * side * (reach + 12.0)) > 19.0:
+			reach += 4.0
+		ends.append(pts[i] + nrm[i] * side * reach)
+	bridges.append({"s": station, "kind": "truss", "half": 22.0, "a": ends[0],
+		"b": ends[1], "water_y": elev[i] - 10.0, "channel": 13.0, "dry": true, "i": i})
+
+
+func add_switchback_tunnel(station: float, half_span: float) -> void:
+	tunnels.append({"s0": station - half_span, "s1": station + half_span})
+	notes.append({"s0": station - half_span, "s1": station + half_span, "kind": "tunnel",
+		"dir": 0.0, "sev": 0, "hairpin": false})
+	notes.sort_custom(func(a, b): return a.s0 < b.s0)
+
+
+func tunnel_at(station: float, margin := 0.0) -> bool:
+	for tunnel in tunnels:
+		if station >= tunnel.s0 - margin and station <= tunnel.s1 + margin:
+			return true
+	return false
+
+
 func build_bridges(seed_v: int, kinds: Array) -> void:
 	bridges = []
 	if kinds.is_empty():
