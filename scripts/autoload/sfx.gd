@@ -43,6 +43,7 @@ var _roll_speed := 0.0
 var _pebble_t := 0.0
 var _pop_cd := 0.0
 var _rng := RandomNumberGenerator.new()
+var _synthesis_task := -1
 var _srng := RandomNumberGenerator.new()   # synthesis thread only
 
 
@@ -77,7 +78,12 @@ func _ready() -> void:
 	add_child(_amb2)
 	get_viewport().gui_focus_changed.connect(func(_c): _ui(UI_FOCUS, -20.0))
 	# Synthesis takes a moment on phones: do it off the main thread.
-	WorkerThreadPool.add_task(_synth_all)
+	_synthesis_task = WorkerThreadPool.add_task(_synth_all)
+
+
+func _exit_tree() -> void:
+	if _synthesis_task >= 0:
+		WorkerThreadPool.wait_for_task_completion(_synthesis_task)
 
 
 var _pending_amb := ""

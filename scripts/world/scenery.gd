@@ -12,6 +12,7 @@ const FALL_BEHIND := 34.0
 
 var track: Track
 var landmark: RegionalLandmark
+var fixed_supports: Array[Vector3] = []
 var stage_def: Dictionary
 var material: Material
 var lib := {}                 # kind -> Array of variant dicts
@@ -42,11 +43,12 @@ func setup(t: Track, sdef: Dictionary, mat: Material, density: float, ddist: flo
 	draw_distance = ddist
 	popups = use_popups
 	if landmark:
-		for o in landmark.obstacles:
-			var cell := Vector2i(floori(o.x / 8.0), floori(o.y / 8.0))
-			if not obstacles.has(cell):
-				obstacles[cell] = []
-			obstacles[cell].append([o.x, o.y, o.z, -1, false, "landmark"])
+		fixed_supports.append_array(landmark.obstacles)
+	for o in fixed_supports:
+		var cell := Vector2i(floori(o.x / 8.0), floori(o.y / 8.0))
+		if not obstacles.has(cell):
+			obstacles[cell] = []
+		obstacles[cell].append([o.x, o.y, o.z, -1, false, "landmark"])
 	_build_library()
 	_measure_footprints()
 	_place(density)
@@ -316,6 +318,9 @@ func _add(kind: String, vi: int, p: Vector2, yaw: float, s: float, rng: RandomNu
 	if not kind in CLIFF_OK and not kind.begins_with("flag") and _near_drop(p):
 		return   # sponsor banners, billboards and the like stay off the clifftops
 	var r: float = lib[kind][vi]["r"]
+	for o in fixed_supports:
+		if p.distance_squared_to(Vector2(o.x,o.y)) < pow(o.z + float(lib[kind][vi]["shore_radius"]),2):
+			return
 	if landmark and landmark.overlaps(p, lib[kind][vi]["shore_radius"]):
 		return
 	if track.overlaps_water(p, lib[kind][vi]["shore_radius"]):

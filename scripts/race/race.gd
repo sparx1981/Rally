@@ -95,13 +95,14 @@ func setup(stage_i: int, mode_v: int, entrants: Array, attract_v := false, tod :
 		add_child(ghost)
 		ghost.setup(Catalog.stages()[stage_i]["id"], player.stats, stage.track)
 	if stage.wx.get("headlights", false):
-		for c in cars:
-			c.enable_lights(c == player and int(Settings.g("shadows")) > 0, int(stage.wx.get("tod", 0)) == 2)
+		# Rival lenses use the stage emissive material. Reserve the mobile
+		# renderer's per-object spotlight slots for the driver's lamp array.
+		player.enable_lights(int(Settings.g("shadows")) > 0, int(stage.wx.get("tod", 0)) == 2)
 	camera.follow(0.016)
 	var st: Dictionary = player.stats
 	var mu := Car.BASE_MU * float(st["grip"]) * stage.grip()
 	var ideal := tr.ideal_time(mu * 0.95, Car.BRAKE * stage.grip() * 0.85, Car.BASE_ACC * float(st["accel"]) * 0.75, player.top_speed())
-	medals = [ideal * 1.15, ideal * 1.3, ideal * 1.48]
+	medals = [ideal * 1.06, ideal * 1.3, ideal * 1.48]
 	if attract:
 		for c in cars:
 			c.frozen = false
@@ -234,7 +235,7 @@ func _process(delta: float) -> void:
 			if drivers.has(c):
 				drivers[c].update(FIXED, cars, _clock)
 			c.step(FIXED)
-			if c.y < stage.track.road_h(c.s) - 7.0 and not c.frozen:
+			if c.y < stage.track.terrain.min_h - 10.0 and not c.frozen:
 				c.reset_to_track()   # over the cliff or into the river: back on the road
 				if c == player:
 					Haptics.impulse(0.8, 0.25)
@@ -432,15 +433,18 @@ func _collide() -> void:
 	# Armco and fences are walls along the road edge.
 	for c in cars:
 		var side := signf(c.lat)
-		if side == 0.0 or absf(c.lat) < stage.track.width * 0.5 - 1.5:
+		if side == 0.0:
 			continue
 		var bar := stage.track.barrier_at(c.s, side)
 		if bar.is_empty():
 			continue
 		var wn: Vector2 = stage.track.nrm[c.track_i] * side          # points out of the road
 		var ext := c.half_wid * absf(c.right_axis().dot(wn)) + c.half_len * absf(c.fwd().dot(wn))
-		var wall := stage.track.width * 0.5 + Stage.BARRIER_LAT
-		var pen := absf(c.lat) + ext - wall
+		var wall: float = bar.get("wall", stage.track.width * 0.5 + Stage.BARRIER_LAT)
+		var offset := absf(c.lat) - wall
+		var pen := ext - absf(offset)
+		if offset > 0.0:
+			wn = -wn
 		if pen > 0.0:
 			c.pos -= wn * pen
 			var cp := _corner_support(c, wn)

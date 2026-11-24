@@ -186,6 +186,12 @@ static func locations() -> Array:
 					"f_dark": "#5a7650", "f_mid": "#78935f", "f_light": "#9db27a", "trunk": "#6a4a36", "accent": "#c8553d",
 					"accent2": "#3f6fa8", "wall": "#ece6d8", "roof": "#4a5a6a", "wood": "#7a5a40", "stone": "#a8a496", "flower": "#e8c05a"}),
 				"kinds": {"tuft": 6, "bush": 4, "rock": 3, "flowers": 2, "house": 1, "spectators": 1}},
+			{"id": "gorge", "bridges": ["girder", "truss"], "barriers": ["armco"], "region": "High desert mountain roads (Mexico / Acropolis style): rocky climbs and switchbacks.", "elev": {"climb": 32.0, "amp": 9.0, "wave": 260.0, "grade": 0.11, "hills": 26.0}, "name": "Slate Gorge", "weather": "dry_noon", "seed": 11939, "length": 1900.0, "twist": 0.5, "width": 8.5,
+				"desc": "Exposed slate cuttings, a rail underpass and long spans over ravines.",
+				"pal": _pal({"ground": "#b8aaa0", "ground2": "#a09388", "ground3": "#cec0ad", "road": "#c99c6c", "rut": "#a87a50",
+					"f_dark": "#5f7a50", "f_mid": "#7d9264", "f_light": "#a4b07a", "trunk": "#7a5235", "accent": "#2f8a8a",
+					"accent2": "#e8c05a", "wall": "#e9cfa6", "roof": "#b5623b", "wood": "#8a5a3b", "stone": "#706971", "flower": "#e2763a"}),
+				"kinds": {"mesa": 4, "rock": 22, "bush": 1, "tuft": 1}},
 		]
 	return _locations
 
@@ -198,6 +204,7 @@ const TOD_NAMES := ["Day", "Dusk", "Night"]
 # existing scenery weight per route without increasing the placement budget.
 const ROUTE_SCENERY := {
 	"meadow": ["flowers", "barn", "bale", "tree"],
+	"gorge": ["rock", "mesa", "rock", "mesa"],
 	"canyon": ["cactus", "mesa", "tent", "rock"],
 	"autumn": ["tree", "cabin", "logs", "pine"],
 	"moor": ["heather", "house", "rock", "pine"],
@@ -209,7 +216,7 @@ const ROUTE_SCENERY := {
 	"cliffs": ["flowers", "house", "bush", "rock"]
 }
 
-## 40 stages: every location as a Sprint (4 km), Classic (8 km), Long (10 km) and Marathon (15 km).
+## 44 stages: every location as a Sprint (4 km), Classic (8 km), Long (10 km) and Marathon (15 km).
 static func stages() -> Array:
 	if _stages.is_empty():
 		for li in locations().size():
@@ -268,7 +275,7 @@ static func series() -> Array:
 			{"id": "winter", "name": "Winter Cup", "desc": "Three snow and ice 8 km stages. Very low grip.", "stages": [25, 29, 33]},
 			{"id": "night", "name": "Night Rally", "desc": "Four stages always run at night, on headlights alone.", "stages": [25, 16, 5, 34], "night": true},
 			{"id": "coast", "name": "Coast Cup", "desc": "Harbour cobbles and clifftop lanes above the sea.", "stages": [21, 36, 37, 22]},
-			{"id": "grand", "name": "Grand Rally", "desc": "The full season: all ten locations at 10 and 15 km.", "stages": [2, 14, 27, 6, 18, 31, 10, 22, 35, 39]},
+			{"id": "grand", "name": "Grand Rally", "desc": "Ten locations at 10 and 15 km.", "stages": [2, 14, 27, 6, 18, 31, 10, 22, 35, 39]},
 		]
 	return _series
 

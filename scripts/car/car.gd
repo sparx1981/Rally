@@ -147,13 +147,17 @@ func _make_rear_lamps() -> void:
 		return m
 	var red: StandardMaterial3D = mk.call(Color(1.0, 0.16, 0.1))
 	var white: StandardMaterial3D = mk.call(Color(1.0, 0.98, 0.92))
-	for xs in [-1.0, 1.0]:
+	for index in 2:
+		var xs := -1.0 if index == 0 else 1.0
+		var lens := Rect2(Vector2(xs*half_wid*0.68,y),Vector2(0.30,0.12))
+		if not _model.rear_lenses.is_empty():
+			lens = _model.rear_lenses[index]
 		var bm := BoxMesh.new()
-		bm.size = Vector3(0.26, 0.11, 0.03)
+		bm.size = Vector3(lens.size.x*0.83, lens.size.y*0.78, 0.024)
 		var b := MeshInstance3D.new()
 		b.mesh = bm
 		b.material_override = red
-		b.position = Vector3(xs * half_wid * 0.68, y, z)
+		b.position = Vector3(lens.position.x,lens.position.y,z-0.01)
 		b.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		b.visible = false
 		_body.add_child(b)
@@ -163,7 +167,7 @@ func _make_rear_lamps() -> void:
 		var r := MeshInstance3D.new()
 		r.mesh = rm
 		r.material_override = white
-		r.position = Vector3(xs * half_wid * 0.36, y - 0.02, z)
+		r.position = Vector3(lens.position.x - signf(lens.position.x)*(lens.size.x*0.5+0.045),lens.position.y,z)
 		r.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		r.visible = false
 		_body.add_child(r)
@@ -262,18 +266,21 @@ func enable_lights(shadows: bool, night := false) -> void:
 	# Two dipped-beam headlamps: a wide, soft-edged spread that lights the road ahead and the verges,
 	# brightest close in and fading with distance (no hard central hot-spot).
 	var lamp: Vector3 = _model["lamp"]
-	for xs in [-0.5, 0.5]:
+	var mounts: PackedVector3Array = _model.beam_mounts
+	for i in mounts.size():
+		var mount := mounts[i]
+		var main_lens := mount.z >= half_len - 0.10
 		var sl := SpotLight3D.new()
 		sl.light_color = Color("#ffe6c0")
-		sl.light_energy = 7.0 if night else 2.4
+		sl.light_energy = (14.0 if night else 4.8) / mounts.size()
 		sl.spot_range = 60.0 if night else 38.0
-		sl.spot_angle = 52.0
+		sl.spot_angle = 36.0 if main_lens else 22.0
 		sl.spot_angle_attenuation = 2.6
 		sl.spot_attenuation = 0.85 if night else 1.4
-		sl.shadow_enabled = shadows and xs > 0.0
+		sl.shadow_enabled = shadows and main_lens and (i == 0 or (i > 0 and mount.x*mounts[i-1].x < 0))
 		sl.shadow_bias = 0.08
-		sl.position = lamp + Vector3(xs * half_wid * 1.2, 0.05, 0.1)
-		sl.rotation = Vector3(-0.07, PI + xs * 0.1, 0.0)
+		sl.position = mount
+		sl.rotation = Vector3(-0.085, PI + signf(mount.x)*0.035, 0.0)
 		_body.add_child(sl)
 		_lights.append(sl)
 	var tail := OmniLight3D.new()
@@ -321,7 +328,7 @@ func add_damage(at: Vector2, strength: float) -> void:
 	for i in vertices.size():
 		var original := _pristine_shell[i]
 		vertices[i] = _crush_point(original, vertices[i], center, outward, radius, crush)
-	for light in _brake_lamps + _rev_lamps:
+	for light in _brake_lamps + _rev_lamps + _lights:
 		if not light.has_meta("undamaged_position"):
 			light.set_meta("undamaged_position", light.position)
 		light.position = _crush_point(light.get_meta("undamaged_position"), light.position, center, outward, radius, crush)
@@ -425,7 +432,7 @@ func step(dt: float) -> void:
 	track_i = hit[0]
 	s = hit[1]
 	lat = hit[2]
-	on_road = absf(lat) <= track.width * 0.5 + 0.2
+	on_road = absf(lat) <= track.road_half_width(s) + 0.2
 	var wgrip := stage.grip()
 	var offroad: float = stats.get("offroad", 0.3)
 	surface = wgrip * (1.0 if on_road else lerpf(0.8, 0.97, offroad))
@@ -526,7 +533,7 @@ func step(dt: float) -> void:
 		target_w *= 1.12
 		target_w += -steer * 0.25 * thr
 	if hb > 0.0 and not frozen:
-		target_w *= 1.4
+		target_w *= 1.0 + 0.95 * hb * smoothstep(2.0, 9.0, sp)
 	var resp := clampf(dt * (5.0 + 4.0 * surface), 0.0, 1.0) * grounded
 	yaw_rate = lerpf(yaw_rate, target_w, resp)
 	h += yaw_rate * dt
@@ -535,7 +542,7 @@ func step(dt: float) -> void:
 	r = right_axis()
 	vl = vel.dot(f)
 	vt = vel.dot(r)
-	var mu := BASE_MU * float(stats["grip"]) * surface * (0.42 if (hb > 0.0 and not frozen) else 1.0)
+	var mu := BASE_MU * float(stats["grip"]) * surface * lerpf(1.0, 0.23, hb if not frozen else 0.0)
 	if drive == "rwd" and thr > 0.6:
 		mu *= 0.88
 	elif drive == "fwd":
@@ -543,7 +550,7 @@ func step(dt: float) -> void:
 	var max_dv := mu * dt * grounded
 	var removed := clampf(vt, -max_dv, max_dv)
 	vt -= removed
-	vt *= 1.0 - clampf(dt * 0.6, 0.0, 1.0)
+	vt *= 1.0 - clampf(dt * lerpf(0.6, 0.30, hb), 0.0, 1.0)
 	# Sliding scrubs speed; a little lateral energy carries forward (rally momentum).
 	slip = clampf(absf(vt) / maxf(absf(vl), 4.0), 0.0, 1.0)
 	vl *= 1.0 - slip * 0.35 * dt

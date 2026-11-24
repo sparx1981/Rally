@@ -481,7 +481,7 @@ func road_h(s: float) -> float:
 
 ## Height of whatever the car stands on: the road inside its edges, the landscape outside.
 func surface_height(p: Vector2, s: float, lat: float) -> float:
-	if absf(lat) <= width * 0.5 + 0.1:
+	if absf(lat) <= road_half_width(s) + 0.1:
 		return road_h(s)
 	if terrain:
 		return terrain.height(p)
@@ -695,7 +695,7 @@ func build_barriers(seed_v: int, kinds: Array) -> void:
 	var n := pts.size()
 	var s := 70.0
 	while s < finish_s - 120.0:
-		var kind: String = kinds[rng.randi() % kinds.size()]
+		var kind: String = kinds[bridges.size() % kinds.size()] if "girder" in kinds else kinds[rng.randi() % kinds.size()]
 		var run := rng.randf_range(50.0, 150.0) if kind == "armco" else rng.randf_range(70.0, 200.0)
 		# Armco on the outside of the bend (or the side the land falls away), fences either side.
 		var side := -1.0 if rng.randf() < 0.5 else 1.0
@@ -729,7 +729,8 @@ func build_bridges(seed_v: int, kinds: Array) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_v * 13 + 5
 	var want := clampi(int(length / 3500.0) + 1, 1, 4)
-	for ci in _candidates(-14, 14, 1.0 / 160.0):
+	var candidates := _candidates(-12, 12, 1.0 / 72.0) if "girder" in kinds else _candidates(-14, 14, 1.0 / 160.0)
+	for ci in candidates:
 		if bridges.size() >= want:
 			break
 		var sc: float = dist[ci]
@@ -746,8 +747,9 @@ func build_bridges(seed_v: int, kinds: Array) -> void:
 				break
 		if not ok:
 			continue
-		var kind: String = kinds[rng.randi() % kinds.size()]
-		var half := 11.0 if kind == "stone" else 10.0
+		var kind: String = kinds[bridges.size() % kinds.size()] if "girder" in kinds else kinds[rng.randi() % kinds.size()]
+		var long_span := kind in ["truss", "girder"]
+		var half := 24.0 if long_span else (11.0 if kind == "stone" else 10.0)
 		flatten_at(sc, half + 4.0, 16.0)
 		var base := elev[ci]
 		if kind == "stone":
@@ -756,7 +758,7 @@ func build_bridges(seed_v: int, kinds: Array) -> void:
 				var u := absf(dist[i] - sc) / (half + 6.0)
 				if u < 1.0:
 					elev[i] += 0.85 * pow(cos(u * PI * 0.5), 2.0)
-		var water_y := base - (3.6 if kind == "stone" else 3.9)
+		var water_y := base - (12.0 if long_span else 3.6 if kind == "stone" else 3.9)
 		# River runs straight across the road; it stops before it meets another stretch of road.
 		var ends: Array = []
 		for side: float in [-1.0, 1.0]:
@@ -767,8 +769,16 @@ func build_bridges(seed_v: int, kinds: Array) -> void:
 					break
 				t += 4.0
 			ends.append(pts[ci] + nrm[ci] * side * t)
-		bridges.append({"s": sc, "kind": kind, "half": half, "a": ends[0], "b": ends[1], "water_y": water_y, "i": ci})
+		bridges.append({"s": sc, "kind": kind, "half": half, "a": ends[0], "b": ends[1], "water_y": water_y, "channel": 14.0 if long_span else 5.5, "dry": kind == "girder", "i": ci})
 	bridges.sort_custom(func(a, b): return a["s"] < b["s"])
+
+
+func road_half_width(s: float) -> float:
+	var br := bridge_at(s, 12.0)
+	if br.get("kind") == "stone":
+		var approach := absf(s - float(br.s)) - float(br.half)
+		return width * lerpf(0.34, 0.5, smoothstep(1.0, 12.0, approach))
+	return width * 0.5
 
 
 ## Bridge at s (within its deck plus `margin`), or {}.
@@ -808,7 +818,8 @@ var watercourses: Array[Watercourse] = []
 func index_watercourses() -> void:
 	watercourses.clear()
 	for br in bridges:
-		watercourses.append(Watercourse.new(br["a"], br["b"], 5.5))
+		if not br.dry:
+			watercourses.append(Watercourse.new(br.a, br.b, br.channel))
 	for f in features:
 		if f["type"] == "splash":
 			var i: int = f["i"]
@@ -854,7 +865,7 @@ func overlaps_water(p: Vector2, radius: float) -> bool:
 func add_bridge_barriers() -> void:
 	for b in bridges:
 		for side: float in [-1.0, 1.0]:
-			barriers.append({"s0": float(b["s"]) - float(b["half"]) - 1.5, "s1": float(b["s"]) + float(b["half"]) + 1.5, "side": side, "kind": "parapet"})
+			barriers.append({"s0": float(b["s"]) - float(b["half"]) - 1.5, "s1": float(b["s"]) + float(b["half"]) + 1.5, "side": side, "kind": "parapet", "wall": road_half_width(b.s) + (0.0 if b.kind == "stone" else Stage.BARRIER_LAT)})
 
 
 ## Coast: Armco wherever the land drops away into the sea beside the road.

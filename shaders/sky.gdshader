@@ -8,6 +8,8 @@ uniform vec3 light_dir;
 uniform vec2 offset;
 uniform float cover;
 uniform bool night;
+uniform bool peaks;
+uniform bool snowcaps;
 uniform sampler2D paper_noise : repeat_enable, filter_linear_mipmap;
 
 void sky() {
@@ -25,4 +27,20 @@ void sky() {
 		base += step(0.984, hash) * (1.0 - smoothstep(0.06, 0.27, length(fract(star_uv)-0.5))) * height * 0.53;
 	}
 	COLOR = mix(base, mix(cloud_ink.rgb, horizon.rgb, rim * 0.30), sheets * smoothstep(-0.015, 0.12, EYEDIR.y) * 0.86);
+
+	if (peaks) {
+		float angle = atan(EYEDIR.z, EYEDIR.x) + offset.x * 4.0;
+		for (int layer = 0; layer < 2; layer++) {
+			float a = angle + float(layer) * 1.7;
+			float ridge = 0.045 + 0.14 * abs(fract(a*3.0/6.2831853)*2.0-1.0) + 0.075 * abs(fract(a*9.0/6.2831853)*2.0-1.0) + 0.032 * abs(fract(a*23.0/6.2831853)*2.0-1.0);
+			ridge *= layer == 0 ? 1.0 : 0.62;
+			vec3 rock = mix(horizon.rgb, zenith.rgb * 0.58, layer == 0 ? 0.32 : 0.55);
+			float facing = smoothstep(-0.1, 0.1, sin(a*7.0)*cos(a*7.0));
+			rock *= mix(0.89, 1.06, facing);
+			if (snowcaps && layer == 0 && EYEDIR.y > ridge * 0.65 + 0.035) {
+				rock = mix(rock, horizon.rgb, 0.65 + 0.16*facing);
+			}
+			COLOR = mix(COLOR, rock, 1.0 - smoothstep(ridge-0.001, ridge+0.001, EYEDIR.y));
+		}
+	}
 }

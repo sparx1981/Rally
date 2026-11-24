@@ -72,7 +72,7 @@ func build(stage_def: Dictionary, time_of_day := -1) -> void:
 	track.index_watercourses()
 	track.build_barriers(int(def["seed"]), def.get("barriers", []))
 	track.terrain = Terrain.new()
-	var bank_height: float = {"canyon": 6.4, "alpine": 7.2, "moor": 3.2, "autumn": 4.2, "pinewood": 2.6}.get(def["loc_id"], 0.0)
+	var bank_height: float = {"gorge": 8.5, "canyon": 6.4, "alpine": 7.2, "moor": 3.2, "autumn": 4.2, "pinewood": 2.6}.get(def["loc_id"], 0.0)
 	track.terrain.build(track, float(ep.get("hills", 10.0)), int(def["seed"]) + 5, 1.0, bank_height, def["loc_id"] in ["meadow", "moor", "pinewood", "autumn"])
 	if def.has("coast"):
 		var cst: Dictionary = def["coast"]
@@ -82,7 +82,7 @@ func build(stage_def: Dictionary, time_of_day := -1) -> void:
 		track.terrain.make_coast(track, lo + float(cst["sea"]), float(cst["edge"]), bool(cst.get("beach", false)), int(def["seed"]) + 9)
 		track.add_cliff_barriers()
 	for br in track.bridges:
-		track.terrain.carve_river(br["a"], br["b"], br["water_y"])
+		track.terrain.carve_river(br["a"], br["b"], br["water_y"], br.channel)
 	for f in track.features:
 		if f["type"] == "splash":
 			var i: int = f["i"]
@@ -107,6 +107,8 @@ func build(stage_def: Dictionary, time_of_day := -1) -> void:
 	scenery.landmark = landmark
 	scenery.lights_on = bool(wx.get("headlights", false))
 	add_child(scenery)
+	if def.loc_id in ["alpine", "gorge"]:
+		_overhead_crossing()
 	scenery.setup(track, def, paper_mat, float(Settings.g("density")), float(Settings.g("draw_distance")), bool(Settings.g("popups")))
 	_make_puddles()
 	_make_parc_ferme()
@@ -219,6 +221,8 @@ func _make_lights() -> void:
 	sky_mat.set_shader_parameter("light_dir", sun)
 	sky_mat.set_shader_parameter("cover", 0.44 if wet else 0.54)
 	sky_mat.set_shader_parameter("night", tod == 2)
+	sky_mat.set_shader_parameter("peaks", def.loc_id in ["gorge", "alpine", "canyon"])
+	sky_mat.set_shader_parameter("snowcaps", def.loc_id == "alpine")
 	sky_mat.set_shader_parameter("offset", Vector2(float(def["seed"] % 197) / 197.0, float(def["loc"]) * 0.08))
 	sky_mat.set_shader_parameter("paper_noise", noise_tex())
 	env.sky = Sky.new()
@@ -272,7 +276,6 @@ func _make_ground() -> void:
 
 func _make_road() -> void:
 	var n := track.pts.size()
-	var hw := track.width * 0.5
 	var chunk := 60
 	var i0 := 0
 	while i0 < n - 1:
@@ -284,6 +287,7 @@ func _make_road() -> void:
 		var idx := PackedInt32Array()
 		for i in range(i0, i1 + 1):
 			var p := track.pts[i]
+			var hw := track.road_half_width(track.dist[i])
 			var l := p + track.nrm[i] * hw
 			var r := p - track.nrm[i] * hw
 			var vv := track.dist[i] / track.width
@@ -355,6 +359,33 @@ func _make_gantries() -> void:
 		line.rotation.y = track.heading_at(i)
 		line.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(line)
+		var rng := RandomNumberGenerator.new()
+		rng.seed = int(def.seed) + i
+		for row in 3:
+			var approach := s + (row+1)*6.0 * (-1.0 if pair[1] else 1.0)
+			var j := track.index_at(approach)
+			for side: float in [-1,1]:
+				var xy := track.pts[j] + track.nrm[j]*side*(track.width*0.5+1.4)
+				var flag := MeshInstance3D.new()
+				flag.mesh = Pieces.feather_flag(rng).mesh
+				flag.material_override = paper_mat
+				flag.position = Vector3(xy.x, track.terrain.height(xy), xy.y)
+				flag.rotation.y = track.heading_at(j) + PI
+				add_child(flag)
+		var j := track.index_at(s + (-30 if pair[1] else 30))
+		var portal := MeshInstance3D.new()
+		portal.mesh = Pieces.split_gantry(track.width+4.0)
+		portal.position = Vector3(track.pts[j].x,track.road_h_i(j),track.pts[j].y)
+		portal.rotation.y = track.heading_at(j)
+		portal.material_override = paper_mat
+		add_child(portal)
+		var sponsor := Label3D.new()
+		sponsor.text = "Polyform Studio" if pair[1] else "Paper Rally"
+		sponsor.font_size = 64
+		sponsor.pixel_size = 0.011
+		sponsor.position = Vector3(0,4.5,-0.18)
+		sponsor.rotation.y = PI
+		portal.add_child(sponsor)
 	# Intermediate split banners on clear sections of the organised road rallies.
 	if def["loc_id"] in ["meadow", "harbour", "alpine", "autumn"]:
 		for fraction: float in [0.34, 0.69]:
@@ -659,8 +690,8 @@ func _riverbanks(sheet: MeshInstance3D, length: float, width: float, seed_v: int
 
 ## Bridges and their rivers.
 func _make_bridges() -> void:
-	var hw := track.width * 0.5 + BARRIER_LAT
 	for br in track.bridges:
+		var hw := track.road_half_width(br.s) + (0.0 if br.kind == "stone" else BARRIER_LAT)
 		var b := PaperKit.Builder.new(int(br["s"]))
 		var sc: float = br["s"]
 		var half: float = br["half"]
@@ -674,11 +705,12 @@ func _make_bridges() -> void:
 		var mid := (a + e) * 0.5
 		var along := e - a
 		var water := Color("#5d8fae") if def["weather"].begins_with("dry") else Color("#5b7f90")
-		var river := _water_sheet(along.length(), 5.5, water, int(sc))
-		river.position = Vector3(mid.x, wy, mid.y)
-		river.rotation.y = atan2(along.x, along.y)
-		add_child(river)
-		_riverbanks(river, along.length(), 5.5, int(sc))
+		if not br.dry:
+			var river := _water_sheet(along.length(), br.channel, water, int(sc))
+			river.position = Vector3(mid.x, wy, mid.y)
+			river.rotation.y = atan2(along.x, along.y)
+			add_child(river)
+			_riverbanks(river, along.length(), br.channel, int(sc))
 		# Local frame at the centre of the deck: x along the road, z across it, y up.
 		var ybase := track.road_h_i(ci) - 0.85 if br["kind"] == "stone" else track.road_h_i(ci)
 		var org := Vector3(c2.x, 0.0, c2.y)
@@ -686,6 +718,8 @@ func _make_bridges() -> void:
 		var fz := Vector3(n2.x, 0, n2.y)
 		if br["kind"] == "stone":
 			_stone_bridge(b, org, fx, fz, sc, half, hw, wy, ybase)
+		elif br.kind in ["truss", "girder"]:
+			_long_bridge(b, br, hw)
 		else:
 			_covered_bridge(b, org, fx, fz, sc, half, hw, wy, ybase)
 		var mi := MeshInstance3D.new()
@@ -751,7 +785,7 @@ func _stone_bridge(b: PaperKit.Builder, org: Vector3, fx: Vector3, fz: Vector3, 
 	# Abutment piers down into the water.
 	for sgn: float in [-1.0, 1.0]:
 		var pc: Vector3 = org + fx * sgn * (arch_a + 0.6)
-		b.box(pc + Vector3(0, wy - 0.4, 0), Vector3(1.6, 1.6, (hw + 0.6) * 2.0), Transform3D(Basis(fx, Vector3.UP, fx.cross(Vector3.UP)), Vector3.ZERO), STONE_DARK)
+		b.box(Vector3.ZERO, Vector3(1.6, 1.6, (hw + 0.6) * 2.0), Transform3D(Basis(fx, Vector3.UP, fx.cross(Vector3.UP)), pc + Vector3.UP*(wy-0.4)), STONE_DARK)
 
 
 func _covered_bridge(b: PaperKit.Builder, org: Vector3, fx: Vector3, fz: Vector3, sc: float, half: float, hw: float, wy: float, ybase: float) -> void:
@@ -1278,3 +1312,99 @@ func grip() -> float:
 
 func kind() -> String:
 	return wx["kind"]
+
+
+func _long_bridge(b: PaperKit.Builder, br: Dictionary, hw: float) -> void:
+	var paint := Color("#586e70") if br.kind == "truss" else Color("#835f4f")
+	for side: float in [-1, 1]:
+		for bay in 8:
+			var ends: Array[Vector3] = []
+			for k in [bay, bay + 1]:
+				var s := float(br.s) + lerpf(-float(br.half), float(br.half), k / 8.0)
+				var i := track.index_at(s)
+				var xy := track.pts[i] + track.nrm[i] * hw * side
+				ends.append(Vector3(xy.x, track.road_h_i(i), xy.y))
+			var a := ends[0]
+			var z := ends[1]
+			var rise := Vector3.UP * (3.4 if br.kind == "truss" else 1.0)
+			_structural_member(b, a - Vector3.UP*0.42, z - Vector3.UP*0.42, 0.38, 0.85, paint)
+			_structural_member(b, a + rise, z + rise, 0.16, 0.19, paint)
+			_structural_member(b, a, a + rise, 0.15, 0.16, paint)
+			if br.kind == "truss":
+				_structural_member(b, a + rise if bay % 2 else a, z if bay % 2 else z + rise, 0.14, 0.16, paint)
+			if bay == 7:
+				_structural_member(b, z, z + rise, 0.15, 0.16, paint)
+			if bay in [1, 7]:
+				var footing := track.terrain.height(Vector2(a.x,a.z)) - 1.6
+				_structural_member(b, Vector3(a.x, minf(footing, a.y-1.0), a.z), a, 1.45, 1.6, STONE_DARK)
+
+
+func _structural_member(b: PaperKit.Builder, a: Vector3, z: Vector3, w: float, h: float, ink: Color) -> void:
+	var dir := a.direction_to(z)
+	var up := Vector3.BACK if absf(dir.y) > 0.98 else Vector3.UP
+	b.box(Vector3.ZERO, Vector3(w,h,a.distance_to(z)), Transform3D(Basis.looking_at(dir,up), (a+z)*0.5), ink)
+
+
+func _overhead_crossing() -> void:
+	var ski: bool = def.loc_id == "alpine"
+	var choice := -1
+	var score := -INF
+	for i in range(track.index_at(track.finish_s*0.26), track.index_at(track.finish_s*0.75), 5):
+		var s := track.dist[i]
+		if not track.bridge_at(s, 35).is_empty() or absf(track.heights[i]) > 0.05 or track.overlaps_water(track.pts[i], 18):
+			continue
+		var slope := absf(track.terrain.height(track.pts[i]+track.nrm[i]*19)-track.terrain.height(track.pts[i]-track.nrm[i]*19))
+		var rank := slope - 50.0*track.curv_abs[i]
+		if rank > score:
+			choice = i
+			score = rank
+	if choice < 0:
+		return
+	var center := track.pts[choice]
+	var origin := Vector3(center.x,track.road_h_i(choice),center.y)
+	var t := track.tang[choice]
+	var span := Vector3(-t.y,0,t.x)
+	var along := Vector3(t.x,0,t.y)
+	var b := PaperKit.Builder.new(choice)
+	var steel := Color("#576566")
+	var half := 19.0 if ski else 12.0
+	var deck := 10.0 if ski else 6.3
+	for side: float in [-1,1]:
+		var post := span * half * side
+		var floor_y := track.terrain.height(center+Vector2(post.x,post.z)) - origin.y
+		if not ski:
+			var toe := post + span*side*11.0
+			var toe_y := track.terrain.height(center+Vector2(toe.x,toe.z))-origin.y
+			var lip := post + Vector3.UP*(deck-0.2)
+			toe.y = toe_y
+			b.slab(lip-along*2.25,lip+along*2.25,toe+along*2.25,toe-along*2.25,0.35,STONE_DARK)
+			for edge: float in [-1,1]:
+				b.slab(lip+along*edge*2.25,toe+along*edge*2.25,toe+along*edge*3.4-Vector3.UP,post+along*edge*3.4+Vector3.UP*(floor_y-1),0.15,STONE_DARK)
+		for rail: float in [-1,1]:
+			var base := post + along * rail * 1.6
+			var xy := center + Vector2(base.x,base.z)
+			scenery.fixed_supports.append(Vector3(xy.x,xy.y,0.46 if ski else 0.95))
+			_structural_member(b,base+Vector3.UP*(minf(floor_y,deck-1)-0.4),base+Vector3.UP*deck,0.32 if ski else 1.3,0.35 if ski else 1.4,steel)
+		_structural_member(b,post-along*2.1+Vector3.UP*deck,post+along*2.1+Vector3.UP*deck,0.4,0.4,steel)
+	for rail: float in [-1,1]:
+		var offset := along*rail*1.6
+		for section in 10:
+			var a := lerpf(-half,half,section/10.0)
+			var z := lerpf(-half,half,(section+1)/10.0)
+			var left := span*a+offset+Vector3.UP*(deck - (1.1*(1.0-pow(a/half,2)) if ski else 0.0))
+			var right := span*z+offset+Vector3.UP*(deck - (1.1*(1.0-pow(z/half,2)) if ski else 0.0))
+			_structural_member(b,left,right,0.064 if ski else 0.32,0.064 if ski else 0.65,steel)
+			if ski and section % 4 == (1 if rail<0 else 3):
+				_structural_member(b,left,left-Vector3.UP*1.65,0.09,0.09,steel)
+				_structural_member(b,left-Vector3.UP*1.65-along*0.75,left-Vector3.UP*1.65+along*0.75,0.62,0.15,Color("#b95443"))
+				_structural_member(b,left-Vector3.UP*1.43-along*0.75-span*0.26,left-Vector3.UP*1.43+along*0.75-span*0.26,0.12,0.45,steel)
+			elif not ski:
+				for sleeper in 3:
+					var at := left.lerp(right,sleeper/3.0)
+					_structural_member(b,at-along*rail*1.6,at+along*rail*0.4,0.28,0.16,Color("#916e53"))
+	var mi := MeshInstance3D.new()
+	mi.name = "Chairlift" if ski else "RailOverpass"
+	mi.mesh = b.mesh()
+	mi.position = origin
+	mi.material_override = paper_mat
+	add_child(mi)

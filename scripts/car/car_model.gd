@@ -23,8 +23,8 @@ const STYLES := {
 	"groups": {"L": 4.0, "W": 2.0, "low": 0.46, "nose": 0.22, "bon": 1.3, "tail": 0.5, "deck": 0.9, "cab": 0.42, "cab_f": 0.6, "cab_r": -1.05, "rake": 0.66, "back": 0.48, "ride": 0.28, "wr": 0.4, "wing": "big", "arches": true, "lamps": "rect", "louvres": true},
 	"gt4": {"L": 4.2, "W": 1.9, "low": 0.56, "nose": 0.36, "bon": 1.25, "tail": 0.5, "deck": 0.35, "cab": 0.48, "cab_f": 0.48, "cab_r": -1.26, "rake": 0.57, "back": 0.68, "ride": 0.31, "wr": 0.4, "wing": "boot", "arches": false, "lamps": "quad", "pod": true},
 	"integrale": {"L": 3.9, "W": 1.95, "low": 0.62, "nose": 0.5, "bon": 1.0, "tail": 0.56, "deck": 0.15, "cab": 0.62, "cab_f": 0.55, "cab_r": -1.65, "rake": 0.38, "back": 0.12, "ride": 0.34, "wr": 0.41, "wing": "roof", "arches": true, "lamps": "quad", "pod": true, "louvres": true},
-	"impreza": {"L": 4.35, "W": 1.9, "low": 0.62, "nose": 0.48, "bon": 1.2, "tail": 0.58, "deck": 0.7, "cab": 0.56, "cab_f": 0.5, "cab_r": -1.2, "rake": 0.45, "back": 0.4, "ride": 0.34, "wr": 0.41, "wing": "boot_high", "arches": true, "lamps": "rect", "scoop": true, "pod": true},
-	"evo": {"L": 4.35, "W": 1.9, "low": 0.62, "nose": 0.46, "bon": 1.15, "tail": 0.6, "deck": 0.7, "cab": 0.56, "cab_f": 0.5, "cab_r": -1.25, "rake": 0.45, "back": 0.42, "ride": 0.33, "wr": 0.41, "wing": "big", "arches": true, "lamps": "rect", "scoop": true},
+	"impreza": {"L": 4.35, "W": 1.9, "low": 0.62, "nose": 0.48, "bon": 1.2, "tail": 0.48, "deck": 0.92, "cab": 0.54, "cab_f": 0.5, "cab_r": -1.16, "rake": 0.45, "back": 0.52, "ride": 0.34, "wr": 0.41, "wing": "boot_high", "arches": true, "lamps": "rect", "scoop": true, "pod": true},
+	"evo": {"L": 4.35, "W": 1.9, "low": 0.62, "nose": 0.46, "bon": 1.15, "tail": 0.67, "deck": 0.48, "cab": 0.60, "cab_f": 0.5, "cab_r": -1.4, "rake": 0.45, "back": 0.30, "ride": 0.33, "wr": 0.41, "wing": "big", "arches": true, "lamps": "rect", "scoop": true},
 	"wrc": {"L": 4.15, "W": 1.98, "low": 0.62, "nose": 0.46, "bon": 1.05, "tail": 0.58, "deck": 0.15, "cab": 0.58, "cab_f": 0.5, "cab_r": -1.6, "rake": 0.55, "back": 0.22, "ride": 0.33, "wr": 0.41, "wing": "roof_big", "arches": true, "lamps": "rect", "scoop": true},
 	"rally2": {"L": 3.88, "W": 1.9, "low": 0.6, "nose": 0.44, "bon": 1.0, "tail": 0.56, "deck": 0.15, "cab": 0.64, "cab_f": 0.59, "cab_r": -1.51, "rake": 0.55, "back": 0.25, "ride": 0.32, "wr": 0.4, "wing": "roof", "arches": true, "lamps": "rect"},
 	"rally1": {"L": 4.24, "W": 2.0, "low": 0.6, "nose": 0.4, "bon": 1.05, "tail": 0.6, "deck": 0.15, "cab": 0.50, "cab_f": 0.53, "cab_r": -1.64, "rake": 0.6, "back": 0.25, "ride": 0.32, "wr": 0.42, "wing": "twin_roof", "arches": true, "lamps": "rect", "louvres": true},
@@ -86,7 +86,11 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 	var top_y := y0 + low
 	var nose_y := y0 + float(P["nose"])
 	var tail_y := y0 + float(P["tail"])
+	var beams := PackedVector3Array()
+	var rear_lenses: Array[Rect2] = []
 	if style == "buggy":
+		for side: float in [-1,1]:
+			beams.append(Vector3(side*W*0.22,y0+0.42,L*0.48+0.065))
 		_buggy(b, P, body_c, acc, stripe)
 	else:
 		# Body: a folded side profile with a sloped nose and tail.
@@ -137,6 +141,13 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 			for q in inset:
 				win2.append(Vector2(-q.x * xs, q.y))
 			b.card(win2, side, glass, {"thick": 0.015, "edge": 0.025, "lip": 0.02})
+			if style in ["impreza","evo"]:
+				var bottom := inset[0].lerp(inset[1], 0.18 if style == "evo" else 0.23)
+				var upper := inset[3].lerp(inset[2], 0.14 if style == "evo" else 0.04)
+				var pillar := PackedVector2Array()
+				for pt: Vector2 in [bottom, bottom+Vector2(0.05,0), upper+Vector2(0.05,0), upper]:
+					pillar.append(Vector2(-pt.x*xs,pt.y))
+				b.card(pillar,side.translated_local(Vector3.BACK*0.025),cab_col,{"edge":0.0,"lip":0.0,"thick":0.01})
 			# B-pillar for four-door shapes.
 			if float(P["cab_f"]) - float(P["cab_r"]) > 1.55:
 				var bz := (cab_r + cab_f) * 0.5 - 0.05
@@ -171,6 +182,9 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 		var lamp_y := y0 + (float(P["nose"]) - 0.05) * 0.72
 		var lamps: String = {"wrc": "split", "rally1": "blade", "rally2": "taper", "evo": "taper"}.get(style, P["lamps"])
 		for xs in [1.0, -1.0]:
+			var emitter_x := W * (0.32 if lamps in ["blade","taper"] else 0.30)
+			if lamps not in ["quad","split"]:
+				beams.append(Vector3(xs*emitter_x,lamp_y,front.origin.z+0.038))
 			match lamps:
 				"blade", "taper":
 					var lamp_x: float = xs * W * 0.32
@@ -180,17 +194,27 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 					b.card(lens,front,Color("#fff4d4"),{"thick":0.025,"edge":0.025,"glow":true})
 				"split":
 					for segment in 2:
+						beams.append(Vector3(xs*(W*0.25+segment*0.18),lamp_y+0.02,front.origin.z+0.038))
 						b.card(PaperKit.rrect(0.16,0.105,0.028,xs*(W*0.25+segment*0.18),lamp_y-0.032),front,Color("#fff3cc"),{"thick":0.025,"glow":true})
 				"round":
 					b.card(PaperKit.circle(0.12, xs * W * 0.3, lamp_y, 12), front, Color("#fff0c8"), {"thick": 0.02, "edge": 0.025, "lip": 0.0, "glow": true})
 				"quad":
 					for k in 2:
+						beams.append(Vector3(xs*(W*0.2+k*0.2),lamp_y,front.origin.z+0.038))
 						b.card(PaperKit.circle(0.085, xs * (W * 0.2 + k * 0.2), lamp_y, 10), front, Color("#fff0c8"), {"thick": 0.02, "edge": 0.02, "lip": 0.0, "glow": true})
 				"popup":
 					b.card(PaperKit.rrect(0.38, 0.09, 0.03, xs * W * 0.3, lamp_y - 0.02), front, Color("#fff0c8"), {"thick": 0.02, "edge": 0.02, "lip": 0.0, "glow": true})
 				_:
 					b.card(PaperKit.rrect(W * 0.24, 0.13, 0.04, xs * W * 0.3, lamp_y - 0.04), front, Color("#fff0c8"), {"thick": 0.02, "edge": 0.025, "lip": 0.0, "glow": true})
-			b.card(PaperKit.rrect(W * 0.18, 0.12, 0.04, xs * W * 0.33, y0 + float(P["tail"]) * 0.7), back, Color("#d84a32"), {"thick": 0.02, "edge": 0.025, "lip": 0.0, "glow": true})
+			var lens_size := Vector2(W*0.18,0.12)
+			if style == "evo":
+				lens_size = Vector2(0.21,0.24)
+			elif style == "impreza":
+				lens_size = Vector2(0.41,0.105)
+			var lens := Rect2(Vector2(xs*W*0.33,y0+float(P.tail)*0.73), lens_size)
+			b.card(PaperKit.rrect(lens.size.x,lens.size.y,0.032,lens.position.x,lens.position.y-lens.size.y*0.5),back,Color("#c84738"),{"thick":0.02,"edge":0.018,"lip":0.0,"glow":true})
+			rear_lenses.append(lens)
+
 		var grille := Transform3D(Basis(), Vector3(0, y0 + float(P["nose"]) * 0.38, L * 0.5 + 0.022))
 		b.box(Vector3.ZERO, Vector3(W * 0.30, 0.105, 0.022), grille, ink)
 		for slat in 3:
@@ -282,6 +306,7 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 			b.box(Vector3(0, pod_y, pod_z), Vector3(W * 0.66, 0.14, 0.14), I, ink)
 			for k in 4:
 				var lx := -W * 0.25 + k * W * 0.167
+				beams.append(Vector3(lx,pod_y+0.02,pod_z+0.11))
 				b.card(PaperKit.circle(0.09, lx, pod_y + 0.02, 10), Transform3D(Basis(), Vector3(0, 0, pod_z + 0.08)), Color("#fff4d6"), {"thick": 0.02, "edge": 0.02, "lip": 0.0, "glow": true})
 		# Bonnet retaining pins follow the sloped leading panel on each side.
 		var nose_run := L * 0.5 - float(P["bon"])
@@ -322,6 +347,12 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 			point.x *= width_scale
 			b.v[i] = point
 
+	for i in beams.size():
+		var t := clampf((absf(beams[i].z)-L*0.5+0.42)/0.42,0.0,1.0)
+		beams[i].x *= 1.0-taper.x*smoothstep(0,1,t)
+	for i in rear_lenses.size():
+		rear_lenses[i].position.x *= 1.0-taper.y
+		rear_lenses[i].size.x *= 1.0-taper.y
 	var root := Node3D.new()
 	var body := Node3D.new()
 	root.add_child(body)
@@ -352,7 +383,7 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 	if style == "buggy":
 		head = Vector3(0.0, y0 + 1.0, 0.0)
 	return {"root": root, "body": body, "wheels": wheels, "length": L, "width": W, "wheel_r": wr, "head": head,
-		"lamp": Vector3(0, y0 + float(P["nose"]) * 0.7, L * 0.5 + 0.1), "style": style}
+		"lamp": Vector3(0, y0 + float(P["nose"]) * 0.7, L * 0.5 + 0.1), "style": style, "beam_mounts": beams, "rear_lenses": rear_lenses}
 
 
 static func _bonnet_print(b: PaperKit.Builder, paint: String, acc: Color, width: float, rear_z: float, tip_z: float, rear_y: float, tip_y: float) -> void:

@@ -1,7 +1,7 @@
 class_name RegionalLandmark
 extends MeshInstance3D
-## One recognisable, terrain-fitted roadside scene per route in these five regions.
-const REGIONS := ["harbour", "alpine", "pinewood", "lakes", "moor"]
+## One recognisable, terrain-fitted roadside scene per route in selected regions.
+const REGIONS := ["harbour", "alpine", "pinewood", "lakes", "moor", "canyon", "autumn"]
 const TIMBER := Color("#8c6849")
 const STEEL := Color("#50595b")
 const RUBBER := Color("#353537")
@@ -33,7 +33,7 @@ func build(region: String, course: Track, mat: Material) -> bool:
 				if not track.terrain.is_sea(p + axis * 20) or track.terrain.is_sea(p - axis * 4):
 					continue
 				score -= absf(y - track.terrain.sea_y - 1.8)
-			elif region == "alpine":
+			elif region in ["alpine", "canyon"]:
 				score = minf(slope, 6.0) + 8.0 * (1.0 - track.tang[i-9].dot(track.tang[i+9]))
 			if score > best:
 				best = score
@@ -51,6 +51,8 @@ func build(region: String, course: Track, mat: Material) -> bool:
 		"pinewood": _loading_bay()
 		"lakes": _ice_camp()
 		"moor": _sheepfold()
+		"canyon": _quarry()
+		"autumn": _press_house()
 	mesh = _builder.mesh()
 	material_override = mat
 	visibility_range_end = 200.0
@@ -227,3 +229,53 @@ func _sheepfold() -> void:
 	for plank in 18:
 		var at := a.lerp(b,(plank+0.5)/18.0)
 		_builder.box(at+Vector3.UP*0.09,Vector3(0.39,0.09,1.65),Transform3D(),TIMBER.lightened(0.03*(plank%3)))
+
+
+func _quarry() -> void:
+	# Split sandstone faces step back from the working floor on the uphill verge.
+	for tier in 3:
+		for block in 6:
+			var x := 2.0+tier*1.65+0.35*sin(block*2.1)
+			var z := (block-2.5)*2.5
+			var base := _foot(x,z)
+			var h := 1.5+tier*0.9
+			_builder.box(base+Vector3.UP*(h*0.5-0.2),Vector3(2.0,h,2.58),Transform3D(),Color("#ae7959").lightened(0.035*((block+tier)%3)))
+			_builder.box(base+Vector3.UP*(h-0.2),Vector3(2.1,0.24,2.62),Transform3D(),Color("#d7ad80"))
+			if tier == 0:
+				_solid(x,z,1.25)
+	var a := _foot(-4,-4)+Vector3.UP*0.72
+	var z := _foot(-1.6,3)+Vector3.UP*2.65
+	_beam(a,z,1.1,0.22,STEEL)
+	for i in 5:
+		var at := a.lerp(z,i/4.0)
+		for side: float in [-0.57,0.57]:
+			var foot := _foot(at.x+side,at.z)
+			_beam(foot,at+Vector3.RIGHT*side,0.13,0.13,TIMBER)
+		_solid(at.x,at.z,0.65)
+
+
+func _press_house() -> void:
+	track.terrain.flatten_disc(_origin,5.8,_base,3.0)
+	var plaster := Color("#d5bc97")
+	var tile := Color("#9f5946")
+	var xf := Transform3D()
+	_builder.box(Vector3(0,0.15,0),Vector3(6.2,0.40,8.0),xf,Color("#918473"))
+	_builder.box(Vector3(2.8,1.7,0),Vector3(0.4,3.1,7.8),xf,plaster)
+	for side: float in [-1,1]:
+		_builder.box(Vector3(0,1.7,side*3.7),Vector3(6,3.1,0.35),xf,plaster)
+		_beam(Vector3(-2.85,0.2,side*2.1),Vector3(-2.85,3.2,side*2.1),0.21,0.21,TIMBER)
+		_builder.slab(Vector3(side*3.45,3.15,-4.3),Vector3(side*3.45,3.15,4.3),Vector3(0,4.7,4.3),Vector3(0,4.7,-4.3),0.22,tile)
+		for station in 3:
+			_solid(-2.0+2*station,side*3.7,1.0)
+	_builder.box(Vector3(-2.85,3.0,0),Vector3(0.27,0.4,7.8),xf,TIMBER)
+	var basket := Transform3D(Basis(Vector3.RIGHT,-PI/2), Vector3(-1,0.95,0))
+	_builder.card(PaperKit.circle(0.89,0,0,12),basket,TIMBER,{"thick":1.05,"lip":0.0})
+	for side: float in [-1.15,1.15]:
+		_builder.box(Vector3(-1,1.55,side),Vector3(0.23,2.5,0.23),xf,TIMBER)
+	_builder.box(Vector3(-1,2.65,0),Vector3(0.38,0.3,2.65),xf,TIMBER)
+	_builder.box(Vector3(-1,2.05,0),Vector3(0.12,1.1,0.12),xf,STEEL)
+	_solid(-1,0,1.2)
+	for k in 4:
+		var crate := _foot(-3.8,-2.7+k*0.78)
+		_builder.box(crate+Vector3.UP*0.25,Vector3(0.83,0.5,0.72),xf,TIMBER.lightened(0.08))
+		_builder.box(crate+Vector3.UP*0.49,Vector3(0.65,0.12,0.55),xf,Color("#775166"))
