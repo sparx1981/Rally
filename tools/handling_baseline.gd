@@ -83,6 +83,9 @@ func _check_split_grip(car: Car) -> void:
 ## happen when an Android controller fails to report the return to rest.
 func _check_brake_recovery(car: Car) -> void:
 	var input := PlayerInput.new()
+	input.detect_android_range = true
+	var mode: int = Settings.g("controller_trigger_mode")
+	Settings.data["controller_trigger_mode"] = PlayerInput.TriggerMode.AUTO
 	var device := PackedInt32Array([4])
 	var left := InputEventJoypadMotion.new()
 	left.device = 4
@@ -99,19 +102,42 @@ func _check_brake_recovery(car: Car) -> void:
 	car._update_rear_lamps()
 	var speed_after_braking := car.speed()
 	var entered_braking := car._brake_light.visible and speed_after_braking < 11.0
-	car.throttle = 1.0
+	var released := left.duplicate() as InputEventJoypadMotion
+	released.axis_value = 0.50
+	Input.parse_input_event(released)
+	Input.flush_buffered_events()
+	car.brake = input.controller_brake(device)
+	car.step(Race.FIXED)
+	car._update_rear_lamps()
+	var midpoint_idle := car.service_brake == 0.0 and not car._brake_light.visible
+	if not midpoint_idle:
+		push_error("Android LT midpoint held the brake without accelerator input")
+		failed = true
+	var stale := left.duplicate() as InputEventJoypadMotion
+	stale.axis_value = 0.95
+	Input.parse_input_event(stale)
+	Input.flush_buffered_events()
+	var right := InputEventJoypadMotion.new()
+	right.device = 4
+	right.axis = JOY_AXIS_TRIGGER_RIGHT
+	right.axis_value = 0.50
+	Input.parse_input_event(right)
+	Input.flush_buffered_events()
+	input.controller_accelerator(device)
+	right = right.duplicate()
+	right.axis_value = 1.0
+	Input.parse_input_event(right)
+	Input.flush_buffered_events()
 	for tick in 90:
+		car.throttle = input.controller_accelerator(device)
 		car.brake = input.controller_brake(device, car.throttle)
 		car.step(Race.FIXED)
 	car._update_rear_lamps()
-	print("Stale LT recovery %.2f -> %.2f m/s, brake light %s" % [speed_after_braking, car.speed(), car._brake_light.visible])
+	print("Android LT midpoint idle %s, stale LT recovery %.2f -> %.2f m/s, brake light %s" % [
+		midpoint_idle, speed_after_braking, car.speed(), car._brake_light.visible])
 	if not entered_braking or car._brake_light.visible or car.speed() < speed_after_braking + 1.0:
-		push_error("Brake lamps or deceleration survived the fresh gas press")
+		push_error("Brake lamps or deceleration survived the gas press")
 		failed = true
-	var released := left.duplicate() as InputEventJoypadMotion
-	released.axis_value = 0.0
-	Input.parse_input_event(released)
-	Input.flush_buffered_events()
 	car.place_at(car.track.start_s, 0.0)
 	car.throttle = 0.0
 	car.brake = 1.0
@@ -123,3 +149,4 @@ func _check_brake_recovery(car: Car) -> void:
 	if not held or car.gear != 0:
 		push_error("Short brake tap or deliberate reverse did not behave as expected")
 		failed = true
+	Settings.data["controller_trigger_mode"] = mode

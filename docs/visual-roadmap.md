@@ -1,5 +1,7 @@
 # Paper Rally visual roadmap
 
+The [Yet to implement section](handling-and-stage-roadmap.md#yet-to-implement) tracks current priorities and verification. The proposals below record the original visual review.
+
 ## Four rally games, four lessons
 
 This review draws on the developers’ public descriptions and store material. The proposals below are original designs for Paper Rally’s folded geometry, printed inks and Android cameras.

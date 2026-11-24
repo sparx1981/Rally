@@ -21,7 +21,7 @@ var data := {
 	"popups": true,            # pop-up / unfolding scenery animation (test toggle)
 	"fps": 60, "show_fps": false,
 	"ai_difficulty": 1, "opponents": 5, "camera": 0, "units": 0,
-	"progressive_trigger": false, "cockpit_fov": 58.0,
+	"progressive_trigger": false, "controller_trigger_mode": 0, "cockpit_fov": 58.0,
 	"touch_mode": 0, "tilt_sens": 1.0, "tilt_invert": false, "touch_controls": 0,
 	"haptics": true, "haptic_strength": 1.0, "phone_vibration": true,
 	"master_vol": 0.8, "sfx_vol": 0.8, "engine_vol": 0.7,
@@ -128,9 +128,6 @@ func load_settings() -> void:
 func _setup_input() -> void:
 	_action("accelerate", 0.1)
 	_key("accelerate", KEY_W); _key("accelerate", KEY_UP)
-	_action("throttle_trigger", 0.0)
-	_joy_axis("throttle_trigger", JOY_AXIS_TRIGGER_RIGHT, 1.0)
-	_joy_btn("accelerate", JOY_BUTTON_A)
 
 	_action("brake", 0.1)
 	_key("brake", KEY_S); _key("brake", KEY_DOWN)

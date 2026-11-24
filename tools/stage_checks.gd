@@ -22,9 +22,9 @@ func _expect(ok: bool, message: String) -> void:
 		_failures += 1
 
 
-func _axis(device: int, pressure: float) -> void:
+func _axis(device: int, pressure: float, axis := JOY_AXIS_TRIGGER_LEFT) -> void:
 	var event := InputEventJoypadMotion.new()
-	event.axis = JOY_AXIS_TRIGGER_LEFT
+	event.axis = axis
 	event.axis_value = pressure
 	event.device = device
 	Input.parse_input_event(event)
@@ -32,6 +32,8 @@ func _axis(device: int, pressure: float) -> void:
 
 
 func _check_brake() -> void:
+	var original_mode: int = Settings.g("controller_trigger_mode")
+	Settings.data["controller_trigger_mode"] = PlayerInput.TriggerMode.AUTO
 	var reader := PlayerInput.new()
 	var pad := PackedInt32Array([4])
 	_axis(4, 0.65)
@@ -54,7 +56,12 @@ func _check_brake() -> void:
 	_axis(4, 0.0)
 	reader.controller_brake(pad, 1.0)
 	_axis(4, 0.78)
-	_expect(reader.controller_brake(pad, 1.0) > 0.8, "New LT press can brake under throttle")
+	_expect(reader.controller_brake(pad, 1.0) == 0.0, "LT cannot reassert itself during throttle")
+	_expect(reader.controller_brake(pad) == 0.0, "LT must first return to rest after acceleration")
+	_axis(4, 0.02)
+	reader.controller_brake(pad)
+	_axis(4, 0.78)
+	_expect(reader.controller_brake(pad) > 0.8, "LT works after returning to rest")
 	_axis(4, 0.0)
 	reader.controller_brake(pad)
 	_axis(7, 0.95)
@@ -67,12 +74,32 @@ func _check_brake() -> void:
 	button.pressed = true
 	Input.parse_input_event(button)
 	Input.flush_buffered_events()
-	_expect(reader.controller_brake(pad) == 1.0, "X applies the brake")
+	_expect(reader.controller_brake(pad, 1.0) == 1.0, "X deliberately applies the brake during throttle")
 	var released := button.duplicate() as InputEventJoypadButton
 	released.pressed = false
 	Input.parse_input_event(released)
 	Input.flush_buffered_events()
 	_expect(reader.controller_brake(pad) == 0.0, "X releases the brake")
+
+	reader = PlayerInput.new()
+	reader.detect_android_range = true
+	_axis(4, 0.90)
+	_expect(reader.controller_brake(pad) > 0.5, "First LT movement before range is known")
+	_axis(4, 0.50)
+	_expect(reader.controller_brake(pad) == 0.0, "Android half-range LT rests at 0.50")
+	_axis(4, 0.75)
+	_expect(absf(reader.trigger_value(4, JOY_AXIS_TRIGGER_LEFT) - 0.5) < 0.002, "Half-range LT retains proportional travel")
+	_axis(4, 0.50, JOY_AXIS_TRIGGER_RIGHT)
+	_expect(reader.controller_accelerator(pad) == 0.0, "Half-range RT is idle at 0.50")
+	_axis(4, 0.93, JOY_AXIS_TRIGGER_RIGHT)
+	_expect(reader.controller_accelerator(pad) > 0.9, "Half-range RT accelerates")
+	_axis(7, 0.29)
+	_expect(reader.controller_brake(PackedInt32Array([7])) > 0.1, "Ordinary trigger identifies sub-midpoint travel")
+	_axis(7, 0.50)
+	_expect(reader.controller_brake(PackedInt32Array([7])) > 0.4, "Ordinary trigger at 50% still brakes")
+	Settings.data["controller_trigger_mode"] = PlayerInput.TriggerMode.BUTTON_BRAKE
+	_expect(reader.controller_brake(PackedInt32Array([7])) == 0.0, "X-only option ignores LT")
+	Settings.data["controller_trigger_mode"] = original_mode
 
 
 func _check_lighting() -> void:

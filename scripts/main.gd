@@ -237,7 +237,7 @@ func _center_box() -> VBoxContainer:
 
 
 ## A full-screen menu page: title tag, a content area and a bottom bar.
-func _page(title: String, back: Callable) -> Dictionary:
+func _page(title: String, back: Callable, plain_title := false) -> Dictionary:
 	_clear_menu()
 	_back = back
 	var shade := ColorRect.new()
@@ -256,7 +256,16 @@ func _page(title: String, back: Callable) -> Dictionary:
 	var top := HBoxContainer.new()
 	top.add_theme_constant_override("separation", 16)
 	v.add_child(top)
-	top.add_child(PaperTheme.tag(title, 34))
+	if plain_title:
+		var heading := Label.new()
+		heading.text = title
+		heading.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		heading.add_theme_font_size_override("font_size", 37)
+		heading.add_theme_color_override("font_outline_color", Color("#eee4d4"))
+		heading.add_theme_constant_override("outline_size", 3)
+		top.add_child(heading)
+	else:
+		top.add_child(PaperTheme.tag(title, 34))
 	var content := VBoxContainer.new()
 	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	content.add_theme_constant_override("separation", 12)
@@ -806,7 +815,7 @@ func _resume() -> void:
 # --- settings -------------------------------------------------------------------------------------
 
 func _settings() -> void:
-	var pg := _page("Settings", func(): _settings_return.call())
+	var pg := _page("Settings", func(): _settings_return.call(), true)
 	menu.set_meta("tabs", true)
 	var top: HBoxContainer = pg["top"]
 	var tabs := ["Graphics", "Controls", "Audio & Haptics"]
@@ -866,6 +875,12 @@ func _settings() -> void:
 			list.add_child(_choice("Camera view", ChaseCamera.VIEWS.map(func(v): return v["name"]), int(Settings.g("camera")), func(i): Settings.set_value("camera", i)))
 			list.add_child(_slider("Cockpit field of view", 58, 90, 1, float(Settings.g("cockpit_fov")), func(v): Settings.set_value("cockpit_fov", v), "%d°", 1.0))
 			list.add_child(_choice("Accelerator trigger", ["Match touch", "Progressive"], int(Settings.g("progressive_trigger")), func(i): Settings.set_value("progressive_trigger", i == 1)))
+			list.add_child(_choice("Controller triggers", ["Auto", "Zero rest", "Half rest", "Brake with X only"], int(Settings.g("controller_trigger_mode")), func(i):
+				Settings.set_value("controller_trigger_mode", i)))
+			var pedal_test := PedalReadout.new()
+			pedal_test.add_theme_font_size_override("font_size", 18)
+			pedal_test.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			list.add_child(pedal_test)
 			list.add_child(_choice("Speed units", ["km/h", "mph"], int(Settings.g("units")), func(i): Settings.set_value("units", i)))
 			list.add_child(_choice("AI difficulty", ["Easy", "Medium", "Hard"], int(Settings.g("ai_difficulty")), func(i): Settings.set_value("ai_difficulty", i)))
 			list.add_child(_choice("Opponents (Race / Championship)", ["3", "5"], 1 if int(Settings.g("opponents")) == 5 else 0, func(i): Settings.set_value("opponents", 5 if i == 1 else 3)))

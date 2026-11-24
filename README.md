@@ -99,6 +99,10 @@ matters ([gameblur](https://gameblur.net/reviews/game-reviews/art-of-rally-xbox-
 | Pause | Start | Esc / P | II |
 | Settings tabs | LB / RB | Q / E | tap |
 
+On Android, **Settings → Controls → Controller triggers** offers automatic range detection, manual zero-rest and half-rest ranges, and **Brake with X only**. The readout below the setting shows the trigger values the controller reports and the effective accelerator and brake.
+
+The [Yet to implement section](docs/handling-and-stage-roadmap.md#yet-to-implement) is the active roadmap for handling, stages and Android releases.
+
 ## Building the APK
 
 The repository holds only source; Godot imports everything on first open.
