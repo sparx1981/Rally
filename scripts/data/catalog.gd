@@ -199,7 +199,9 @@ static func locations() -> Array:
 
 
 const VARIANTS := [["Sprint", 4000.0], ["Classic", 8000.0], ["Long", 10000.0], ["Marathon", 15000.0]]
-const TOD_NAMES := ["Day", "Dusk", "Night"]
+const SUNSET := 3
+const SUNRISE := 4
+const TOD_NAMES := ["Day", "Dusk", "Night", "Sunset", "Sunrise"]
 
 
 # The four routes pass through different parts of each location. Double one

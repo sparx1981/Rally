@@ -7,7 +7,8 @@ uniform vec4 light_ink : source_color;
 uniform vec3 light_dir;
 uniform vec2 offset;
 uniform float cover;
-uniform bool night;
+uniform float night_amount;
+uniform vec3 moon_dir;
 uniform bool peaks;
 uniform bool snowcaps;
 uniform sampler2D paper_noise : repeat_enable, filter_linear_mipmap;
@@ -20,11 +21,13 @@ void sky() {
 	float sheets = smoothstep(cover, cover + 0.028, cloud);
 	float rim = smoothstep(cover + 0.09, cover + 0.12, cloud);
 	float disk = smoothstep(0.9980, 0.9986, dot(EYEDIR, light_dir));
-	base = mix(base, light_ink.rgb, disk);
-	if (night) {
+	base = mix(base, light_ink.rgb, disk * (1.0 - night_amount));
+	float moon = smoothstep(0.9985, 0.9991, dot(EYEDIR, moon_dir));
+	base = mix(base, vec3(0.86, 0.89, 0.97), moon * night_amount);
+	if (night_amount > 0.0) {
 		vec2 star_uv = SKY_COORDS * vec2(480.0, 240.0);
 		float hash = fract(sin(dot(floor(star_uv),vec2(31.7, 75.1))) * 13275.5);
-		base += step(0.984, hash) * (1.0 - smoothstep(0.06, 0.27, length(fract(star_uv)-0.5))) * height * 0.53;
+		base += step(0.984, hash) * (1.0 - smoothstep(0.06, 0.27, length(fract(star_uv)-0.5))) * height * 0.53 * night_amount;
 	}
 	COLOR = mix(base, mix(cloud_ink.rgb, horizon.rgb, rim * 0.30), sheets * smoothstep(-0.015, 0.12, EYEDIR.y) * 0.86);
 

@@ -122,7 +122,7 @@ func _loading_stage(sdef: Dictionary, startup := false) -> void:
 		if tod_i < 0:
 			tod_i = int(sdef.get("tod", 0))
 		var info := Label.new()
-		info.text = "%.1f km  ·  %s  ·  %s     |     %s" % [float(sdef["length"]) / 1000.0, Catalog.weather(sdef["weather"])["label"], Catalog.TOD_NAMES[clampi(tod_i, 0, 2)], TIPS.pick_random()]
+		info.text = "%.1f km  ·  %s  ·  %s     |     %s" % [float(sdef["length"]) / 1000.0, Catalog.weather(sdef["weather"])["label"], Catalog.TOD_NAMES[clampi(tod_i, 0, Catalog.TOD_NAMES.size() - 1)], TIPS.pick_random()]
 		info.add_theme_font_size_override("font_size", 17)
 		info.add_theme_color_override("font_color", PaperTheme.EDGE)
 		info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -153,6 +153,7 @@ func _start_race() -> void:
 		race.sim_dt = 1.0 / 30.0
 	world.add_child(race)
 	race.setup(Game.stage_index, Game.mode, entrants, false, Game.race_tod())
+	race.lighting_changed.connect(_apply_post)
 	race.finished.connect(_on_race_finished)
 	race.pause_requested.connect(_pause)
 	if _shot.has("hazard"):
@@ -286,23 +287,11 @@ func _button(text: String, cb: Callable, min_w := 0.0) -> Button:
 
 
 func _focus_first(root: Node) -> void:
-	await get_tree().process_frame
-	if not is_instance_valid(root) or not root.is_inside_tree():
-		return
-	var f := _find_focusable(root)
-	if f:
-		f.grab_focus()
-
-
-func _find_focusable(n: Node) -> Control:
-	if n is Control and (n as Control).focus_mode == Control.FOCUS_ALL and (n as Control).is_visible_in_tree():
-		if not (n is Button and (n as Button).disabled):
-			return n
-	for c in n.get_children():
-		var r := _find_focusable(c)
-		if r:
-			return r
-	return null
+	var rows: Array = []
+	for button in _focus_controls(root):
+		rows.append([button])
+	if not rows.is_empty():
+		_focus_rows(rows, rows[0][0])
 
 
 # --- title --------------------------------------------------------------------------------------
@@ -432,8 +421,7 @@ func _car_select() -> void:
 			_stage_select(), 200)
 	nav.add_child(go)
 	refresh.call()
-	await get_tree().process_frame
-	go.grab_focus()
+	_focus_rows([[prev, nxt, go], [liv], _focus_controls(pg.bar)], go)
 
 
 class StatBar:
@@ -519,81 +507,161 @@ func _weather_style(kind: String) -> StyleBoxFlat:
 	return PaperTheme.box(col)
 
 
-func _stage_select(keep_variant_focus := false) -> void:
-	var pg := _page("Choose a stage  -  %s" % Game.mode_name(), _car_select)
-	var content: VBoxContainer = pg["content"]
-	var cur_loc: int = Catalog.stages()[Game.stage_index]["loc"]
-	var opts := HBoxContainer.new()
-	opts.add_theme_constant_override("separation", 12)
-	content.add_child(opts)
-	opts.add_child(_choice_inline(["Sprint (4 km)", "Classic (8 km)", "Long (10 km)", "Marathon (15 km)"], int(Catalog.stages()[Game.stage_index]["variant"]), func(i):
-		Game.stage_index = cur_loc * 4 + i
-		_stage_select(true)))
-	opts.add_child(_choice_inline(["Time: stage default", "Time: Day", "Time: Dusk", "Time: Night"], Game.time_of_day + 1, func(i):
-		Game.time_of_day = i - 1))
+func _stage_select(focus_location := -1) -> void:
+	var pg := _page("Choose a location", _car_select)
 	var grid := GridContainer.new()
-	grid.columns = 5
+	grid.columns = 4
 	grid.add_theme_constant_override("h_separation", 10)
 	grid.add_theme_constant_override("v_separation", 10)
 	grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	content.add_child(grid)
-	var first: Button
-	var variant: int = Catalog.stages()[Game.stage_index]["variant"]
-	for li in Catalog.locations().size():
-		var si = li * 4 + variant
-		var sd: Dictionary = Catalog.stages()[si]
-		var wx := Catalog.weather(sd["weather"])
-		var best := Game.best_time(si)
-		var txt := "%s\n%s  -  %.0f km  -  %s" % [sd["name"], wx["label"], float(sd["length"]) / 1000.0, Game.fmt_time(best) if best > 0.0 else "no time"]
-		var b := _button(txt, func():
-			Game.stage_index = si
-			_start_race())
-		# Preview picture of the location above its name.
-		var pv := "res://ui/previews/%s.png" % sd["loc_id"]
-		if ResourceLoader.exists(pv):
-			b.icon = load(pv)
-			b.expand_icon = true
-			b.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
-			b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		b.custom_minimum_size = Vector2(226, 196)
+	pg.content.add_child(grid)
+	var selected := int(Catalog.stages()[Game.stage_index].loc) if focus_location < 0 else focus_location
+	var rows: Array = []
+	var cards: Array[Control] = []
+	for location in Catalog.locations().size():
+		var sd: Dictionary = Catalog.locations()[location]
+		var wx := Catalog.weather(sd.weather)
+		var b := _button("%s\n%s" % [sd.name, wx.label], _stage_details.bind(location))
+		b.icon = load("res://ui/previews/%s.png" % sd.id)
+		b.expand_icon = true
+		b.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
+		b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		b.custom_minimum_size = Vector2(210, 165)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.add_theme_font_size_override("font_size", 15)
-		b.add_theme_constant_override("icon_max_width", 210)
-		b.add_theme_stylebox_override("normal", _weather_style(wx["kind"]))
-		b.tooltip_text = "%s\n%s" % [sd["desc"], sd["region"]]
-		b.focus_entered.connect(func(): _stage_info.text = "%s  %s" % [sd["region"], sd["desc"]])
+		b.add_theme_font_size_override("font_size", 19)
+		b.add_theme_constant_override("icon_max_width", 230)
+		b.add_theme_stylebox_override("normal", _weather_style(wx.kind))
 		grid.add_child(b)
-		if li == cur_loc:
-			first = b
-	_stage_info = Label.new()
-	_stage_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_stage_info.add_theme_font_size_override("font_size", 18)
-	_stage_info.custom_minimum_size.x = 900
-	content.add_child(_stage_info)
+		if location % grid.columns == 0:
+			rows.append([])
+		rows[-1].append(b)
+		cards.append(b)
+	rows.append(_focus_controls(pg.bar))
+	_focus_rows(rows, cards[selected])
+
+
+func _stage_details(location: int) -> void:
+	var routes := Catalog.VARIANTS.size()
+	var sd: Dictionary = Catalog.locations()[location]
+	var pg := _page(sd.name, _stage_select.bind(location))
+	var content: VBoxContainer = pg.content
+	var selection := {"variant": int(Catalog.stages()[Game.stage_index].variant), "time": Game.time_of_day}
+	var overview := HBoxContainer.new()
+	overview.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	overview.add_theme_constant_override("separation", 16)
+	content.add_child(overview)
+
+	var preview := TextureRect.new()
+	preview.texture = load("res://ui/previews/%s.png" % sd.id)
+	preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	preview.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	preview.custom_minimum_size = Vector2(0, 220)
+	overview.add_child(preview)
+
+	var details := PanelContainer.new()
+	details.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	overview.add_child(details)
+	var right := VBoxContainer.new()
+	right.add_theme_constant_override("separation", 8)
+	details.add_child(right)
+	var description := _note(sd.desc)
+	description.custom_minimum_size.x = 0.0
+	right.add_child(description)
+	var map := StageRouteMap.new()
+	map.custom_minimum_size.y = 136
+	map.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	right.add_child(map)
+	var map_key := Label.new()
+	map_key.text = "Green  Start                 Red  Finish"
+	map_key.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	map_key.add_theme_font_size_override("font_size", 15)
+	right.add_child(map_key)
+	var caption := Label.new()
+	caption.add_theme_font_size_override("font_size", 18)
+	right.add_child(caption)
+
+	var distance_names: Array[String] = []
+	for variant in Catalog.VARIANTS:
+		distance_names.append("%s · %.0f km" % [variant[0], float(variant[1]) / 1000.0])
+	var time_names := ["Default · %s" % Catalog.TOD_NAMES[int(sd.get("tod", 0))]] + Catalog.TOD_NAMES
+	var refresh := func():
+		var index := location * routes + int(selection.variant)
+		map.show_route(Catalog.stages()[index])
+		var record := Game.best_time(index)
+		caption.text = "%s    ·    Best %s" % [Catalog.weather(sd.weather).label, Game.fmt_time(record)]
+	var distance := _stage_options(content, "Distance", distance_names, selection.variant, func(index: int):
+		selection.variant = index
+		refresh.call())
+	var times := _stage_options(content, "Time of day", time_names, selection.time + 1, func(index: int):
+		selection.time = index - 1)
+	var start := _button("Start race", func():
+		Game.stage_index = location * routes + int(selection.variant)
+		Game.time_of_day = int(selection.time)
+		_start_race(), 200)
+	pg.bar.add_child(start)
+	refresh.call()
+	_focus_rows([distance, times, _focus_controls(pg.bar)], distance[selection.variant])
+
+
+func _stage_options(parent: VBoxContainer, title: String, options: Array, active: int, on_change: Callable) -> Array:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 9)
+	parent.add_child(row)
+	row.add_child(_label(title, 150))
+	var group := ButtonGroup.new()
+	var buttons: Array = []
+	for index in options.size():
+		var button := _button(options[index], on_change.bind(index))
+		button.toggle_mode = true
+		button.button_group = group
+		button.button_pressed = index == active
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.add_theme_font_size_override("font_size", 19)
+		row.add_child(button)
+		buttons.append(button)
+	return buttons
+
+
+## Link physical rows in display order. Vertical movement crosses to the nearest
+## column and a short final row stays reachable from every column above it.
+func _focus_rows(rows: Array, initial: Control) -> void:
 	await get_tree().process_frame
-	if keep_variant_focus:
-		(opts.get_child(0) as Button).grab_focus()
-	elif first:
-		first.grab_focus()
+	if not is_instance_valid(initial) or not initial.is_inside_tree():
+		return
+	var order: Array = []
+	for row in rows:
+		order.append_array(row)
+	for row_index in rows.size():
+		var row: Array = rows[row_index]
+		for column in row.size():
+			var button: Control = row[column]
+			button.focus_neighbor_left = button.get_path_to(row[maxi(0, column - 1)])
+			button.focus_neighbor_right = button.get_path_to(row[mini(row.size() - 1, column + 1)])
+			button.focus_neighbor_top = button.get_path_to(_nearest_column(button, rows[maxi(0, row_index - 1)]) if row_index > 0 else button)
+			button.focus_neighbor_bottom = button.get_path_to(_nearest_column(button, rows[mini(rows.size() - 1, row_index + 1)]) if row_index + 1 < rows.size() else button)
+			var index := order.find(button)
+			button.focus_next = button.get_path_to(order[(index + 1) % order.size()])
+			button.focus_previous = button.get_path_to(order[posmod(index - 1, order.size())])
+	initial.grab_focus()
 
 
-var _stage_info: Label
+func _nearest_column(button: Control, row: Array) -> Control:
+	var x := button.get_global_rect().get_center().x
+	var closest: Control = row[0]
+	for item: Control in row:
+		if absf(item.get_global_rect().get_center().x - x) < absf(closest.get_global_rect().get_center().x - x):
+			closest = item
+	return closest
 
 
-## A compact cycling button for option rows.
-func _choice_inline(options: Array, current: int, on_change: Callable) -> Button:
-	var state := {"i": clampi(current, 0, options.size() - 1)}
-	var b := Button.new()
-	b.focus_mode = Control.FOCUS_ALL
-	b.text = "<  %s  >" % options[state["i"]]
-	b.custom_minimum_size.x = 330
-	var change := func(d: int):
-		state["i"] = (state["i"] + d + options.size()) % options.size()
-		b.text = "<  %s  >" % options[state["i"]]
-		Sfx.toggle()
-		on_change.call(state["i"])
-	b.pressed.connect(func(): change.call(1))
-	return b
+func _focus_controls(node: Node) -> Array:
+	var controls: Array = []
+	if node is Control and node.focus_mode == Control.FOCUS_ALL and node.is_visible_in_tree() and not (node is Button and node.disabled):
+		controls.append(node)
+	for child in node.get_children():
+		controls.append_array(_focus_controls(child))
+	return controls
 
 
 func _series_select() -> void:
@@ -614,8 +682,11 @@ func _series_select() -> void:
 		if first == null:
 			first = b
 	content.add_child(PaperTheme.tag("Points per stage: 10 - 8 - 6 - 4 - 2 - 1", 20))
-	await get_tree().process_frame
-	first.grab_focus()
+	var rows: Array = []
+	for button in _focus_controls(content):
+		rows.append([button])
+	rows.append(_focus_controls(pg.bar))
+	_focus_rows(rows, first)
 
 
 func _champ_intro() -> void:
@@ -630,8 +701,7 @@ func _champ_intro() -> void:
 	_standings_table(content)
 	var go := _button("Start stage", _start_race, 260)
 	(pg["bar"] as HBoxContainer).add_child(go)
-	await get_tree().process_frame
-	go.grab_focus()
+	_focus_rows([_focus_controls(pg.bar)], go)
 
 
 func _standings_table(parent: Control) -> void:
@@ -813,12 +883,13 @@ func _settings() -> void:
 			list.add_child(_slider("Master volume", 0.0, 1.0, 0.05, float(Settings.g("master_vol")), func(v): Settings.set_value("master_vol", v), "%d%%", 100.0))
 			list.add_child(_slider("Effects volume", 0.0, 1.0, 0.05, float(Settings.g("sfx_vol")), func(v): Settings.set_value("sfx_vol", v), "%d%%", 100.0))
 			list.add_child(_slider("Engine volume", 0.0, 1.0, 0.05, float(Settings.g("engine_vol")), func(v): Settings.set_value("engine_vol", v), "%d%%", 100.0))
-	await get_tree().process_frame
-	var f := _find_focusable(list)
-	if f:
-		f.grab_focus()
-	else:
-		tab_btns[_settings_tab].grab_focus()
+	var rows: Array = [tab_btns]
+	for child in list.get_children():
+		var controls := _focus_controls(child)
+		if not controls.is_empty():
+			rows.append(controls)
+	rows.append(_focus_controls(pg.bar))
+	_focus_rows(rows, tab_btns[_settings_tab])
 
 
 func _label(t: String, w := 420.0) -> Label:
@@ -944,9 +1015,7 @@ func _tt_results(r: Dictionary) -> void:
 	bar.add_child(_button("Menu", func():
 		await _start_attract(Game.stage_index)
 		_title(), 160))
-	await get_tree().process_frame
-	if is_instance_valid(retry) and retry.is_inside_tree():
-		retry.grab_focus()
+	_focus_rows([_focus_controls(pg.bar)], retry)
 
 
 func _results_table(parent: Control, rows: Array, with_points: bool) -> void:
@@ -994,9 +1063,7 @@ func _race_results(r: Dictionary) -> void:
 	bar.add_child(_button("Menu", func():
 		await _start_attract(Game.stage_index)
 		_title(), 160))
-	await get_tree().process_frame
-	if is_instance_valid(retry) and retry.is_inside_tree():
-		retry.grab_focus()
+	_focus_rows([_focus_controls(pg.bar)], retry)
 
 
 func _champ_results(r: Dictionary) -> void:
@@ -1027,8 +1094,7 @@ func _champ_results(r: Dictionary) -> void:
 		b = _button("Next stage", func():
 			_champ_intro(), 220)
 	bar.add_child(b)
-	await get_tree().process_frame
-	b.grab_focus()
+	_focus_rows([_focus_controls(pg.bar)], b)
 
 
 # --- automated screenshots (development) -------------------------------------------------------------

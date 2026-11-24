@@ -544,6 +544,7 @@ func solids_near(p: Vector2) -> Array:
 
 
 var lights_on := false
+var lamp_level := 1.0
 
 # --- streaming: scenery is built in chunks of road around the camera and freed behind it ------
 const STREAM_R := 320.0
@@ -744,7 +745,9 @@ func update_chimneys(center: Vector2, radius: float) -> void:
 				var up: bool = c[2] < 0 or (_springs[c[2]] != null and (_springs[c[2]] as FlapSpring).p > 0.9)
 				(c[0] as CPUParticles3D).emitting = dd < radius + 50.0 and up
 			else:
-				(c[0] as Node3D).visible = dd < radius + 30.0
+				var lamp := c[0] as OmniLight3D
+				lamp.visible = dd < radius + 30.0 and lamp_level > 0.01
+				lamp.light_energy = 2.2 * lamp_level
 
 
 ## Ground height under a piece (pieces beside the road stand on the landscape).

@@ -19,7 +19,7 @@ func _init(c: Car, skill_v: float) -> void:
 	_wobble_seed = randf() * 100.0
 	var mu := Car.BASE_MU * float(c.stats["grip"]) * c.stage.grip()
 	var top := c.top_speed()
-	profile = c.track.speed_profile(mu * 0.8, minf(Car.BRAKE,mu) * 0.7, c.profile_acceleration() * 0.6, top * 0.98)
+	profile = c.track.speed_profile(mu * 0.8, c.profile_braking() * 0.7, c.profile_acceleration() * 0.6, top * 0.98)
 
 
 func update(dt: float, others: Array, t: float) -> void:

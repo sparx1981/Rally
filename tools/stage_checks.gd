@@ -1,10 +1,11 @@
 extends Node
-## Integration checks for authored crossings, wildlife and controller brake release.
+## Integration checks for authored crossings, birds and controller brake release.
 var _failures := 0
 
 
 func _ready() -> void:
 	_check_brake()
+	_check_lighting()
 	for stage_def: Dictionary in Catalog.stages():
 		var stage := Stage.new()
 		add_child(stage)
@@ -45,6 +46,17 @@ func _check_brake() -> void:
 	reader.controller_brake(pad)
 	_axis(4, -1.0)
 	_expect(reader.controller_brake(pad) == 0.0, "Signed resting value releases the brake")
+	_axis(4, 0.74)
+	_expect(reader.controller_brake(pad) > 0.7, "Braking before switching pedals")
+	_axis(4, 0.91)
+	_expect(reader.controller_brake(pad, 1.0) == 0.0, "RT overrides a stale LT reading")
+	_expect(reader.controller_brake(pad, 1.0) == 0.0, "Stale braking stays suppressed")
+	_axis(4, 0.0)
+	reader.controller_brake(pad, 1.0)
+	_axis(4, 0.78)
+	_expect(reader.controller_brake(pad, 1.0) > 0.8, "New LT press can brake under throttle")
+	_axis(4, 0.0)
+	reader.controller_brake(pad)
 	_axis(7, 0.95)
 	_expect(reader.controller_brake(PackedInt32Array([4, 7])) == 1.0, "Second controller can brake")
 	_expect(reader.controller_brake(pad) == 0.0, "Disconnected controller clears its pressure")
@@ -63,21 +75,28 @@ func _check_brake() -> void:
 	_expect(reader.controller_brake(pad) == 0.0, "X releases the brake")
 
 
+func _check_lighting() -> void:
+	for mode: int in [Catalog.SUNSET, Catalog.SUNRISE]:
+		var stage := Stage.new()
+		add_child(stage)
+		stage.build(Catalog.stages()[0], mode)
+		var starts_dark := mode == Catalog.SUNRISE
+		var track := stage.track
+		var start := stage.headlight_level
+		_expect(is_equal_approx(start, float(starts_dark)), "Light level matches the start of the transition")
+		stage.advance_lighting(lerpf(track.start_s, track.finish_s, 0.475))
+		var midway := stage.headlight_level
+		_expect(midway > 0.2 and midway < 0.8, "Dusk or dawn blends the endpoints")
+		_expect(not stage.advance_lighting(track.start_s) and stage.headlight_level == midway, "Reversing does not rewind sunset")
+		stage.advance_lighting(lerpf(track.start_s, track.finish_s, 0.96))
+		_expect(is_equal_approx(stage.headlight_level, float(not starts_dark)), "Transition completes before the finish")
+		stage.free()
+
+
 func _check_stage(stage: Stage) -> void:
 	var id: String = stage.def.id
 	var track := stage.track
-	_expect(not stage.wildlife._groups.is_empty(), id + " has no wildlife")
-	if not stage.wildlife._groups.is_empty():
-		var group: Dictionary = stage.wildlife._groups.front()
-		var actor := stage.wildlife._actor
-		var start := Vector3(group.a.x, track.terrain.height(group.a), group.a.y)
-		stage.wildlife.update(0.0, start, group.s)
-		var before := actor.position
-		stage.wildlife.update(0.6, start, group.s)
-		_expect(actor.visible and actor.position.distance_to(before) > 0.01, id + " wildlife did not animate")
-		stage.wildlife.update(0.1, start + Vector3(250, 0, 0), group.s + 250.0)
-		_expect(not actor.visible, id + " wildlife still active at long range")
-
+	_expect(stage.has_node("Birds"), id + " has no birds")
 	for tunnel in track.tunnels:
 		_expect(stage.has_node("TunnelRoof"), id + " tunnel has no roof")
 		var centre: float = (tunnel.s0 + tunnel.s1) * 0.5
@@ -96,4 +115,4 @@ func _check_stage(stage: Stage) -> void:
 		if Stage.SWITCHBACK_BRIDGES.get(id, -1.0) == bridge.s:
 			var middle := track.point_at(bridge.s)
 			_expect(track.terrain.height(middle) < track.road_h(bridge.s) - 4.0, id + " missing the dry bridge cutting")
-	print(id, " • ", stage.wildlife._groups.size(), " wildlife routes • ", track.tunnels.size(), " tunnels")
+	print(id, " • ", track.tunnels.size(), " tunnels")

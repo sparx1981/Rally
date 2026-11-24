@@ -1,5 +1,28 @@
 # Paper Rally handling and stage roadmap
 
+## Handling and race setup · 1.0.11
+
+The location card now opens a race setup page. The map follows the selected Sprint, Classic, Long or Marathon route, with green for the start and red for the finish. A player can return to the same location card with B. Only **Start race** commits the distance and time of day. Directional focus follows the rows on the location grid, route setup and settings screens.
+
+**Sunset** starts in daylight and ends at night. **Sunrise** starts at night and ends in daylight. Both move through a low, warm sun and finish the transition at 94% of the course. Track progress controls the sky, ambient light, headlights, street lamps and colour grade. Reversing and resetting leave the sky at the furthest point reached during the run.
+
+A fresh accelerator press overrides an unchanged controller brake reading. A fresh brake press can still slow the car during acceleration. Automated checks simulated a left trigger remaining at 85% after the driver switched to the accelerator. Speed recovered from 6.93 to 11.44 m/s and the brake lamps went out. The release still needs confirmation on the affected Android controller.
+
+### Drivetrain and suspension priorities in the current build
+
+| Priority | Implementation |
+|---|---|
+| Fixed-tick telemetry | The handling trace writes the normalised controls, delivered service brake, four tyre surfaces and loads, front and rear force and slip, and the two suspension offsets. |
+| Drive, braking and combined grip | Drive reaches the configured axles. Each wheel's longitudinal force reduces its lateral grip budget. Front and rear lateral forces are limited separately. Longitudinal acceleration moves load forward or rearward. |
+| Tyres and differentials | Each tyre samples patches and verges. The open differential and limited-slip model share a torque budget. AWD can move some surplus torque to the axle with spare grip. |
+| Pedals and gearbox | The service brake has front bias. The handbrake reduces rear grip and releases progressively. Gear torque blends across shifts. Closed throttle adds engine braking, and a deliberate brake hold at a standstill engages reverse. |
+| Ride | Front and rear springs use different compression and rebound damping, limited travel and progressive stops. Hard surfaces use shorter travel. Body heave, pitch and roll interpolate between physics ticks. Wheel contact informs the debris and separate suspension sound. |
+| Race balance and saves | AI and medal calculations use the vehicle's traction profiles. Existing ghosts replay stored positions on the same road. |
+
+The equal-spec Frozen Lakes launch reached 4.14 m/s in FWD, 4.71 m/s in RWD and 9.52 m/s in AWD after 1.5 seconds. The Meadow crest test recorded a period with one axle supporting the car at each of the three approach speeds. Device frame times and controller behaviour still need a run on the affected handset.
+
+The ground animals introduced in 1.0.10 were removed. The existing birds remain.
+
 ## November 2026 field update · 1.0.10
 
 The favourite Slate Gorge sequence works because the driver can see another part of the route before taking the return bend. The bridge then provides a clear destination. The new sections apply that timing to existing return legs and keep their original centreline and road height.
@@ -23,8 +46,7 @@ The 11 stage cards now use actual in-game viewpoints. The compositions include M
 2. **Readability through a tunnel.** Drive the first Alpine portal in both chase modes and the cockpit. Check whether the wall stripes give enough warning before the left edge enters the view. Try the same entrance at dusk. Test an interior lamp rhythm with fewer, brighter pools if drivers struggle to spot the bend.
 3. **A true stacked road crossing.** Prototype a road that passes beneath its own bridge and drives across the same footprint later. Model the two road heights separately and keep projection, collisions, camera, pace notes and ghost playback on the correct road segment. Exercise resets and overtaking from both decks before authoring a full stage around it.
 4. **Shadow calibration.** Compare a narrow deck, a steep bank, wet tarmac and a slow jump in the same light. Check tyre contact from low chase and roof clearance from photo mode. Measure the shadow update and wet-stage GPU frame times on a representative phone.
-5. **Wildlife at driving speed.** Confirm each regional silhouette reads from low chase before adding more species. Try an animal pausing and retreating at the sound of a car. Keep its entire route outside the road, water and steep cliff faces.
-6. **Variant-specific previews.** Trial a second shot for locations with distinct Sprint and Classic features. Use the same camera aspect ratio as the menu and check whether a player can pick out the feature at thumbnail size.
+5. **Variant-specific previews.** Trial a second shot for locations with distinct Sprint and Classic features. Use the same camera aspect ratio as the menu and check whether a player can pick out the feature at thumbnail size.
 
 ## Implemented in 1.0.9
 
@@ -43,7 +65,7 @@ Regional additions include a haul track and scree fan in the rocky regions, asym
 
 AI speed planning and medal calculations use available traction when estimating braking and acceleration. Existing ghost files record positions and headings, so playback needs no input re-simulation. On-phone rain performance, physical USB-C/Bluetooth feel and blind player recognition of locations still need device and player testing. The following sections retain the original 1.0.8 investigation for comparison.
 
-## What a driver can feel today
+## Original handling comparison · 1.0.8
 
 The first handling prototype should address how a driven axle spends its available grip. In a controlled launch the same car hit exactly the same speed to two decimal places with front-, rear- and all-wheel drive. The layouts already feel distinct when turning under power. Preserving that distinction while making wheelspin and recovery depend on which tyres have grip offers more value than increasing the power of every AWD car.
 
@@ -76,7 +98,7 @@ RWD turned eight degrees further than FWD in the Meadow trial. On Frozen Lakes i
 | 10 | Derive visual body roll, tyre debris and the sound of suspension compression from contact and load. Interpolate the visual pose between physics ticks. | A one-wheel verge strike should eject debris on that side. A two-wheel landing should sound and look different from a gentle compression, without moving the cockpit horizon abruptly. |
 | 11 | Re-run medal targets and AI after handling stabilises. Version physics-dependent ghost data where re-simulation is needed. | Compare valid old saves, ghost playback, repeatable finish times and AI bridge clearance. Measure fixed-step CPU time on a representative Android phone before expanding to four independent suspension corners. |
 
-Today the game uses an artistic gravity of 22 game units/s², caps crest launch velocity at 4.2, adds up to 0.025 m of off-road wheel jiggle and shows 0.09 m of wheel droop while airborne. Landing excites a visual spring on the body. Start suspension work by measuring contact and pitch on a known hump. Changing global gravity first would also change jumps and landing timing on every existing route.
+The 1.0.8 build used an artistic gravity of 22 game units/s², caps crest launch velocity at 4.2, adds up to 0.025 m of off-road wheel jiggle and shows 0.09 m of wheel droop while airborne. Landing excites a visual spring on the body. Start suspension work by measuring contact and pitch on a known hump. Changing global gravity first would also change jumps and landing timing on every existing route.
 
 The axle proposal uses combined-slip tyre modelling as a reference. The half-car suspension example is a useful intermediate model because it represents sprung-mass bounce and pitch with front and rear springs and dampers. Rally de España drivers also describe the practical impact of the gravel-to-tarmac setup change. The suggested tuning values and acceptance drives above are development proposals for Paper Rally. [MathWorks vehicle dynamics reference](https://www.mathworks.com/help/pdf_doc/vdynblks/vdynblks_ref.pdf) · [MathWorks automotive suspension](https://www.mathworks.com/help/simulink/slref/automotive-suspension.html) · [Four-wheel drive and differentials](https://www.howacarworks.com/advanced-driving/using-four-wheel-drive) · [FIA driver discussion](https://www.fia.com/news/2013-rally-de-espana-post-event-press-conference-0)
 

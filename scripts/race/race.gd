@@ -4,6 +4,7 @@ extends Node3D
 ## haptics, engine audio, HUD and the pop-up scenery driven by the player's progress.
 ## In attract mode (title screen) an AI drives and the stage loops.
 
+signal lighting_changed
 signal finished(result: Dictionary)
 signal pause_requested
 
@@ -71,7 +72,7 @@ func setup(stage_i: int, mode_v: int, entrants: Array, attract_v := false, tod :
 		cars.append(car)
 		car.landed.connect(func(v): _on_landed(car, v))
 		if car.is_player and not attract:
-			car.compressed.connect(Sfx.land)
+			car.compressed.connect(Sfx.suspension)
 		car.splashed.connect(func(v): _on_splashed(car, v))
 		if car.is_player:
 			player = car
@@ -96,14 +97,16 @@ func setup(stage_i: int, mode_v: int, entrants: Array, attract_v := false, tod :
 		ghost = Ghost.new()
 		add_child(ghost)
 		ghost.setup(Catalog.stages()[stage_i]["id"], player.stats, stage.track)
-	if stage.wx.get("headlights", false):
+	if stage.changing_light() or stage.wx.get("headlights", false):
 		# Rival lenses use the stage emissive material. Reserve the mobile
 		# renderer's per-object spotlight slots for the driver's lamp array.
-		player.enable_lights(int(Settings.g("shadows")) > 0, int(stage.wx.get("tod", 0)) == 2)
+		player.enable_lights(int(Settings.g("shadows")) > 0, stage.changing_light() or stage.tod == 2)
+		if stage.changing_light():
+			player.set_headlight_level(stage.headlight_level)
 	camera.follow(0.016)
 	var st: Dictionary = player.stats
 	var mu := Car.BASE_MU * float(st["grip"]) * stage.grip()
-	var ideal := tr.ideal_time(mu * 0.95, minf(Car.BRAKE,mu) * 0.85, player.profile_acceleration() * 0.75, player.top_speed())
+	var ideal := tr.ideal_time(mu * 0.95, player.profile_braking() * 0.85, player.profile_acceleration() * 0.75, player.top_speed())
 	medals = [ideal * 1.06, ideal * 1.3, ideal * 1.48]
 	if attract:
 		for c in cars:
@@ -244,12 +247,14 @@ func _process(delta: float) -> void:
 		_collide()
 		if state == State.RACING:
 			race_time += FIXED
+	for c: Car in cars:
+		c.render_fraction = clampf(_acc / FIXED, 0.0, 1.0)
 	if sim_dt > 0.0 and OS.get_cmdline_user_args().has("--trace") and Engine.get_process_frames() % 10 == 0:
 		print("TRACE s=%.1f lat=%.2f v=%.1f y=%.2f air=%s steer=%.2f slip=%.2f h=%.2f" % [player.s, player.lat, player.v_long, player.y, player.airborne, player.steer, player.slip, player.h])
 	if skids:
 		skids.advance(dt)
 		for c in cars:
-			var hard: bool = not c.in_water and not c.airborne and absf(c.v_long) > 7.0 and (c.slip > 0.18 or c.handbrake > 0.5 or (c.brake > 0.5 and c.v_long > 10.0))
+			var hard: bool = not c.in_water and not c.airborne and absf(c.v_long) > 7.0 and (c.slip > 0.18 or c.handbrake > 0.5 or (c.service_brake > 0.5 and c.v_long > 10.0))
 			skids.feed(c, hard)
 	if ghost and state == State.RACING:
 		ghost.record(race_time, player)
@@ -266,6 +271,9 @@ func _process(delta: float) -> void:
 		player.cockpit(vi == ChaseCamera.COCKPIT)
 		player.set_low_view(vi == ChaseCamera.LOW)
 	var vf: Array = camera.view_focus()
+	if stage.advance_lighting(player.s):
+		player.set_headlight_level(stage.headlight_level)
+		lighting_changed.emit()
 	stage.update(dt, vf[0], float(vf[1]), player.s, camera)
 	var threats: Array = []
 	for c in cars:

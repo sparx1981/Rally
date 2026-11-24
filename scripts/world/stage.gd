@@ -30,7 +30,6 @@ var env: Environment
 var weather_fx: Node3D
 var _particles: CPUParticles3D
 var birds: Birds
-var wildlife: Wildlife
 var _tunnel_roof: MeshInstance3D
 var _time := 0.0
 
@@ -66,12 +65,20 @@ static func fibre_tex() -> NoiseTexture2D:
 
 
 var tod := 0
+var _lighting_mode := 0
+var _light_presets: Array[Dictionary] = []
+var _light_progress := 0.0
+var headlight_level := 0.0
 
 
 func build(stage_def: Dictionary, time_of_day := -1) -> void:
 	def = stage_def
-	tod = int(def.get("tod", 0)) if time_of_day < 0 else time_of_day
-	wx = Catalog.lighting(def["weather"], tod)
+	_lighting_mode = int(def.get("tod", 0)) if time_of_day < 0 else time_of_day
+	tod = 2 if _lighting_mode == Catalog.SUNRISE else (0 if _lighting_mode == Catalog.SUNSET else clampi(_lighting_mode, 0, 2))
+	_light_presets = [Catalog.lighting(def.weather, 0), Catalog.lighting(def.weather, 1), Catalog.lighting(def.weather, 2)]
+	if changing_light():
+		_light_presets[1].elev = 9.0
+	wx = _light_presets[tod].duplicate()
 	track.generate(int(def["seed"]), float(def["length"]) + Track.POST_FINISH, float(def["twist"]), float(def["width"]))
 	var ep: Dictionary = def.get("elev", {})
 	track.build_elevation(ep, int(def["seed"]))
@@ -115,7 +122,8 @@ func build(stage_def: Dictionary, time_of_day := -1) -> void:
 	scenery = Scenery.new()
 	scenery.name = "Scenery"
 	scenery.landmark = landmark
-	scenery.lights_on = bool(wx.get("headlights", false))
+	scenery.lights_on = changing_light() or bool(wx.headlights)
+	scenery.lamp_level = 0.0 if tod == 0 else 1.0
 	add_child(scenery)
 	if def.loc_id in ["alpine", "gorge"]:
 		_overhead_crossing()
@@ -134,9 +142,6 @@ func build(stage_def: Dictionary, time_of_day := -1) -> void:
 	_make_weather()
 	_make_mist()
 	_make_birds()
-	wildlife = Wildlife.new()
-	add_child(wildlife)
-	wildlife.setup(track, scenery, paper_mat, def)
 	apply_settings()
 	Settings.changed.connect(_on_settings_changed)
 
@@ -204,50 +209,23 @@ func _make_lights() -> void:
 	env = Environment.new()
 	env.background_mode = Environment.BG_SKY
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = wx["amb"]
-	env.ambient_light_energy = float(wx["amb_e"]) * 0.95
 	env.tonemap_mode = Environment.TONE_MAPPER_LINEAR
 	we.environment = env
 	add_child(we)
-	key_light = DirectionalLight3D.new()
-	key_light.light_color = wx["key"]
-	key_light.light_energy = float(wx["key_e"]) * 0.6
-	var el := deg_to_rad(float(wx["elev"]))
-	var az := deg_to_rad(float(wx["azim"]))
-	var sun := Vector3(cos(el) * sin(az), sin(el), cos(el) * cos(az))
 	var sky_mat := ShaderMaterial.new()
 	sky_mat.shader = preload("res://shaders/sky.gdshader")
-	var wet: bool = wx["kind"] == "rain"
-	var horizon := Color("#cedacb") if wet else Color("#f1dfc3")
-	var zenith := Color("#748797") if wet else Color("#719abc")
-	var cloud := Color("#a5acaa") if wet else Color("#fff2d8")
-	if wx["kind"] == "snow":
-		horizon = Color("#e3e7ed")
-		zenith = Color("#8499b8")
-		cloud = Color("#f4f1ea")
-	if tod == 1:
-		horizon = Color("#e9ac88")
-		zenith = Color("#796f99")
-		cloud = Color("#a98189")
-	elif tod == 2:
-		horizon = Color("#34394e")
-		zenith = Color("#0e152b")
-		cloud = Color("#42475d")
-	sky_mat.set_shader_parameter("horizon", horizon)
-	sky_mat.set_shader_parameter("zenith", zenith)
-	sky_mat.set_shader_parameter("cloud_ink", cloud)
-	sky_mat.set_shader_parameter("light_ink", Color("#d8dfed") if tod == 2 else Color("#fff2d1"))
-	sky_mat.set_shader_parameter("light_dir", sun)
-	sky_mat.set_shader_parameter("cover", 0.44 if wet else 0.54)
-	sky_mat.set_shader_parameter("night", tod == 2)
+	sky_mat.set_shader_parameter("cover", 0.44 if kind() == "rain" else 0.54)
 	sky_mat.set_shader_parameter("peaks", def.loc_id in ["gorge", "alpine", "canyon"])
 	sky_mat.set_shader_parameter("snowcaps", def.loc_id == "alpine")
-	sky_mat.set_shader_parameter("offset", Vector2(float(def["seed"] % 197) / 197.0, float(def["loc"]) * 0.08))
+	sky_mat.set_shader_parameter("offset", Vector2(float(def.seed % 197) / 197.0, float(def.loc) * 0.08))
 	sky_mat.set_shader_parameter("paper_noise", noise_tex())
 	env.sky = Sky.new()
 	env.sky.sky_material = sky_mat
-	env.fog_light_color = horizon
-	key_light.basis = Basis.looking_at(-sun, Vector3.UP if absf(sun.y) < 0.99 else Vector3.FORWARD)
+	if changing_light():
+		env.sky.process_mode = Sky.PROCESS_MODE_REALTIME
+		env.sky.radiance_size = Sky.RADIANCE_SIZE_64
+
+	key_light = DirectionalLight3D.new()
 	key_light.shadow_enabled = true
 	key_light.shadow_blur = 1.6
 	key_light.shadow_bias = 0.04
@@ -256,10 +234,88 @@ func _make_lights() -> void:
 	key_light.directional_shadow_fade_start = 0.85
 	add_child(key_light)
 	fill_light = DirectionalLight3D.new()
-	fill_light.light_color = wx["fill"]
-	fill_light.light_energy = float(wx["fill_e"]) * 1.7
 	fill_light.shadow_enabled = false
 	add_child(fill_light)
+	_apply_lighting(float(tod))
+
+
+func changing_light() -> bool:
+	return _lighting_mode in [Catalog.SUNRISE, Catalog.SUNSET]
+
+
+## Advance the sky with completed course distance, so a retry starts at the
+## same light and backing up or resetting cannot roll the sky back.
+func advance_lighting(station: float) -> bool:
+	if not changing_light():
+		return false
+	var progress := clampf(inverse_lerp(track.start_s, track.finish_s, station) / 0.94, 0.0, 1.0)
+	var next := floorf(progress * 180.0) / 180.0
+	if next <= _light_progress:
+		return false
+	_light_progress = next
+	var journey := next * 2.0 if _lighting_mode == Catalog.SUNSET else (1.0 - next) * 2.0
+	_apply_lighting(journey)
+	return true
+
+
+func _sky_colors(index: int) -> Array[Color]:
+	if index == 2:
+		return [Color("#34394e"), Color("#0e152b"), Color("#42475d")]
+	if index == 1:
+		return [Color("#e9ac88"), Color("#796f99"), Color("#a98189")]
+	match kind():
+		"rain": return [Color("#cedacb"), Color("#748797"), Color("#a5acaa")]
+		"snow": return [Color("#e3e7ed"), Color("#8499b8"), Color("#f4f1ea")]
+	return [Color("#f1dfc3"), Color("#719abc"), Color("#fff2d8")]
+
+
+func _apply_lighting(phase: float) -> void:
+	var lower := mini(floori(phase), 1)
+	var mix_amount := smoothstep(0.0, 1.0, phase - lower)
+	var left: Dictionary = _light_presets[lower]
+	var right: Dictionary = _light_presets[lower + 1]
+	for key: String in ["key", "fill", "amb", "leak", "vig_col", "tint"]:
+		wx[key] = left[key].lerp(right[key], mix_amount)
+	for key: String in ["key_e", "fill_e", "amb_e", "wrap", "glow", "vig", "contrast", "exposure", "sat", "green_pull"]:
+		wx[key] = lerpf(left[key], right[key], mix_amount)
+
+	var altitude := lerpf(left.elev, right.elev, mix_amount)
+	var azimuth := lerpf(left.azim, right.azim, mix_amount)
+	var sun := _sky_direction(altitude, azimuth)
+	var darkness := smoothstep(1.0, 2.0, phase)
+	var sky_mat := env.sky.sky_material as ShaderMaterial
+	var warm := _sky_colors(lower)
+	var cool := _sky_colors(lower + 1)
+	var horizon := warm[0].lerp(cool[0], mix_amount)
+	sky_mat.set_shader_parameter("horizon", horizon)
+	sky_mat.set_shader_parameter("zenith", warm[1].lerp(cool[1], mix_amount))
+	sky_mat.set_shader_parameter("cloud_ink", warm[2].lerp(cool[2], mix_amount))
+	sky_mat.set_shader_parameter("light_dir", _sky_direction(lerpf(altitude, -6.0, darkness), azimuth))
+	sky_mat.set_shader_parameter("moon_dir", _sky_direction(_light_presets[2].elev, azimuth))
+	sky_mat.set_shader_parameter("light_ink", Color("#fff2d1").lerp(Color("#ffa660"), smoothstep(0.0, 1.0, phase)))
+	sky_mat.set_shader_parameter("night_amount", darkness)
+
+	env.fog_light_color = horizon
+	env.ambient_light_color = wx.amb
+	env.ambient_light_energy = float(wx.amb_e) * 0.95
+	key_light.basis = Basis.looking_at(-sun, Vector3.UP if absf(sun.y) < 0.99 else Vector3.FORWARD)
+	key_light.light_color = wx.key
+	key_light.light_energy = float(wx.key_e) * 0.6
+	fill_light.light_color = wx.fill
+	fill_light.light_energy = float(wx.fill_e) * 1.7
+	for material in [paper_mat, ground_mat, road_mat]:
+		material.set_shader_parameter("leak", wx.leak)
+		material.set_shader_parameter("wrap", wx.wrap)
+	paper_mat.set_shader_parameter("glow", wx.glow)
+	headlight_level = 0.34 * smoothstep(0.42, 1.0, phase) + 0.66 * darkness
+	if scenery:
+		scenery.lamp_level = smoothstep(0.45, 1.26, phase)
+
+
+func _sky_direction(elevation: float, azimuth: float) -> Vector3:
+	var el := deg_to_rad(elevation)
+	var az := deg_to_rad(azimuth)
+	return Vector3(cos(el) * sin(az), sin(el), cos(el) * cos(az))
 
 
 func _make_ground() -> void:
@@ -1338,8 +1394,6 @@ func update(dt: float, focus: Vector3, radius: float, player_s: float, cam: Came
 	if scenery:
 		scenery.update(Vector2(focus.x, focus.z), radius, dt)
 	weather_fx.position = focus
-	if is_instance_valid(wildlife):
-		wildlife.update(dt, focus, player_s)
 	if cam:
 		fill_light.global_basis = cam.global_basis
 		update_tunnel_roof(cam, player_s)

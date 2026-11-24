@@ -200,6 +200,10 @@ func land(k: float) -> void:
 	play("impact", linear_to_db(clampf(k, 0.2, 1.0)) - 8.0, 0.7)
 
 
+func suspension(load: float) -> void:
+	play("thud", linear_to_db(clampf(load, 0.1, 0.5)) - 7.0, 1.18)
+
+
 func splash(big: bool, k := 1.0) -> void:
 	play("splash_big" if big else "splash", linear_to_db(clampf(k, 0.2, 1.0)) - (0.0 if big else 3.0), _rng.randf_range(0.9, 1.1))
 

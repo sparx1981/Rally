@@ -73,6 +73,14 @@ func _ready() -> void:
 	add_child(_toast)
 	_toast.position = Vector2(20, 20)
 	await get_tree().process_frame
+	for index in _bar.get_child_count():
+		var button := _bar.get_child(index) as Button
+		button.focus_neighbor_left = button.get_path_to(_bar.get_child(maxi(0, index - 1)))
+		button.focus_neighbor_right = button.get_path_to(_bar.get_child(mini(_bar.get_child_count() - 1, index + 1)))
+		button.focus_neighbor_top = button.get_path_to(_roadside if _roadside else button)
+		button.focus_neighbor_bottom = button.get_path_to(button)
+	if _roadside:
+		_roadside.focus_neighbor_bottom = _roadside.get_path_to(_bar.get_child(-1))
 	(_bar.get_child(0) as Button).grab_focus()
 	_apply()
 

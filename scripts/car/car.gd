@@ -15,6 +15,7 @@ const BASE_ACC := 14.5
 const BASE_MU := 17.0
 const BRAKE := 28.0
 const RADIUS := 1.55
+const GEAR_TORQUE := [1.0, 1.0, 0.88, 0.77, 0.69, 0.62]
 const GEARS := [0.0, 8.0, 14.0, 20.0, 26.0, 31.0]
 const GRAVITY := 22.0
 const MAX_LAUNCH_VY := 4.2
@@ -43,6 +44,7 @@ var on_road := true
 var slip := 0.0
 var v_long := 0.0
 var gear := 1
+var _transmission_ratio := 1.0
 var rpm := 900.0
 var finished := false
 var finish_time := -1.0
@@ -67,16 +69,17 @@ var _trip_centikm := -1
 var _lights: Array = []
 var _prev_gh := 0.0
 var _slope := 0.0
-var _comp := 0.0
-var _comp_v := 0.0
-var _wheel_base: Array = []
+var _suspension_offset := Vector2.ZERO
+var _suspension_velocity := Vector2.ZERO
+var _suspension_pose := Vector3.ZERO
+var _previous_pose := Vector3.ZERO
+var render_fraction := 1.0
+var _wheel_base := PackedVector3Array()
 var _has_prev_gh := false
 
 var _body: Node3D
 var _wheels: Array = []
 var _spin := 0.0
-var _roll := 0.0
-var _pitch := 0.0
 var _dust: CPUParticles3D
 var _last_puddle := false
 var _contact: MeshInstance3D
@@ -94,6 +97,8 @@ func setup(car_stats: Dictionary, num: int, stg: Stage, mat: Material) -> void:
 	add_child(m["root"])
 	_body = m["body"]
 	_wheels = m["wheels"]
+	for wheel in _wheels:
+		_wheel_base.append(wheel.position)
 	half_len = float(m["length"]) * 0.5
 	half_wid = float(m["width"]) * 0.5
 	wheel_r = float(m["wheel_r"])
@@ -239,7 +244,7 @@ func _make_rear_lamps() -> void:
 
 
 func _update_rear_lamps() -> void:
-	var braking := brake > 0.08 and v_long > 0.5 and not frozen
+	var braking := service_brake > 0.08 and not frozen
 	var reversing := gear == 0 and not frozen
 	for b in _brake_lamps:
 		b.visible = braking
@@ -348,6 +353,15 @@ func enable_lights(shadows: bool, night := false) -> void:
 	tail.position = Vector3(0, lamp.y, -half_len - 0.4)
 	_body.add_child(tail)
 	_lights.append(tail)
+
+
+func set_headlight_level(level: float) -> void:
+	for node in _lights:
+		var light := node as Light3D
+		if not light.has_meta("full_energy"):
+			light.set_meta("full_energy", light.light_energy)
+		light.visible = level > 0.004
+		light.light_energy = float(light.get_meta("full_energy")) * level
 
 
 ## Sync the visible car to the physics state now (before the camera follows it), so fast-moving
@@ -469,16 +483,23 @@ func place_at(s_pos: float, lateral: float) -> void:
 	vy = 0.0
 	longitudinal_accel = 0.0
 	rear_lock = 0.0
-	_comp = 0.0
-	_comp_v = 0.0
+	_suspension_offset = Vector2.ZERO
+	_suspension_velocity = Vector2.ZERO
+	_suspension_pose = Vector3.ZERO
+	_previous_pose = Vector3.ZERO
+	_reverse_hold = 0.0
+	service_brake = 0.0
 	contact_pitch = track.grade_along(pos,s,lat,fwd())
-	suspension_pitch = 0.0
 	gear = 1
+	_transmission_ratio = 1.0
 	rpm = 900.0
 	v_long = 0.0
 	slip = 0.0
 	_prev_gh = y
+	_has_prev_gh = false
+	air_time = 0.0
 	airborne = false
+	wheel_height.fill(y)
 	_sync_visual(0.0)
 
 
@@ -513,7 +534,11 @@ var lateral_capacity := Vector2.ZERO
 var axle_demand := Vector2.ZERO
 var axle_slip := Vector2.ZERO
 var longitudinal_accel := 0.0
-var suspension_pitch := 0.0
+var wheel_surface := PackedStringArray(["road", "road", "road", "road"])
+var front_weight := 0.53
+var lateral_force := Vector2.ZERO
+var service_brake := 0.0
+var _reverse_hold := 0.0
 var contact_pitch := 0.0
 var rear_lock := 0.0
 var traction_yaw := 0.0
@@ -534,59 +559,114 @@ func profile_acceleration() -> float:
 	var traction := BASE_MU * stage.grip() * float(stats.grip)
 	return minf(BASE_ACC * float(stats.accel), traction * (0.52 if split == 1.0 else (0.56 if split == 0.0 else 1.0)))
 
+func profile_braking() -> float:
+	return minf(BRAKE, BASE_MU * stage.grip() * float(stats.grip))
+
+
 func _sample_wheels(dt: float) -> void:
 	var forward := fwd()
 	var right := right_axis()
-	var front_load := clampf(0.53 - longitudinal_accel * 0.44 / (9.81 * 2.0 * (half_len - 0.8)), 0.28, 0.76)
+	var course := track.tang[track_i]
+	var normal := track.nrm[track_i]
+	var wheelbase := 2.0 * _wheel_base[0].z
+	front_weight = clampf(0.53 - longitudinal_accel * 0.44 / (9.81 * wheelbase), 0.28, 0.76)
 	var roll_load := clampf(-yaw_rate * v_long * 0.013, -0.22, 0.22)
-	var travel := suspension_travel
 	for i in 4:
-		var point: Vector3 = _wheels[i].position
+		var point: Vector3 = _wheel_base[i]
 		var offset := forward * point.z + right * point.x
-		var station := clampf(s + offset.dot(track.tang[track_i]), 0.0, track.length)
-		var lateral := lat + offset.dot(track.nrm[track_i])
+		var station := clampf(s + offset.dot(course), 0.0, track.length)
+		var lateral := lat + offset.dot(normal)
 		var loose := absf(lateral) > track.road_half_width(station)
 		var patch := track.patch_at(station, lateral)
-		wheel_loose[i] = int(loose or patch.get("kind","") in ["mud","gravel","deep snow"])
-		wheel_grip[i] = stage.grip() * (lerpf(0.72,0.95,stats.offroad) if loose else 1.0) * float(patch.get("grip",1.0))
+		var label: String = patch.get("kind", "verge" if loose else "road")
+		wheel_surface[i] = label
+		wheel_loose[i] = int(loose or label in ["mud", "gravel", "deep snow", "ice"])
+		wheel_grip[i] = stage.grip() * (lerpf(0.72, 0.95, stats.offroad) if loose else 1.0) * float(patch.get("grip", 1.0))
 		wheel_height[i] = track.surface_height(pos + offset, station, lateral)
-		var gap := y + _comp + point.z * (contact_pitch-suspension_pitch) - wheel_height[i]
-		var support := (1.0 - smoothstep(travel*0.25, travel, gap)) * clampf(1.0-gap*1.2,0.82,1.20)
-		wheel_load[i] = support * (front_load if i < 2 else 1.0-front_load) * (0.5 + signf(point.x)*roll_load)
-	var front_h := (wheel_height[0]+wheel_height[1])*0.5
-	var rear_h := (wheel_height[2]+wheel_height[3])*0.5
-	contact_pitch = lerpf(contact_pitch, clampf((front_h-rear_h)/(2.0*(half_len-0.8)),-0.55,0.55), minf(dt*18.0,1.0))
-	var offset_y := clampf((front_h+rear_h)*0.5-y,-travel,travel)
-	var spring := 23.0/travel
-	_bump_cooldown = maxf(0.0,_bump_cooldown-dt)
-	if not airborne and _comp_v > 0.48 and offset_y > 0.065 and _bump_cooldown == 0.0:
-		compressed.emit(clampf(_comp_v*0.23,0.12,0.50))
-		_bump_cooldown = 0.33
-	var damping := 14.0 if _comp_v > 0.0 else 21.0
-	_comp_v += ((offset_y-_comp)*spring - _comp_v*damping - maxf(_comp-0.07,0.0)*480.0)*dt
-	_comp = clampf(_comp + _comp_v*dt,-travel,travel)
-	suspension_pitch = lerpf(suspension_pitch,clampf(-longitudinal_accel*0.003,-0.055,0.075), minf(dt*8.0,1.0))
+
+	var front_h := (wheel_height[0] + wheel_height[1]) * 0.5
+	var rear_h := (wheel_height[2] + wheel_height[3]) * 0.5
+	var ground_pitch := clampf((front_h - rear_h) / wheelbase, -0.55, 0.55)
+	contact_pitch = lerpf(contact_pitch, ground_pitch, minf(dt * 18.0, 1.0))
+	_previous_pose = _suspension_pose
+	_step_suspension(Vector2(front_h, rear_h) - Vector2.ONE * y, wheelbase, dt)
+
+	for i in 4:
+		var point: Vector3 = _wheel_base[i]
+		var gap := y + _suspension_pose.x + point.z * (contact_pitch - _suspension_pose.y) - wheel_height[i]
+		var support := (1.0 - smoothstep(suspension_travel * 0.25, suspension_travel, gap)) * clampf(1.0 - gap * 1.2, 0.82, 1.20)
+		var axle_weight := front_weight if i < 2 else 1.0 - front_weight
+		wheel_load[i] = support * axle_weight * (0.5 + signf(point.x) * roll_load)
+	var side_load := wheel_load[0] + wheel_load[2] - wheel_load[1] - wheel_load[3]
+	_suspension_pose.z = lerpf(_suspension_pose.z, clampf(-side_load * 0.13, -0.055, 0.055), minf(dt * 10.0, 1.0))
+
+
+func _step_suspension(ground: Vector2, wheelbase: float, dt: float) -> void:
+	var travel := suspension_travel
+	var static_pitch := contact_pitch * wheelbase * 0.5
+	var weight_shift := (front_weight - 0.53) * 0.14
+	var target := ground - Vector2(static_pitch + weight_shift, -static_pitch - weight_shift)
+	_bump_cooldown = maxf(0.0, _bump_cooldown - dt)
+	for axle in 2:
+		var desired := clampf(target[axle], -travel, travel)
+		var offset := _suspension_offset[axle]
+		var velocity := _suspension_velocity[axle]
+		var damping := 14.0 if velocity > 0.0 else 20.0
+		var stop := maxf(absf(offset) - travel * 0.67, 0.0) * signf(offset)
+		velocity += ((desired - offset) * (23.0 / travel) - damping * velocity - stop * 420.0) * dt
+		var next := clampf(offset + velocity * dt, -travel, travel)
+		_suspension_offset[axle] = next
+		_suspension_velocity[axle] = (next - offset) / dt
+		if not airborne and velocity > 0.68 and desired > travel * 0.48 and _bump_cooldown <= 0.0:
+			compressed.emit(clampf(velocity * 0.19, 0.13, 0.46))
+			_bump_cooldown = 0.28
+	_suspension_pose.x = (_suspension_offset.x + _suspension_offset.y) * 0.5
+	_suspension_pose.y = clampf((_suspension_offset.y - _suspension_offset.x) / wheelbase, -0.11, 0.11)
+
 
 func _axle_forces(vl: float, thr: float, brk: float, hb: float, dt: float) -> float:
 	var split := drive_split()
-	var ratio := 1.0 / (1.0 + 0.15*maxi(0,gear-1))
+	_transmission_ratio = move_toward(_transmission_ratio, float(GEAR_TORQUE[gear]), dt * 2.0)
+	var ratio := _transmission_ratio
 	var torque := 0.87 + 0.21*sin(PI*clampf((rpm-900.0)/6300.0,0.0,1.0))
 	var drive := BASE_ACC * float(stats.accel) * ratio * torque * thr * clampf(1.0-pow(maxf(vl,0.0)/top_speed(),2.0),0.0,1.0)
-	if vl < 0.6 and vl > -9.0:
-		drive -= brk*8.0
-	if vl > 1.0 and thr < 0.05:
+	if brk > 0.08 and thr < 0.05 and absf(vl) < 0.65:
+		_reverse_hold += dt
+	elif brk <= 0.08 or thr >= 0.05 or vl >= 0.65:
+		_reverse_hold = 0.0
+	var reverse := _reverse_hold >= 0.22 and vl <= 0.12
+	if reverse:
+		drive = -brk * 8.0 * clampf(1.0 + vl / 9.0, 0.0, 1.0)
+	service_brake = 0.0 if reverse else brk
+	if service_brake > 0.0:
+		drive = 0.0
+	if vl > 1.0 and thr < 0.05 and service_brake == 0.0:
 		drive -= ratio * 1.3
 	rear_lock = move_toward(rear_lock,hb,dt*(12.0 if hb>rear_lock else 3.8))
 	var bias := float(stats.get("differential_bias",1.0))
 	traction_yaw = 0.0
+	var limits := Vector2.ZERO
+	var capacities := Vector4.ZERO
+	for i in 4:
+		capacities[i] = wheel_load[i] * wheel_grip[i] * BASE_MU * float(stats.grip)
 	for axle in 2:
-		var i := axle*2
-		var a := wheel_load[i]*wheel_grip[i]*BASE_MU*float(stats.grip)
-		var b := wheel_load[i+1]*wheel_grip[i+1]*BASE_MU*float(stats.grip)
-		var engine := drive*(split if axle==0 else 1.0-split)
-		var axle_limit := minf(a+b,minf(a,b)*(1.0+bias))
-		var service := brk*BRAKE*(0.64 if axle==0 else 0.36) if vl>0.6 else 0.0
-		var parking := rear_lock*14.0*signf(vl) if axle==1 and absf(vl)>0.2 else 0.0
+		var right := capacities[axle * 2]
+		var left := capacities[axle * 2 + 1]
+		limits[axle] = minf(right + left, minf(right, left) * (1.0 + bias))
+	var engine_demand := Vector2(split, 1.0 - split) * drive
+	if split > 0.0 and split < 1.0:
+		# Limited centre transfer sends some surplus torque to the axle with
+		# reserve grip, while the sum of both demands stays at engine output.
+		var spare := limits - engine_demand.abs()
+		var transfer := clampf(spare.y, 0.0, maxf(0.0, -spare.x)) - clampf(spare.x, 0.0, maxf(0.0, -spare.y))
+		engine_demand -= Vector2(transfer, -transfer) * signf(drive) * 0.48
+	for axle in 2:
+		var a := capacities[axle * 2]
+		var b := capacities[axle * 2 + 1]
+		var engine := engine_demand[axle]
+		var axle_limit := limits[axle]
+		var service := service_brake * BRAKE * (0.64 if axle == 0 else 0.36) * signf(vl) if absf(vl) > 0.03 else 0.0
+		var parking := rear_lock * 14.0 * signf(vl) if axle == 1 and absf(vl) > 0.2 else 0.0
 		axle_demand[axle] = engine-service-parking
 		var transmitted := clampf(engine,-axle_limit,axle_limit)
 		# Start with equal wheel torque. An LSD can transfer unmet torque to
@@ -602,8 +682,6 @@ func _axle_forces(vl: float, thr: float, brk: float, hb: float, dt: float) -> fl
 		lateral_capacity[axle] = sqrt(maxf(0.0,a*a-right_force*right_force))+sqrt(maxf(0.0,b*b-left_force*left_force))
 		if axle==1:
 			lateral_capacity.y *= 1.0-0.85*rear_lock
-	if telemetry_enabled:
-		handling_sample.emit({"throttle":thr,"brake":brk,"steer":steer,"handbrake":hb,"load":wheel_load.duplicate(),"grip":wheel_grip.duplicate(),"demand":axle_demand,"force":longitudinal_force,"slip":axle_slip,"lateral":lateral_capacity})
 	return longitudinal_force.x+longitudinal_force.y
 
 
@@ -649,7 +727,7 @@ func step(dt: float) -> void:
 			airborne = false
 			if air_time > 0.12:
 				landed.emit(hit_v)
-				_comp_v -= clampf(hit_v * 0.12, 0.0, 1.2)   # body squats onto its springs
+				_suspension_velocity -= Vector2.ONE * clampf(hit_v * 0.10, 0.0, 1.0)
 	else:
 		# Ballistic if the ground drops away faster than gravity can pull the car down.
 		var predicted := y + vy * dt - 0.5 * GRAVITY * dt * dt
@@ -708,8 +786,11 @@ func step(dt: float) -> void:
 	r = right_axis()
 	vl = vel.dot(f)
 	vt = vel.dot(r)
-	var max_dv := (lateral_capacity.x + lateral_capacity.y)*dt
-	var removed := clampf(vt, -max_dv, max_dv)
+	var lateral_wish := vt / dt
+	var applied_front := clampf(lateral_wish * front_weight, -lateral_capacity.x, lateral_capacity.x)
+	var applied_rear := clampf(lateral_wish - applied_front, -lateral_capacity.y, lateral_capacity.y)
+	lateral_force = Vector2(clampf(lateral_wish - applied_rear, -lateral_capacity.x, lateral_capacity.x), applied_rear)
+	var removed := (lateral_force.x + lateral_force.y) * dt
 	vt -= removed
 	vt *= 1.0 - clampf(dt * lerpf(0.6, 0.30, hb), 0.0, 1.0)
 	# Sliding scrubs speed; a little lateral energy carries forward (rally momentum).
@@ -720,13 +801,18 @@ func step(dt: float) -> void:
 	v_long = vl
 	pos += vel * dt
 	_update_gear(vl, thr)
+	if telemetry_enabled:
+		handling_sample.emit({"throttle": thr, "brake": brk, "service_brake": service_brake, "steer": steer,
+			"handbrake": hb, "surface": wheel_surface.duplicate(), "load": wheel_load.duplicate(),
+			"grip": wheel_grip.duplicate(), "demand": axle_demand, "force": longitudinal_force,
+			"slip": axle_slip, "lateral": lateral_force, "suspension": _suspension_offset})
 
 
 func _update_gear(vl: float, thr: float) -> void:
 	var v := absf(vl)
 	var g := 1
 	for i in range(1, GEARS.size()):
-		if v >= GEARS[i] * float(stats["top"]):
+		if v >= GEARS[i] * float(stats["top"]) * (0.90 if gear > i else 1.0):
 			g = i + 1
 	g = clampi(g, 1, 5)
 	if vl < -0.5:
@@ -768,12 +854,10 @@ func _sync_visual(delta: float) -> void:
 	_slope = lerpf(_slope, slope_t, clampf(delta * 8.0, 0.0, 1.0))
 	rotation = Vector3(_slope, h, 0.0)
 	# Body on its springs: small roll and pitch about the axle line, plus compression on landings.
-	var lat_acc := yaw_rate * v_long * clampf(wheel_load[0]+wheel_load[1]+wheel_load[2]+wheel_load[3],0.0,1.0)
-	_roll = lerpf(_roll, clampf(lat_acc * 0.004, -0.035, 0.035), clampf(delta * 6.0, 0.0, 1.0))
-	_pitch = lerpf(_pitch,suspension_pitch,minf(delta*16.0,1.0))
+	var pose := _previous_pose.lerp(_suspension_pose, render_fraction)
 	var pivot := Vector3(0, wheel_r, 0)
-	var bb := Basis.from_euler(Vector3(_pitch, 0.0, _roll))
-	_body.transform = Transform3D(bb, pivot - bb * pivot + Vector3(0, _comp, 0))
+	var bb := Basis.from_euler(Vector3(pose.y, 0.0, pose.z))
+	_body.transform = Transform3D(bb, pivot - bb * pivot + Vector3(0, pose.x, 0))
 	_spin += v_long * delta / wheel_r
 	if not _cockpit.is_empty() and _cockpit["root"].visible:
 		(_cockpit["wheel"] as Node3D).rotation.z = steer * 1.6
@@ -796,9 +880,7 @@ func _sync_visual(delta: float) -> void:
 	# Suspension travel: wheels droop in the air and jiggle over rough ground, within the arches.
 	for i in _wheels.size():
 		var wnode: Node3D = _wheels[i]
-		if _wheel_base.size() < _wheels.size():
-			_wheel_base.append(wnode.position)
-		var travel := clampf(wheel_height[i]-y-contact_pitch*wnode.position.z,-0.14,0.10)
+		var travel := clampf(wheel_height[i] - y - contact_pitch * _wheel_base[i].z, -suspension_travel, suspension_travel * 0.62)
 		wnode.position.y = lerpf(wnode.position.y, float(_wheel_base[i].y) + travel, clampf(delta * 12.0, 0.0, 1.0))
 		if i < 2:
 			wnode.rotation.y = -steer * 0.45

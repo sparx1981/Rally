@@ -10,7 +10,7 @@ var car_index := 11
 var livery := 0
 var stage_index := 0
 var series_index := 0
-var time_of_day := -1        # -1 = the stage's own default, 0 day, 1 dusk, 2 night
+var time_of_day := -1        # -1 = stage default, otherwise an index into Catalog.TOD_NAMES
 
 # Championship in progress.
 var champ_round := 0
