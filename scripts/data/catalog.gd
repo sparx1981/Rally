@@ -102,15 +102,15 @@ static func weather(id: String) -> Dictionary:
 				"vig": 0.12, "vig_col": Color("#1c2430"), "green_pull": 0.15, "glow": 0.35, "particles": "rain"},
 			"snow_bright": {"label": "Snow", "kind": "snow", "key": Color("#fbf0e0"), "key_e": 0.72, "elev": 46.0, "azim": 40.0,
 				"fill": Color("#a4bbe0"), "fill_e": 0.22, "amb": Color("#dfe6f2"), "amb_e": 0.28, "leak": Color("#6c84b0"),
-				"wrap": 0.3, "grip": 0.56, "exposure": 0.86, "contrast": 1.08, "sat": 1.0, "tint": Vector3(1.0, 1.0, 1.02),
+				"wrap": 0.3, "grip": 0.53, "exposure": 0.86, "contrast": 1.08, "sat": 1.0, "tint": Vector3(1.0, 1.0, 1.02),
 				"vig": 0.08, "vig_col": Color("#283048"), "green_pull": 0.1, "glow": 0.0, "particles": "snow"},
 			"snow_ice": {"label": "Snow", "kind": "snow", "key": Color("#fbf0e0"), "key_e": 0.72, "elev": 44.0, "azim": 30.0,
 				"fill": Color("#a4bbe0"), "fill_e": 0.22, "amb": Color("#dfe6f2"), "amb_e": 0.28, "leak": Color("#6c84b0"),
-				"wrap": 0.3, "grip": 0.49, "exposure": 0.86, "contrast": 1.08, "sat": 1.0, "tint": Vector3(1.0, 1.0, 1.02),
+				"wrap": 0.3, "grip": 0.46, "exposure": 0.86, "contrast": 1.08, "sat": 1.0, "tint": Vector3(1.0, 1.0, 1.02),
 				"vig": 0.08, "vig_col": Color("#283048"), "green_pull": 0.1, "glow": 0.0, "particles": "snow"},
 			"snow_dusk": {"label": "Snow", "kind": "snow", "key": Color("#ffb38a"), "key_e": 0.7, "elev": 28.0, "azim": 45.0,
 				"fill": Color("#6f63a8"), "fill_e": 0.3, "amb": Color("#c6bfd9"), "amb_e": 0.34, "leak": Color("#5e5c98"),
-				"wrap": 0.36, "grip": 0.55, "exposure": 0.95, "contrast": 1.06, "sat": 0.98, "tint": Vector3(1.01, 0.98, 1.01),
+				"wrap": 0.36, "grip": 0.52, "exposure": 0.95, "contrast": 1.06, "sat": 0.98, "tint": Vector3(1.01, 0.98, 1.01),
 				"vig": 0.14, "vig_col": Color("#1a1430"), "green_pull": 0.1, "glow": 1.1, "particles": "snow"},
 		}
 	return _weather[id]

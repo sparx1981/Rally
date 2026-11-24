@@ -309,16 +309,15 @@ func flatten_disc(c: Vector2, r: float, height: float) -> void:
 
 ## Cut a river channel along segment a-b: water surface at water_y, a gravel bed below it and
 ## grassy banks easing back into the land.
-func carve_river(a: Vector2, b: Vector2, water_y: float) -> void:
-	var half := 5.5
-	var bank := 16.0
+func carve_river(a: Vector2, b: Vector2, water_y: float, half := 5.5, depth := 1.65, taper_ends := false) -> void:
+	var bank := half + 10.5
 	var lo := Vector2(minf(a.x, b.x), minf(a.y, b.y)) - Vector2.ONE * (bank + cell)
 	var hi := Vector2(maxf(a.x, b.x), maxf(a.y, b.y)) + Vector2.ONE * (bank + cell)
 	var x0 := maxi(0, int((lo.x - origin.x) / cell))
 	var x1 := mini(nx - 1, int((hi.x - origin.x) / cell) + 1)
 	var z0 := maxi(0, int((lo.y - origin.y) / cell))
 	var z1 := mini(nz - 1, int((hi.y - origin.y) / cell) + 1)
-	var bed := water_y - 1.65
+	var bed := water_y - depth
 	for z in range(z0, z1 + 1):
 		for x in range(x0, x1 + 1):
 			var p := Vector2(origin.x + x * cell, origin.y + z * cell)
@@ -326,7 +325,12 @@ func carve_river(a: Vector2, b: Vector2, water_y: float) -> void:
 			if d > bank:
 				continue
 			var k := z * nx + x
-			var target := lerpf(bed, h[k], smoothstep(half, bank, d))
+			var cut := 1.0 - smoothstep(half, bank, d)
+			if taper_ends:
+				var axis := a.direction_to(b)
+				var to_end := minf((p - a).dot(axis), (b - p).dot(axis))
+				cut *= smoothstep(0, 7, to_end)
+			var target := lerpf(h[k], bed, cut)
 			h[k] = minf(h[k], target)
 			far[k] = 0
 			min_h = minf(min_h, h[k])

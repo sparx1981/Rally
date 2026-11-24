@@ -83,6 +83,11 @@ func build(stage_def: Dictionary, time_of_day := -1) -> void:
 		track.add_cliff_barriers()
 	for br in track.bridges:
 		track.terrain.carve_river(br["a"], br["b"], br["water_y"])
+	for f in track.features:
+		if f["type"] == "splash":
+			var i: int = f["i"]
+			var reach := track.nrm[i] * (track.width * 0.5 + 16.0)
+			track.terrain.carve_river(track.pts[i] - reach, track.pts[i] + reach, f["water_y"], 3.6, 0.38, true)
 	track.terrain.flatten_disc(parc_center(), 26.0, track.road_h_i(track.index_at(track.length - PARC_BACK)) - 0.1)
 	_make_materials()
 	_make_lights()
@@ -381,7 +386,10 @@ func _make_puddles() -> void:
 		mi.material_override = paper_mat
 		var ps: float = track.project(p, track.nearest_global(p))[1]
 		mi.position = Vector3(p.x, track.road_h(ps) + ROAD_Y + 0.012, p.y)
-		mi.rotation.y = rng.randf() * TAU
+		var tangent := track.tang[track.index_at(ps)]
+		var slope := (track.road_h(ps + 1.0) - track.road_h(ps - 1.0)) * 0.5
+		var normal := Vector3(-tangent.x * slope, 1.0, -tangent.y * slope).normalized()
+		mi.basis = Basis(Quaternion(Vector3.UP, normal)) * Basis(Vector3.UP, rng.randf() * TAU)
 		var sc: float = pd[1] / 1.5
 		mi.scale = Vector3(sc, 1.0, sc)
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -395,14 +403,14 @@ func _make_hazards() -> void:
 	rng.seed = int(def["seed"]) + 501
 	var lay := Transform3D(Basis(Vector3.RIGHT, -PI * 0.5), Vector3.ZERO)
 	for f in track.features:
-		var i := track.index_at(f["s"])
+		var i: int = f.get("i", track.index_at(f["s"]))
 		var p := track.pts[i]
 		var hd := track.heading_at(i)
 		match f["type"]:
 			"splash":
 				var wl := track.width * 0.5 + 16.0
-				var stream := _water_sheet(wl * 2.0, 3.6, Color("#7895a4"), i)
-				stream.position = Vector3(p.x, track.road_h_i(i) + ROAD_Y + 0.025, p.y)
+				var stream := _water_sheet(wl * 2.0, 3.6, Color("#7895a4"), i, track.width * 0.5)
+				stream.position = Vector3(p.x, float(f["water_y"]), p.y)
 				stream.rotation.y = hd + PI * 0.5
 				add_child(stream)
 				_riverbanks(stream, wl * 2.0, 3.6, i, track.width * 0.5 + 1.0)
@@ -553,7 +561,7 @@ func _stone_wall(b: PaperKit.Builder, p0: Vector2, p1: Vector2, y0: float, y1: f
 
 ## A cut-paper channel with pale shallows, a wandering deep seam and long facets.
 ## Local Z follows the current for both the geometry and the moving ink marks.
-func _water_sheet(length: float, half_width: float, water: Color, seed_v: int) -> MeshInstance3D:
+func _water_sheet(length: float, half_width: float, water: Color, seed_v: int, ford_half_road := 0.0) -> MeshInstance3D:
 	var b := PaperKit.Builder.new(seed_v)
 	var steps := maxi(2, ceili(length / 3.5))
 	var last := PackedVector3Array()
@@ -563,7 +571,10 @@ func _water_sheet(length: float, half_width: float, water: Color, seed_v: int) -
 		var z := length * (float(i) / steps - 0.5)
 		var section := PackedVector3Array()
 		for x: float in [-1.0, -0.68, -0.24, 0.26, 0.72, 1.0]:
-			section.append(Vector3(_channel_x(z, x, half_width, seed_v), 0, z))
+			var breadth := half_width
+			if ford_half_road > 0.0:
+				breadth = Track.ford_width(z, ford_half_road)
+			section.append(Vector3(Track.channel_x(z, x, breadth, seed_v), 0, z))
 		if i > 0:
 			for j in range(depths.size() - 1):
 				var c := PaperKit.lin(depths[j])
@@ -580,20 +591,13 @@ func _water_sheet(length: float, half_width: float, water: Color, seed_v: int) -
 
 
 # Keep mesh edges and bank toes on exactly the same sampled curve.
-func _channel_x(z: float, fraction: float, width: float, seed_v: int) -> float:
-	var phase := float(seed_v % 41)
-	var bend := sin(z * 0.093 + phase) * 0.18 + sin(z * 0.22 - phase) * 0.065
-	var breadth := 1.0 + 0.09 * sin(z * 0.16 + phase)
-	return width * (bend + fraction * breadth)
-
-
 func _riverbanks(sheet: MeshInstance3D, length: float, width: float, seed_v: int, ford_gap := 0.0) -> void:
 	var b := PaperKit.Builder.new(seed_v)
 	var steps := maxi(2, ceili(length / 3.5))
-	var mud := PaperKit.lin(Color("#685947"))
-	var gravel := PaperKit.lin(Color(def["pal"]["stone"]).darkened(0.14))
-	var grass := PaperKit.lin(def["pal"]["ground"])
-	var colors := [mud, gravel, grass]
+	var mud := PaperKit.lin(Color(def["pal"]["ground2"]).lerp(Color(def["pal"]["stone"]), 0.30).darkened(0.34))
+	var gravel := PaperKit.lin(Color(def["pal"]["stone"]).lerp(Color(def["pal"]["ground2"]), 0.42))
+	var turf := PaperKit.Builder.new(seed_v)
+	var colors := [mud, gravel]
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_v
 	for side: float in [-1.0, 1.0]:
@@ -603,11 +607,14 @@ func _riverbanks(sheet: MeshInstance3D, length: float, width: float, seed_v: int
 			if absf(z) < ford_gap:
 				last.clear()
 				continue
-			var edge := _channel_x(z, side, width, seed_v)
+			var edge := Track.channel_x(z, side, width, seed_v)
 			var outer := Vector3(edge + side * 5.4, 0, z)
 			var world := sheet.transform * outer
 			outer.y = track.terrain.height(Vector2(world.x, world.z)) - sheet.position.y - 0.15
-			var ridge := (1.12 if ford_gap == 0.0 else 0.66) + 0.20 * sin(z * 0.43 + side)
+			var taper := smoothstep(0.0, 5.0, length * 0.5 - absf(z))
+			if ford_gap > 0:
+				taper *= smoothstep(ford_gap, ford_gap + 6.0, absf(z))
+			var ridge := ((1.12 if ford_gap == 0.0 else 0.66) + 0.20 * sin(z * 0.43 + side)) * taper
 			# Short gravel bars build up on one bank, tapering back into the flow.
 			var shelf := pow(maxf(0, sin(z * 0.21 + seed_v % 9 + side * 2.0)), 3.0)
 			var toe := edge - side * (0.13 + shelf * 1.35)
@@ -619,7 +626,10 @@ func _riverbanks(sheet: MeshInstance3D, length: float, width: float, seed_v: int
 					var normal := (row[j] - last[j]).cross(last[j + 1] - last[j]).normalized()
 					if normal.y < 0:
 						normal = -normal
-					b.quad(last[j], row[j], row[j + 1], last[j + 1], normal, colors[j])
+					if j == 2:
+						turf.quad(last[j], row[j], row[j + 1], last[j + 1], normal, Color.WHITE)
+					else:
+						b.quad(last[j], row[j], row[j + 1], last[j + 1], normal, colors[j])
 			if shelf > 0.25 and i > 0 and i < steps:
 				for k in 3:
 					var stone_z := z + rng.randf_range(-0.65, 0.65)
@@ -632,6 +642,10 @@ func _riverbanks(sheet: MeshInstance3D, length: float, width: float, seed_v: int
 	banks.mesh = b.mesh()
 	banks.material_override = paper_mat
 	sheet.add_child(banks)
+	var turf_mesh := MeshInstance3D.new()
+	turf_mesh.mesh = turf.mesh()
+	turf_mesh.material_override = ground_mat
+	sheet.add_child(turf_mesh)
 
 
 ## Bridges and their rivers.

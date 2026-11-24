@@ -385,7 +385,7 @@ func bonnet_transform() -> Transform3D:
 
 func place_at(s_pos: float, lateral: float) -> void:
 	var i := track.index_at(s_pos)
-	pos = track.pts[i] + track.nrm[i] * lateral
+	pos = track.point_at(s_pos) + track.nrm[i] * lateral
 	h = track.heading_at(i)
 	vel = Vector2.ZERO
 	yaw_rate = 0.0
@@ -439,8 +439,8 @@ func step(dt: float) -> void:
 		patch_drag = float(patch["drag"])
 		patch_drag *= lerpf(1.0, 0.4, offroad)
 	# Water splash: heavy drag, a burst of spray.
-	var water := absf(lat) < track.width * 0.5 + 16.0 and not track.feature_at(s, "splash").is_empty()
-	if water and not in_water:
+	var water := track.inside_ford(pos, s)
+	if water and not in_water and speed() > 1.0:
 		splashed.emit(absf(vel.dot(fwd())))
 	in_water = water
 	# Vertical: follow the road over crests and ramps; leave it when it falls away faster than gravity.
@@ -589,6 +589,7 @@ func _sync_visual(delta: float) -> void:
 	position = Vector3(pos.x, y + (Stage.ROAD_Y if on_road else 0.0), pos.y)
 	if _contact:
 		# The printed contact shadow stays on the road / ground while the car flies.
+		_contact.visible = not in_water and not in_puddle and (on_road or not track.overlaps_water(pos, 0.0)) and y > track.terrain.sea_y
 		_contact.position.y = track.surface_height(pos, s, lat) - y
 	if _body == null:
 		return
@@ -613,6 +614,13 @@ func _sync_visual(delta: float) -> void:
 	if not _cockpit.is_empty() and _cockpit["root"].visible:
 		(_cockpit["wheel"] as Node3D).rotation.z = steer * 1.6
 		(_cockpit["needle"] as Node3D).rotation.z = lerpf(-2.2, 1.8, clampf(rpm / 7500.0, 0.0, 1.0))
+		var leds: MultiMesh = _cockpit["shift_leds"]
+		leds.visible_instance_count = clampi(1 + floori((rpm - 4200.0) / 525.0), 0, 5) if gear > 0 else 0
+		var gear_readout: Label3D = _cockpit["gear_readout"]
+		if gear_readout:
+			gear_readout.text = str(gear) if gear > 0 else "R"
+			var speed_readout: Label3D = _cockpit["speed_readout"]
+			speed_readout.text = str(roundi(speed() * (2.23694 if int(Settings.g("units")) == 1 else 3.6)))
 		var trip_display: Label3D = _cockpit["trip_display"]
 		var distance := floori(maxf(s, 0.0) / 10.0)
 		if trip_display and distance != _trip_centikm:
@@ -636,9 +644,9 @@ func _sync_visual(delta: float) -> void:
 	if _dust:
 		var spd := absf(v_long)
 		var emit := spd > 6.0 and (slip > 0.12 or not on_road or stage.kind() != "dry" or spd > 18.0)
-		_dust.emitting = emit and not airborne
+		_dust.emitting = emit and not airborne and not in_water
 		_dust.speed_scale = clampf(0.7 + slip, 0.7, 1.6)
 	if _smoke:
 		_smoke_t -= delta
 		# Launch smoke and backfire smoke.
-		_smoke.emitting = _smoke_t > 0.0 or (throttle > 0.8 and absf(v_long) < 6.0 and not frozen)
+		_smoke.emitting = not in_water and (_smoke_t > 0.0 or (throttle > 0.8 and absf(v_long) < 6.0 and not frozen))

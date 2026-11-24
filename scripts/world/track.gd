@@ -539,7 +539,7 @@ func build_hazards(seed_v: int, kind: String, twist: float) -> void:
 				"crest":
 					features.append({"type": "crest", "s": sc, "s0": sc - 14.0, "s1": sc + 14.0, "h": rng.randf_range(0.8, 1.05)})
 				"splash":
-					features.append({"type": "splash", "s": sc, "s0": sc - 3.5, "s1": sc + 3.5})
+					features.append({"type": "splash", "i": ci, "s": sc, "s0": sc - 3.5, "s1": sc + 3.5})
 				"chicane":
 					features.append({"type": "chicane", "s": sc, "s0": sc - 2.0, "s1": sc + 18.0, "side": -1.0 if rng.randf() < 0.5 else 1.0})
 			break
@@ -547,6 +547,12 @@ func build_hazards(seed_v: int, kind: String, twist: float) -> void:
 	for f in features:
 		if f["type"] == "splash" or f["type"] == "chicane":
 			flatten_at(float(f["s"]), 12.0 if f["type"] == "splash" else 14.0, 20.0)
+		# Carve the sampled road itself so the mesh, suspension and road grade agree.
+		if f["type"] == "splash":
+			var sc: float = f["s"]
+			for i in range(index_at(sc - 15), index_at(sc + 15) + 1):
+				elev[i] -= 0.95 * (1.0 - smoothstep(0.0, 15.0, absf(dist[i] - sc)))
+			f["water_y"] = road_h(sc) + Stage.ROAD_Y + 0.20
 	for f in features:
 		if f["type"] == "jump" or f["type"] == "crest":
 			for i in range(index_at(f["s0"]) - 1, index_at(f["s1"]) + 2):
@@ -554,7 +560,7 @@ func build_hazards(seed_v: int, kind: String, twist: float) -> void:
 					continue
 				heights[i] = maxf(heights[i], _bump(f, dist[i]))
 	# Loose-surface patches on the road (gravel / mud / ice / deep snow).
-	var pk := {"dry": ["gravel", 0.78, 0.1], "rain": ["mud", 0.62, 0.45], "snow": ["ice", 0.55, 0.0]}
+	var pk := {"dry": ["gravel", 0.78, 0.1], "rain": ["mud", 0.62, 0.45], "snow": ["ice", 0.53, 0.0]}
 	for k in int(6 * maxf(1.0, length / 2200.0)):
 		var sc := rng.randf_range(120.0, length - 120.0)
 		var near := false
@@ -805,9 +811,36 @@ func index_watercourses() -> void:
 		watercourses.append(Watercourse.new(br["a"], br["b"], 5.5))
 	for f in features:
 		if f["type"] == "splash":
-			var i := index_at(f["s"])
+			var i: int = f["i"]
 			var offset := nrm[i] * (width * 0.5 + 16.0)
 			watercourses.append(Watercourse.new(pts[i] - offset, pts[i] + offset, 3.6))
+
+
+static func channel_x(z: float, fraction: float, width: float, seed_v: int) -> float:
+	var phase := float(seed_v % 41)
+	var bend := sin(z * 0.093 + phase) * 0.18 + sin(z * 0.22 - phase) * 0.065
+	var breadth := 1.0 + 0.09 * sin(z * 0.16 + phase)
+	return width * (bend + fraction * breadth)
+
+
+## Over the gravel lane the water sheet extends under the rising road at each shore.
+static func ford_width(along: float, road_half_width: float) -> float:
+	return lerpf(5.8, 3.6, smoothstep(road_half_width, road_half_width + 3.0, absf(along)))
+
+
+## The stream mesh lies across the stage, with local +X pointing against travel.
+func inside_ford(p: Vector2, s: float) -> bool:
+	var ford := feature_at(s, "splash", 3.0)
+	if ford.is_empty():
+		return false
+	var i: int = ford["i"]
+	var offset := p - pts[i]
+	var across := -offset.dot(tang[i])
+	var along := -offset.dot(nrm[i])
+	if absf(along) > width * 0.5 + 16.0 or surface_height(p, s, along) + (Stage.ROAD_Y if absf(along) <= width * 0.5 else 0.0) >= float(ford["water_y"]):
+		return false
+	var breadth := ford_width(along, width * 0.5)
+	return across >= channel_x(along, -1.0, breadth, i) and across <= channel_x(along, 1.0, breadth, i)
 
 
 func overlaps_water(p: Vector2, radius: float) -> bool:

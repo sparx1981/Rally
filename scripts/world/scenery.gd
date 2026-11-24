@@ -317,6 +317,8 @@ func _add(kind: String, vi: int, p: Vector2, yaw: float, s: float, rng: RandomNu
 	var lat: float = hit[2]
 	var away := Vector2(-tg.y, tg.x) * signf(lat if lat != 0.0 else 1.0)
 	var out_yaw := atan2(away.x, away.y)
+	if kind == "spectators":
+		yaw = _sign_yaw(p, s - 4.0)
 	placements.append({"kind": kind, "var": vi, "pos": p, "yaw": yaw, "out_yaw": out_yaw, "s": s,
 		"delay": rng.randf_range(0.0, 14.0), "text": text})
 	# Every piece registers for overlap tests; solid ones collide, small ones break.

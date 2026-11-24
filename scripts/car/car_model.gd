@@ -34,6 +34,21 @@ const STYLES := {
 	"buggy": {"L": 3.4, "W": 1.8, "low": 0.25, "nose": 0.2, "bon": 0.5, "tail": 0.25, "deck": 0.3, "cab": 0.9, "cab_f": 0.6, "cab_r": -0.9, "rake": 0.3, "back": 0.1, "ride": 0.45, "wr": 0.48, "wing": "none", "arches": false, "lamps": "round", "pod": true},
 }
 
+# Instrument pack position (metres from the driver), auxiliary dial count, face colour and trim.
+const DASHBOARDS := {
+	"classic": [-0.10, 2, "#ede1be", "#744f34"], "mini": [-0.31, 1, "#f0ead4", "#526454"],
+	"escort": [-0.055, 3, "#e6dbc0", "#51504a"], "stratos": [-0.08, 2, "#e4c879", "#383d40"],
+	"groupb_rwd": [-0.02, 3, "#eebc69", "#494039"], "quattro": [-0.12, 3, "#d8cfaf", "#674c40"],
+	"t16": [0.01, 2, "#dedad1", "#494a58"], "groups": [-0.03, 1, "#acc9ae", "#353d48"],
+	"gt4": [-0.04, 2, "#d3e1d9", "#4d5359"], "integrale": [-0.11, 3, "#ecbc8a", "#4e4945"],
+	"impreza": [0.02, 2, "#ebe8d6", "#39495c"], "evo": [-0.07, 3, "#d6dae2", "#554649"],
+	"wrc": [-0.10, 1, "#c4dfcb", "#414a50"], "rally2": [-0.04, 1, "#d1deae", "#383c42"],
+	"rally1": [0.0, 0, "#b9dddf", "#323d43"], "estate": [-0.14, 2, "#e2d6ac", "#695442"],
+	"suv": [-0.08, 3, "#d6d8c2", "#536055"], "truck": [-0.15, 3, "#eee0c2", "#505661"],
+	"buggy": [0.0, 0, "#f2d088", "#594b3e"]
+}
+
+
 const SPONSOR_COLS := [Color("#c8553d"), Color("#3f6fa8"), Color("#e8b04a"), Color("#2f8a8a"), Color("#2b2b2b")]
 
 
@@ -248,6 +263,15 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 			for k in 4:
 				var lx := -W * 0.25 + k * W * 0.167
 				b.card(PaperKit.circle(0.09, lx, pod_y + 0.02, 10), Transform3D(Basis(), Vector3(0, 0, pod_z + 0.08)), Color("#fff4d6"), {"thick": 0.02, "edge": 0.02, "lip": 0.0, "glow": true})
+		# Bonnet retaining pins follow the sloped leading panel on each side.
+		var nose_run := L * 0.5 - float(P["bon"])
+		var pin_z := lerpf(nose_run, L * 0.5 - 0.25, 0.72)
+		for flank: float in [-1.0, 1.0]:
+			var pin := Transform3D(lay, Vector3(flank * W * 0.33, top_y - 0.04 * 0.72 + 0.009, pin_z))
+			b.card(PaperKit.circle(0.050, 0, 0, 8), pin, Color("#99988f"), {"thick": 0.012, "lip": 0.0})
+			b.box(Vector3(0.009, 0, 0.012), Vector3(0.067, 0.012, 0.010), pin, ink)
+			var flap_z := -L * 0.5 + 0.12
+			b.box(Vector3(flank * W * 0.38, tail_y - 0.10, flap_z - 0.145), Vector3(0.082, 0.035, 0.018), I, Color("#da9143"))
 		# Mud flaps.
 		for xs in [1.0, -1.0]:
 			for zs in [1.0, -1.0]:
@@ -384,6 +408,10 @@ static func _buggy(b: PaperKit.Builder, P: Dictionary, body_c: Color, acc: Color
 		b.box(Vector3(sx, y0 + 0.45, 0.06), Vector3(0.07, 0.46, 0.025), I, stripe)
 	for k in 4:
 		b.box(Vector3(0, y0 + 0.66, -0.94 - k * 0.14), Vector3(0.68, 0.05, 0.05), I, ink)
+	# Braced rear shock towers on the exposed frame.
+	for flank: float in [-1.0, 1.0]:
+		tube.call(Vector3(flank * 0.33, y0 + 0.61, -0.86), Vector3(flank * 0.69, y0 + 0.06, -1.02))
+		b.box(Vector3(flank * 0.34, y0 + 0.60, -0.86), Vector3(0.14, 0.10, 0.15), I, acc)
 	# Whip flag.
 	b.box(Vector3(W * 0.3, top + 0.8, -0.6), Vector3(0.03, 1.6, 0.03), I, ink)
 	b.card(PackedVector2Array([Vector2(0, 0), Vector2(0.45, 0.12), Vector2(0, 0.26)]), Transform3D(Basis(Vector3.UP, PI * 0.5), Vector3(W * 0.3, top + 1.35, -0.6)), Color("#e8b04a"), {"thick": 0.01, "edge": 0.0, "lip": 0.0})
@@ -472,6 +500,13 @@ static func build_cockpit(car: Dictionary, model: Dictionary, mat: Material) -> 
 	var I := Transform3D()
 	var dash_z := head.z + 0.55
 	var trip_display: Label3D
+	var dash: Array = DASHBOARDS.get(style, DASHBOARDS["evo"])
+	var cluster_x := head.x + float(dash[0])
+	var face_color := Color(dash[2])
+	var panel := Color(dash[3])
+	var digital := style in ["groups", "wrc", "rally1", "rally2"]
+	var gear_readout: Label3D
+	var speed_readout: Label3D
 	# Low roof prototypes need a smaller instrument pack to clear the sightline at 58°.
 	var dial_scale := clampf((cab_h - 0.42) * 1.8 + 0.66, 0.66, 1.0)
 	var dial_y := top_y + 0.15 - (1.0 - dial_scale) * 0.14
@@ -540,7 +575,7 @@ static func build_cockpit(car: Dictionary, model: Dictionary, mat: Material) -> 
 		b.box(Vector3(0, top_y - 0.05, (cab_f + L * 0.5) * 0.5), Vector3(W, 0.1, L * 0.5 - cab_f), I, body_c, body_c.lightened(0.05))
 		_bonnet_print(b, car.get("paint", "sweep"), car["accent"], W, maxf(cab_f, L * 0.5 - float(P["bon"])), L * 0.5 - 0.25, top_y + 0.006, top_y + 0.006)
 		b.box(Vector3(0, top_y - 0.05, cab_f - 0.05), Vector3(W * 0.9, 0.18, 0.5), I, Color("#4e4640"), Color("#6a6058"))
-		b.box(Vector3(0, top_y + 0.03, dash_z + 0.05), Vector3(W * 0.86, 0.12, 0.36), I, Color("#4e4640"), Color("#5e564e"))
+		b.box(Vector3(0, top_y + 0.03, dash_z + 0.05), Vector3(W * 0.86, 0.12, 0.36), I, panel, panel.lightened(0.10))
 		# Recessed demister slots across the scuttle, with raised folded lips.
 		for section in 3:
 			var slot_x := W * 0.23 * (section - 1)
@@ -572,36 +607,58 @@ static func build_cockpit(car: Dictionary, model: Dictionary, mat: Material) -> 
 		b.box(Vector3(0, roof_y - 0.06, head.z - 0.45), Vector3(hx * 2.0 - 0.16, 0.045, 0.045), I, cage)
 		# --- rally-car detail ---------------------------------------------------------------
 		var ink := Color("#2a2624")
-		var dx: float = head.x
+		var dx: float = cluster_x
 		var cx: float = -head.x
 		# Instrument binnacle over the driver's dials, with a speedo and three small gauges.
 		var tilt := (Basis(Vector3.RIGHT, -0.5) * Basis(Vector3.UP, PI)).scaled(Vector3.ONE * dial_scale)
 		var speed_face := Transform3D(tilt, Vector3(dx + 0.10 * dial_scale, dial_y, dash_z - 0.035))
-		b.card(PaperKit.circle(0.07, 0, 0, 14), speed_face, PaperKit.CREAM, {"thick": 0.01, "edge": 0.012, "lip": 0.0})
-		speed_pivot = Node3D.new()
-		speed_pivot.transform = speed_face.translated_local(Vector3(0, 0, 0.010))
-		var speed_hand := PaperKit.Builder.new(26)
-		speed_hand.box(Vector3(0, 0.020, 0), Vector3(0.007, 0.054, 0.004), I, ink)
-		speed_mesh = MeshInstance3D.new()
-		speed_mesh.mesh = speed_hand.mesh()
-		speed_mesh.material_override = mat
-		speed_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		speed_pivot.add_child(speed_mesh)
-		for k in 7:
-			var angle := lerpf(2.2, -1.8, k / 6.0)
-			var tick := speed_face * Transform3D(Basis(Vector3.BACK, angle), Vector3.ZERO)
-			b.box(Vector3(0, 0.05, 0.007), Vector3(0.006, 0.012, 0.003), tick, ink)
-		for k in 3:
+		if digital:
+			var lcd := Vector3(dx + 0.10 * dial_scale, dial_y, dash_z - 0.052)
+			b.box(lcd, Vector3(0.19, 0.10, 0.022) * dial_scale, I, dark)
+			b.box(lcd + Vector3.FORWARD * 0.013, Vector3(0.17, 0.082, 0.008) * dial_scale, I, face_color)
+			speed_readout = Label3D.new()
+			speed_readout.position = lcd + Vector3.FORWARD * 0.021
+			speed_readout.rotation.y = PI
+			speed_readout.font_size = 54
+			speed_readout.pixel_size = 0.0012 * dial_scale
+			speed_readout.modulate = Color("#1e3329")
+			speed_readout.outline_size = 0
+		else:
+			b.card(PaperKit.circle(0.07, 0, 0, 14), speed_face, face_color, {"thick": 0.01, "edge": 0.012, "lip": 0.0})
+			speed_pivot = Node3D.new()
+			speed_pivot.transform = speed_face.translated_local(Vector3(0, 0, 0.010))
+			var speed_hand := PaperKit.Builder.new(26)
+			speed_hand.box(Vector3(0, 0.020, 0), Vector3(0.007, 0.054, 0.004), I, ink)
+			speed_mesh = MeshInstance3D.new()
+			speed_mesh.mesh = speed_hand.mesh()
+			speed_mesh.material_override = mat
+			speed_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			speed_pivot.add_child(speed_mesh)
+			for k in 7:
+				var angle := lerpf(2.2, -1.8, k / 6.0)
+				var tick := speed_face * Transform3D(Basis(Vector3.BACK, angle), Vector3.ZERO)
+				b.box(Vector3(0, 0.05, 0.007), Vector3(0.006, 0.012, 0.003), tick, ink)
+		for k in int(dash[1]):
 			var gauge := Transform3D(tilt, Vector3(dx - (0.21 + k * 0.065) * dial_scale, dial_y - 0.02 * dial_scale, dash_z - 0.03))
 			b.card(PaperKit.circle(0.03, 0, 0, 10), gauge, Color("#e8dcc0"), {"thick": 0.008, "edge": 0.008, "lip": 0.0})
 			var pointer := gauge * Transform3D(Basis(Vector3.BACK, -0.65 + k * 0.58), Vector3.ZERO)
 			b.box(Vector3(0, 0.009, 0.006), Vector3(0.005, 0.024, 0.003), pointer, ink)
 		# Gauge pod standing on the dash behind the dials.
 		b.box(Vector3.ZERO, Vector3(0.56, 0.16, 0.05), Transform3D(tilt, Vector3(dx - 0.05 * dial_scale, dial_y - 0.01 * dial_scale, dash_z + 0.04)), Color("#2e2a28"))
-		# Shift light strip along the top of the binnacle.
-		for k in 5:
-			var lc: Color = [Color("#5fa860"), Color("#5fa860"), Color("#e8b04a"), Color("#e8b04a"), Color("#c8553d")][k]
-			b.box(Vector3(dx + (k * 0.04 - 0.08) * dial_scale, dial_y + 0.065 * dial_scale, dash_z + 0.0), Vector3(0.022, 0.014, 0.01), I, lc)
+		if digital:
+			var screen := Vector3(dx - 0.255 * dial_scale, dial_y + 0.040 * dial_scale, dash_z - 0.062)
+			b.box(screen, Vector3(0.080, 0.055, 0.014) * dial_scale, I, face_color)
+			gear_readout = Label3D.new()
+			gear_readout.position = screen + Vector3.FORWARD * 0.011
+			gear_readout.rotation.y = PI
+			gear_readout.font_size = 54
+			gear_readout.pixel_size = 0.0008 * dial_scale
+			gear_readout.modulate = Color("#223329")
+			gear_readout.outline_size = 0
+		elif style in ["classic", "mini", "estate", "escort"]:
+			# A rolled trim strip and glovebox latch on the passenger side.
+			b.box(Vector3(-W * 0.23, top_y + 0.02, dash_z - 0.14), Vector3(W * 0.38, 0.016, 0.016), I, face_color)
+			b.box(Vector3(-W * 0.23, top_y - 0.012, dash_z - 0.15), Vector3(0.085, 0.027, 0.018), I, dark)
 		# Co-driver: tripmaster with a lit display, intercom box and the pace-note book on the dash.
 		b.box(Vector3(cx, top_y + 0.1, dash_z - 0.02), Vector3(0.24, 0.1, 0.08), I, Color("#26282c"))
 		b.box(Vector3(cx, top_y + 0.11, dash_z - 0.065), Vector3(0.18, 0.045, 0.01), I, Color("#b8e0a0"), Color(-1, 0, 0), true)
@@ -653,18 +710,46 @@ static func build_cockpit(car: Dictionary, model: Dictionary, mat: Material) -> 
 		b.box(Vector3(0, floor_y + 0.12, head.z - 0.15), Vector3(0.09, 0.09, 0.36), I, Color("#c8553d"))
 		b.box(Vector3(0, floor_y + 0.12, head.z + 0.05), Vector3(0.05, 0.05, 0.06), I, ink)
 	else:
-		b.box(Vector3(0, float(P["ride"]) + 0.55, dash_z), Vector3(W * 0.5, 0.12, 0.25), I, dark)
+		b.box(Vector3(0, head.y - 0.32, head.z + 0.73), Vector3(W * 0.48, 0.14, 0.13), I, panel)
+		for side: float in [-1.0, 1.0]:
+			b.box(Vector3(side * W * 0.19, head.y - 0.46, head.z + 0.74), Vector3(0.045, 0.26, 0.05), I, dark)
 	# Rev dial on the dash.
-	var dial_pos := Vector3(head.x - 0.08 * dial_scale, dial_y, dash_z - 0.035)
+	var dial_pos := Vector3(cluster_x - 0.08 * dial_scale, dial_y, dash_z - 0.035)
 	if style == "buggy":
-		dial_pos = Vector3(head.x, float(P["ride"]) + 0.59, dash_z - 0.15)
+		dial_pos = Vector3(head.x, head.y - 0.20, head.z + 0.66)
 	var dial_face := Transform3D((Basis(Vector3.RIGHT, -0.5) * Basis(Vector3.UP, PI)).scaled(Vector3.ONE * dial_scale), dial_pos)
-	b.card(PaperKit.circle(0.09, 0, 0, 16), dial_face, PaperKit.CREAM, {"thick": 0.01, "edge": 0.012, "lip": 0.0})
+	b.card(PaperKit.circle(0.09, 0, 0, 16), dial_face, face_color, {"thick": 0.01, "edge": 0.012, "lip": 0.0})
 	for k in 9:
 		var angle := lerpf(2.2, -1.8, k / 8.0)
 		var tick := dial_face * Transform3D(Basis(Vector3.BACK, angle), Vector3.ZERO)
 		b.box(Vector3(0, 0.065, 0.007), Vector3(0.008, 0.018, 0.003), tick, Color("#c8553d") if k >= 7 else dark)
 	var root := Node3D.new()
+	if gear_readout:
+		root.add_child(gear_readout)
+		root.add_child(speed_readout)
+	# Light lenses sit on a dark backing strip. All lit lenses share a single draw call.
+	var strip := dial_pos + Vector3(0.08, 0.077, -0.037) * dial_scale
+	var leds := MultiMesh.new()
+	leds.transform_format = MultiMesh.TRANSFORM_3D
+	leds.use_colors = true
+	var lens := BoxMesh.new()
+	lens.size = Vector3(0.025, 0.016, 0.010) * dial_scale
+	var luminous := StandardMaterial3D.new()
+	luminous.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	luminous.vertex_color_use_as_albedo = true
+	lens.material = luminous
+	leds.mesh = lens
+	leds.instance_count = 5
+	b.box(strip + Vector3.BACK * 0.008, Vector3(0.19, 0.025, 0.014) * dial_scale, I, dark)
+	for i in 5:
+		var at := strip + Vector3((2 - i) * 0.035 * dial_scale, 0, -0.005)
+		leds.set_instance_transform(i, Transform3D(Basis(), at))
+		leds.set_instance_color(i, [Color("#61cc68"), Color("#83dc70"), Color("#ffc24d"), Color("#ff9944"), Color("#ff5141")][i])
+	leds.visible_instance_count = 0
+	var bar := MultiMeshInstance3D.new()
+	bar.multimesh = leds
+	bar.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(bar)
 	var mi := MeshInstance3D.new()
 	mi.mesh = b.mesh()
 	mi.material_override = mat
@@ -735,4 +820,4 @@ static func build_cockpit(car: Dictionary, model: Dictionary, mat: Material) -> 
 		root.add_child(trip_display)
 	if speed_pivot:
 		root.add_child(speed_pivot)
-	return {"root": root, "wheel": wheel, "needle": npiv, "speed_hand": speed_mesh, "trip_display": trip_display}
+	return {"root": root, "wheel": wheel, "needle": npiv, "speed_hand": speed_mesh, "trip_display": trip_display, "shift_leds": leds, "gear_readout": gear_readout, "speed_readout": speed_readout}

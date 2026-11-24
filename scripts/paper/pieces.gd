@@ -567,19 +567,39 @@ static func spectators(pal: Dictionary, rng: RandomNumberGenerator) -> Dictionar
 		var s := rng.randf_range(0.85, 1.05)
 		var cloth: Color = CLOTHES[rng.randi() % CLOTHES.size()]
 		var skin: Color = SKIN[rng.randi() % SKIN.size()]
-		for k in 2:
-			var xf := Transform3D(Basis(Vector3.UP, k * PI * 0.5 + 0.3), Vector3(x, 0, z))
-			b.card(PaperKit.rrect(0.16 * s, 0.75 * s, 0.05, -0.1 * s, 0), xf, Color("#3a3a44"), {"thick": 0.04, "edge": 0.025})
-			b.card(PaperKit.rrect(0.16 * s, 0.75 * s, 0.05, 0.1 * s, 0), xf, Color("#3a3a44"), {"thick": 0.04, "edge": 0.025})
-			b.card(PaperKit.rrect(0.52 * s, 0.7 * s, 0.14, 0, 0.7 * s), xf, cloth, {"thick": 0.05, "edge": 0.03})
-			b.card(PaperKit.circle(0.17 * s, 0, 1.6 * s, 12), xf, skin, {"thick": 0.05, "edge": 0.03, "lip": 0.0})
-			# One arm raised, cheering.
-			var arm := PaperKit.rrect(0.12 * s, 0.55 * s, 0.05, 0.0, 0.0)
-			var ax := xf * Transform3D(Basis(Vector3(0, 0, 1), rng.randf_range(2.4, 2.9)), Vector3(0.24 * s, 1.3 * s, 0.03))
-			b.card(arm, ax, cloth.darkened(0.12), {"thick": 0.03, "edge": 0.02})
-			if i == 0:
-				var flag := PackedVector2Array([Vector2(0, 0), Vector2(0.55, 0.15), Vector2(0, 0.35)])
-				b.card(flag, xf * Transform3D(Basis(), Vector3(0.5 * s, 1.9 * s, 0.05)), pal["accent"], {"thick": 0.02, "edge": 0.02, "lip": 0.0})
+		var person := Transform3D(Basis(Vector3.UP, rng.randf_range(-0.38, 0.38)).scaled(Vector3.ONE * s), Vector3(x, 0, z))
+		var coat := cloth.darkened(0.18)
+		var trousers := Color("#49444a") if i % 2 == 0 else Color("#415363")
+		for side: float in [-1.0, 1.0]:
+			var foot_z := side * 0.055
+			b.box(Vector3(side * 0.11, 0.41, foot_z), Vector3(0.16, 0.69, 0.19), person, trousers)
+			b.box(Vector3(side * 0.11, 0.08, foot_z + 0.045), Vector3(0.19, 0.14, 0.28), person, Color("#393432"))
+		b.card(PaperKit.rrect(0.48, 0.63, 0.065, 0, 0.73), person, cloth, {"thick": 0.24, "edge": 0.025, "back": coat})
+		b.box(Vector3(0, 1.32, 0.014), Vector3(0.26, 0.10, 0.26), person, coat)
+		b.box(Vector3(0, 1.02, 0.127), Vector3(0.018, 0.49, 0.012), person, coat)
+		b.card(PaperKit.rrect(0.30, 0.34, 0.09, 0, 1.38), person, skin, {"thick": 0.22, "edge": 0.012, "back": Color("#594237")})
+		b.box(Vector3(0, 1.53, 0.121), Vector3(0.051, 0.065, 0.054), person, skin.darkened(0.08))
+		var hat := cloth.lightened(0.22) if i % 2 else Color("#54463d")
+		b.box(Vector3(0, 1.69, 0), Vector3(0.32, 0.10, 0.24), person, hat)
+		if i % 2:
+			b.box(Vector3(0, 1.655, 0.12), Vector3(0.28, 0.025, 0.12), person, hat)
+		# A photographer cups the camera with both hands, other spectators wave or hold a pennant.
+		for side: float in [-1.0, 1.0]:
+			var shoulder := Vector3(side * 0.25, 1.27, 0)
+			var hand := Vector3(side * 0.16, 1.42, 0.23) if i % 3 == 1 else Vector3(side * 0.38, 1.68 if side > 0 else 0.93, 0.10)
+			var elbow := Vector3(side * 0.34, 1.06 if i % 3 == 1 else (shoulder.y + hand.y) * 0.5, 0.12)
+			for segment in [[shoulder, elbow], [elbow, hand]]:
+				var line: Vector3 = segment[1] - segment[0]
+				var arm := Transform3D(Basis.looking_at(line.normalized(), Vector3.UP), (segment[0] + segment[1]) * 0.5)
+				b.box(Vector3.ZERO, Vector3(0.12, 0.12, line.length()), person * arm, cloth)
+			b.box(hand, Vector3(0.11, 0.12, 0.10), person, skin)
+		if i % 3 == 1:
+			b.box(Vector3(0, 1.44, 0.23), Vector3(0.25, 0.14, 0.09), person, Color("#383639"))
+			b.box(Vector3(0, 1.44, 0.30), Vector3(0.10, 0.10, 0.09), person, Color("#687477"))
+		elif i % 3 == 0:
+			b.box(Vector3(0.38, 1.80, 0.10), Vector3(0.024, 0.54, 0.024), person, pal["wood"])
+			var flag := PackedVector2Array([Vector2.ZERO, Vector2(0.37, 0.11), Vector2(0, 0.22)])
+			b.card(flag, person.translated_local(Vector3(0.39, 1.84, 0.10)), pal["accent"], {"thick": 0.015, "edge": 0.01})
 	return _out(b, n * 0.38, true, 2.0, 0.35)
 
 
