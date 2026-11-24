@@ -1,5 +1,22 @@
 # Paper Rally handling and stage review · 1.0.8
 
+## Implemented in 1.0.9
+
+The handling comparison now samples four tyre positions at the race’s fixed tick. Each driven axle receives a share of the available engine torque. A tyre using grip to accelerate or brake has less available to turn. Braking transfers load forward, acceleration moves it rearward, and rear grip recovers progressively after releasing the handbrake. The open differential and bounded torque-bias model share the same force calculation. Roster AWD cars have class-specific torque splits. Suspension samples actual ground height under the wheels, with shorter travel on sealed stages and a more compliant setup on rough stages. The existing artistic gravity and jump cap still govern the airborne body.
+
+| Stage | FWD launch | RWD launch | AWD launch | Powered corner heading change, FWD / RWD / AWD |
+|---|---:|---:|---:|---|
+| Meadow Run | 8.54 m/s | 12.42 m/s | 12.85 m/s | 17.8° / 21.2° / 19.8° |
+| Frozen Lakes | 4.13 m/s | 4.73 m/s | 9.53 m/s | 16.8° / 22.0° / 18.7° |
+
+Run `godot --headless res://tools/handling_baseline.tscn -- --trace=/tmp/rally.csv` to repeat the original equal-spec comparison and write the 1,512 fixed-tick input and force samples. The benchmark also checks split-grip torque bias, mirrored left/right response and loss of drive when unsupported. An automated impact-and-recovery drive using touch, a controller trigger and a digital controller button reached 14.19 m/s with each input.
+
+On a Meadow jump approached at 12, 20 and 28 m/s, the car spent 32, 12 and 7 ticks respectively with only one axle supported. Both axles were unsupported for 0, 40 and 47 ticks. The sampled motion drives wheel travel, pitch and suspension thumps. The model uses a sprung body with limited travel. Individual wheel rotational inertia and independent unsprung masses remain potential extensions.
+
+Regional additions include a haul track and scree fan in the rocky regions, asymmetric snow deposits and scouring in the snowy regions, ruts at forestry and moorland sites, longer hay and vine rows, and a longer Taiga lantern approach. An approach sightline is reserved for an Alpine lift tower. Roadside photo framing accounts for intervening ground. Mud has paired ruts, and touching a loose verge on one side can throw debris only from those wheels. The Lynx and Fennec now have different rear-window slopes, lamp profiles and tailgate pressings.
+
+AI speed planning and medal calculations use available traction when estimating braking and acceleration. Existing ghost files record positions and headings, so playback needs no input re-simulation. On-phone rain performance, physical USB-C/Bluetooth feel and blind player recognition of locations still need device and player testing. The following sections retain the original 1.0.8 investigation for comparison.
+
 ## What a driver can feel today
 
 The first handling prototype should address how a driven axle spends its available grip. In a controlled launch the same car hit exactly the same speed to two decimal places with front-, rear- and all-wheel drive. The layouts already feel distinct when turning under power. Preserving that distinction while making wheelspin and recovery depend on which tyres have grip offers more value than increasing the power of every AWD car.

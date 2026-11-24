@@ -494,6 +494,12 @@ func _make_hazards() -> void:
 			if k:
 				var ink := PaperKit.lin(col.lightened(0.018*(k%3)))
 				b.quad(prev[0],line[0],line[1],prev[1],Vector3.UP,ink)
+				if pt.kind == "mud":
+					for rut: float in [0.30,0.68]:
+						var r0 := prev[0].lerp(prev[1],rut)+Vector3.UP*0.008
+						var r1 := line[0].lerp(line[1],rut)+Vector3.UP*0.008
+						var width := Vector3(n.x,0,n.y)*0.11
+						b.quad(r0-width,r1-width,r1+width,r0+width,Vector3.UP,PaperKit.lin(Color("#715640")))
 				if pt.kind == "ice" and k%4 == 2:
 					var a := prev[0].lerp(prev[1],0.27)+Vector3.UP*0.009
 					var z := line[0].lerp(line[1],0.46)+Vector3.UP*0.009
@@ -1382,6 +1388,9 @@ func _overhead_crossing() -> void:
 	var steel := Color("#576566")
 	var half := 19.0 if ski else 12.0
 	var deck := 10.0 if ski else 6.3
+	if ski:
+		scenery.tower_approach = track.point_at(track.dist[choice]-48.0)
+		scenery.tower_position = center + track.nrm[choice] * half
 	for side: float in [-1,1]:
 		var post := span * half * side
 		var floor_y := track.terrain.height(center+Vector2(post.x,post.z)) - origin.y

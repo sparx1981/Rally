@@ -12,6 +12,8 @@ const FALL_BEHIND := 34.0
 
 var track: Track
 var landmark: RegionalLandmark
+var tower_approach := Vector2.ZERO
+var tower_position := Vector2.INF
 var fixed_supports: Array[Vector3] = []
 var stage_def: Dictionary
 var material: Material
@@ -299,6 +301,10 @@ func _add(kind: String, vi: int, p: Vector2, yaw: float, s: float, rng: RandomNu
 	var r: float = lib[kind][vi]["r"]
 	for o in fixed_supports:
 		if p.distance_squared_to(Vector2(o.x,o.y)) < pow(o.z + float(lib[kind][vi]["shore_radius"]),2):
+			return
+	if tower_position.is_finite() and p.distance_squared_to(tower_position)<3600.0 and lib[kind][vi]["h"]>2.5:
+		var nearest := Geometry2D.get_closest_point_to_segment(p,tower_approach,tower_position)
+		if p.distance_to(nearest)<r+1.4:
 			return
 	if landmark and (landmark.overlaps(p, lib[kind][vi]["shore_radius"]) or (lib[kind][vi]["h"]>1.5 and landmark.blocks_view(p,r))):
 		return

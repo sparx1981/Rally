@@ -211,6 +211,12 @@ func _position_camera() -> void:
 			var aim := delta.normalized()
 			var xy := car.pos-aim*clampf(delta.length()*0.8,10.0,44.0)+aim.orthogonal()*7.0
 			eye = Vector3(xy.x,c.y+3.2,xy.y)
+			# Raise the roadside lens enough to clear intervening banks.
+			for step in range(1,12):
+				var t := step/12.0
+				var sample := car.pos.lerp(xy,t)
+				var clearance := car.track.terrain.height(sample)+0.35
+				eye.y = maxf(eye.y,c.y+(clearance-c.y)/t)
 			c = c.lerp(site,0.34)
 		eye.y = maxf(eye.y,car.track.terrain.height(Vector2(eye.x,eye.z))+0.75)
 	cam.global_position = eye

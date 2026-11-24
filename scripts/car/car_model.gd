@@ -25,8 +25,8 @@ const STYLES := {
 	"integrale": {"L": 3.9, "W": 1.95, "low": 0.62, "nose": 0.5, "bon": 1.0, "tail": 0.56, "deck": 0.15, "cab": 0.62, "cab_f": 0.55, "cab_r": -1.65, "rake": 0.38, "back": 0.12, "ride": 0.34, "wr": 0.41, "wing": "roof", "arches": true, "lamps": "quad", "pod": true, "louvres": true},
 	"impreza": {"L": 4.35, "W": 1.9, "low": 0.62, "nose": 0.48, "bon": 1.2, "tail": 0.48, "deck": 0.92, "cab": 0.54, "cab_f": 0.5, "cab_r": -1.16, "rake": 0.45, "back": 0.52, "ride": 0.34, "wr": 0.41, "wing": "boot_high", "arches": true, "lamps": "rect", "scoop": true, "pod": true},
 	"evo": {"L": 4.35, "W": 1.9, "low": 0.62, "nose": 0.46, "bon": 1.15, "tail": 0.67, "deck": 0.48, "cab": 0.60, "cab_f": 0.5, "cab_r": -1.4, "rake": 0.45, "back": 0.30, "ride": 0.33, "wr": 0.41, "wing": "big", "arches": true, "lamps": "rect", "scoop": true},
-	"wrc": {"L": 4.15, "W": 1.98, "low": 0.62, "nose": 0.46, "bon": 1.05, "tail": 0.58, "deck": 0.15, "cab": 0.58, "cab_f": 0.5, "cab_r": -1.6, "rake": 0.55, "back": 0.22, "ride": 0.33, "wr": 0.41, "wing": "roof_big", "arches": true, "lamps": "rect", "scoop": true},
-	"rally2": {"L": 3.88, "W": 1.9, "low": 0.6, "nose": 0.44, "bon": 1.0, "tail": 0.56, "deck": 0.15, "cab": 0.64, "cab_f": 0.59, "cab_r": -1.51, "rake": 0.55, "back": 0.25, "ride": 0.32, "wr": 0.4, "wing": "roof", "arches": true, "lamps": "rect"},
+	"wrc": {"L": 4.15, "W": 1.98, "low": 0.62, "nose": 0.46, "bon": 1.05, "tail": 0.58, "deck": 0.15, "cab": 0.58, "cab_f": 0.5, "cab_r": -1.68, "rake": 0.55, "back": 0.49, "ride": 0.33, "wr": 0.41, "wing": "roof_big", "arches": true, "lamps": "rect", "scoop": true},
+	"rally2": {"L": 3.88, "W": 1.9, "low": 0.6, "nose": 0.44, "bon": 1.0, "tail": 0.56, "deck": 0.15, "cab": 0.64, "cab_f": 0.59, "cab_r": -1.58, "rake": 0.55, "back": 0.11, "ride": 0.32, "wr": 0.4, "wing": "roof", "arches": true, "lamps": "rect"},
 	"rally1": {"L": 4.24, "W": 2.0, "low": 0.6, "nose": 0.4, "bon": 1.05, "tail": 0.6, "deck": 0.15, "cab": 0.50, "cab_f": 0.53, "cab_r": -1.64, "rake": 0.6, "back": 0.25, "ride": 0.32, "wr": 0.42, "wing": "twin_roof", "arches": true, "lamps": "rect", "louvres": true},
 	"estate": {"L": 4.4, "W": 1.85, "low": 0.62, "nose": 0.48, "bon": 1.05, "tail": 0.58, "deck": 0.12, "cab": 0.6, "cab_f": 0.5, "cab_r": -2.0, "rake": 0.45, "back": 0.06, "ride": 0.32, "wr": 0.38, "wing": "none", "arches": false, "lamps": "rect", "pod": true},
 	"suv": {"L": 4.1, "W": 2.0, "low": 0.78, "nose": 0.7, "bon": 0.95, "tail": 0.76, "deck": 0.1, "cab": 0.64, "cab_f": 0.6, "cab_r": -1.85, "rake": 0.3, "back": 0.04, "ride": 0.46, "wr": 0.46, "wing": "none", "arches": true, "lamps": "round", "pod": true, "bumpers": true},
@@ -264,7 +264,13 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 				lens_size = Vector2(0.21,0.24)
 			elif style == "impreza":
 				lens_size = Vector2(0.41,0.105)
-			var lens := Rect2(Vector2(xs*W*0.33,y0+float(P.tail)*0.73), lens_size)
+			var lamp_height := y0+float(P.tail)*0.73
+			if style == "rally2":
+				lens_size = Vector2(0.15,0.26)
+				lamp_height += 0.10
+			elif style == "wrc":
+				lens_size = Vector2(0.46,0.085)
+			var lens := Rect2(Vector2(xs*W*0.33,lamp_height), lens_size)
 			b.card(PaperKit.rrect(lens.size.x,lens.size.y,0.032,lens.position.x,lens.position.y-lens.size.y*0.5),back,Color("#c84738"),{"thick":0.02,"edge":0.018,"lip":0.0,"glow":true})
 			rear_lenses.append(lens)
 
@@ -287,6 +293,11 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 					side*W*0.50-0.085,side*W*0.50+0.085,Transform3D(Basis(),Vector3(0,0,-L*0.5+0.8)),body_c)
 		# A pressed tail panel and cream rally plate sit between the rear lamps.
 		var plate_y := y0 + float(P["tail"]) * 0.60
+		if style == "wrc":
+			b.box(Vector3(0,plate_y+0.13,0.025),Vector3(W*0.69,0.045,0.04),back,ink)
+		elif style == "rally2":
+			for side: float in [-1,1]:
+				b.box(Vector3(side*W*0.22,plate_y,0.014),Vector3(0.045,0.30,0.035),back,body_c.darkened(0.25))
 		var plate := Transform3D(back.basis, Vector3(0, plate_y, back.origin.z))
 		b.box(Vector3.ZERO, Vector3(W * 0.28, 0.145, 0.028), plate, ink)
 		b.box(Vector3(0, 0, 0.019), Vector3(W * 0.24, 0.106, 0.012), plate, PaperKit.CREAM)

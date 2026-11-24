@@ -17,6 +17,8 @@ static func cars() -> Array:
 	if _cars.is_empty():
 		var C := func(id, name, cls, style, drive, body, acc, stripe, top, accel, grip, steer, offroad, desc):
 			return {"id": id, "name": name, "class": cls, "style": style, "drive": drive, "body": Color(body), "accent": Color(acc),
+				"front_split": {"quattro":0.50,"t16":0.40,"rally1":0.46}.get(style,0.48),
+				"differential_bias": 1.0 if style in ["classic","mini","estate"] else (2.6 if drive=="awd" else 1.8),
 				"stripe": Color(stripe), "top": top, "accel": accel, "grip": grip, "steer": steer, "offroad": offroad, "desc": desc}
 		_cars = [
 			C.call("ventura", "Ventura 60", "1960s Classic", "classic", "rwd", "#6f9bb0", "#efe3c8", "#c8553d", 0.8, 0.78, 0.9, 1.05, 0.2, "A rounded sixties sports coupe. Light, lively and tail-happy."),

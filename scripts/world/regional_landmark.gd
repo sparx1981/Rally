@@ -78,6 +78,28 @@ func build(region: String, course: Track, mat: Material) -> bool:
 		"taiga": _sauna()
 		"cliffs": _lookout()
 		"gorge": _catch_fence()
+	if region in ["gorge","canyon"]:
+		# The quarry haul track winds behind the site and crosses a fan of pale scree.
+		for k in 20:
+			var z := -18.0+k*1.8
+			var a := _foot(12+sin(z*0.14)*3,z)+Vector3.UP*0.12
+			var b := _foot(12+sin((z+1.8)*0.14)*3,z+1.8)+Vector3.UP*0.12
+			_beam(a,b,2.4,0.10,Color("#ab9683"))
+			if k<9:
+				for j in 3:
+					var q := _foot(8+k*0.45,z+j*0.53)
+					_disc(q+Vector3.UP*0.10,Vector3.UP,0.32+j*0.20,0.18,Color("#baaa96"))
+	if region in ["moor","pinewood"]:
+		for side: float in [-1,1]:
+			for k in 7:
+				var z := -8.0+k
+				_beam(_foot(-3+side*0.75,z)+Vector3.UP*0.07,_foot(-3+side*0.75,z+1)+Vector3.UP*0.07,0.23,0.07,Color("#605447"))
+	if region in ["alpine","lakes"]:
+		for k in 9:
+			var z := -8.0+k*2.0
+			var drift := _foot(6+0.5*sin(k),z)
+			_disc(drift+Vector3.UP*0.14,Vector3.UP,1.1+(k%3)*0.35,0.32,Color("#dfebed"))
+			_beam(_foot(4,z)+Vector3.UP*0.06,_foot(3,z+1.4)+Vector3.UP*0.06,0.36,0.05,Color("#aabfc9"))
 	mesh = _builder.mesh()
 	material_override = mat
 	visibility_range_end = 200.0
@@ -354,7 +376,7 @@ func _dairy_field() -> void:
 		var at := pad+Vector3(0.5-(k%2)*0.6,0.61,-1.5+k*0.47)
 		_disc(at,Vector3.UP,0.25,0.72,Color("#c4c8be"))
 		_disc(at+Vector3.UP*0.41,Vector3.UP,0.19,0.14,STEEL)
-	for row in 7:
+	for row in 11:
 		var z := -6.5-row*0.75
 		for k in 4:
 			var x := -6.0+k*3
@@ -386,7 +408,7 @@ func _quarry_entrance() -> void:
 
 
 func _harvest_rows() -> void:
-	for row in 3:
+	for row in 5:
 		var row_x := 4.7+row*1.75
 		var target_height := _foot(row_x,-5.6).y
 		var last := Vector3.ZERO
@@ -419,7 +441,7 @@ func _harvest_rows() -> void:
 
 func _peat_shelter() -> void:
 	var p := _foot(5,6)
-	for row in 7:
+	for row in 11:
 		for col in range(-3,4):
 			if row>3 and absi(col)>6-row:
 				continue
@@ -510,7 +532,7 @@ func _sauna() -> void:
 	var shore := _foot(-1,-6)
 	track.terrain.flatten_disc(_world(-1,-6),3.3,_base+shore.y,2.0)
 	_disc(shore+Vector3.UP*0.07,Vector3.UP,3.1,0.08,Color("#a1aeba"))
-	for k in 4:
+	for k in 8:
 		var q := _foot(-2.0-k*0.22,1.5-k*1.31)
 		_beam(q,q+Vector3.UP*0.55,0.09,0.09,TIMBER)
 		_builder.box(q+Vector3.UP*0.65,Vector3(0.18,0.18,0.18),Transform3D(),Color("#e8b373"),Color(-1,0,0),true)

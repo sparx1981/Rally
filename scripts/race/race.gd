@@ -70,6 +70,8 @@ func setup(stage_i: int, mode_v: int, entrants: Array, attract_v := false, tod :
 		car.place_at(tr.start_s - 5.0 - row * 8.0, lat)
 		cars.append(car)
 		car.landed.connect(func(v): _on_landed(car, v))
+		if car.is_player and not attract:
+			car.compressed.connect(Sfx.land)
 		car.splashed.connect(func(v): _on_splashed(car, v))
 		if car.is_player:
 			player = car
@@ -101,7 +103,7 @@ func setup(stage_i: int, mode_v: int, entrants: Array, attract_v := false, tod :
 	camera.follow(0.016)
 	var st: Dictionary = player.stats
 	var mu := Car.BASE_MU * float(st["grip"]) * stage.grip()
-	var ideal := tr.ideal_time(mu * 0.95, Car.BRAKE * stage.grip() * 0.85, Car.BASE_ACC * float(st["accel"]) * 0.75, player.top_speed())
+	var ideal := tr.ideal_time(mu * 0.95, minf(Car.BRAKE,mu) * 0.85, player.profile_acceleration() * 0.75, player.top_speed())
 	medals = [ideal * 1.06, ideal * 1.3, ideal * 1.48]
 	if attract:
 		for c in cars:

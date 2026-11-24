@@ -945,7 +945,8 @@ func _tt_results(r: Dictionary) -> void:
 		await _start_attract(Game.stage_index)
 		_title(), 160))
 	await get_tree().process_frame
-	retry.grab_focus()
+	if is_instance_valid(retry) and retry.is_inside_tree():
+		retry.grab_focus()
 
 
 func _results_table(parent: Control, rows: Array, with_points: bool) -> void:
@@ -994,7 +995,8 @@ func _race_results(r: Dictionary) -> void:
 		await _start_attract(Game.stage_index)
 		_title(), 160))
 	await get_tree().process_frame
-	retry.grab_focus()
+	if is_instance_valid(retry) and retry.is_inside_tree():
+		retry.grab_focus()
 
 
 func _champ_results(r: Dictionary) -> void:
