@@ -60,7 +60,7 @@ Use Android's frame pacing and thermal guidance to design the device benchmark. 
 
 The most transferable reference features are adjustable co-driver lead and short training exercises from EA SPORTS WRC, and the combination of results, replay and photo sharing shown by art of rally. For control and HUD review, use the Xbox guidelines on input choices and redundant cues. These are references for Paper Rally's original designs. [EA SPORTS WRC features](https://www.ea.com/games/ea-sports-wrc/wrc/news/deep-dive-features) · [EA accessibility options](https://www.ea.com/able/resources/ea-sports-wrc) · [art of rally](https://store.steampowered.com/app/550320/Art_of_rally/) · [Xbox accessibility guidelines](https://learn.microsoft.com/gaming/accessibility/guidelines)
 
-## Sandstone Eight and timed recovery · 1.0.21
+## Sandstone Eight and timed recovery · 1.0.22
 
 Race vs AI now includes a 965 m sandy figure-eight circuit with a grade-separated bridge, a shallow ford and two covered grandstands. Races can run for 3–12 laps. Each lap requires three intermediate checkpoints and a forward crossing at the timing line. The launch screen shows the route map and the HUD shows the current lap and race position.
 
