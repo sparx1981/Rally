@@ -31,20 +31,22 @@ func _expect(ok: bool, message: String) -> void:
 
 func _check_engine_audio() -> void:
 	for style: String in ["mini", "impreza", "quattro", "truck"]:
-		var player := AudioStreamPlayer.new()
+		var player := Node.new()
 		add_child(player)
 		var engine := RecordedEngine.new(player, style, true)
 		engine.mix(2500.0, 0.5, 0.8)
 		var voices := engine._voices.duplicate()
-		_expect(voices.count(AudioStreamPlaybackPolyphonic.INVALID_ID) == 0,
-			style + " starts all power and overrun loops")
+		_expect(voices.size() == 10 and voices.all(func(voice): return voice.playing and voice.playback_type == AudioServer.PLAYBACK_TYPE_STREAM),
+			style + " starts all power and overrun loops as direct streams")
 		engine.mix(3700.0, 0.0, 0.8)
-		_expect(engine._levels[2] > 0.01 and engine._levels[7] > engine._levels[2],
-			style + " keeps engine character under the stronger overrun loop off throttle")
-		engine.mix(2800.0, 1.0, 0.8)
-		_expect(engine._voices == voices and is_zero_approx(engine._levels[7]),
-			style + " reuses the same playing loops on throttle reapplication")
-		player.stop()
+		_expect(voices[2].volume_db > -20.0 and voices[7].volume_db > voices[2].volume_db,
+			style + " plays the overrun bank while keeping the power bank audible")
+		engine.mix(6100.0, 1.0, 0.8)
+		_expect(engine._voices == voices and voices[4].playing and voices[4].volume_db > -6.0
+			and is_equal_approx(voices[4].pitch_scale, 6100.0 / 6400.0) and voices[9].volume_db <= -79.0,
+			style + " brings in the high-RPM power recording after throttle reapplication")
+		engine.stop()
+		_expect(voices.all(func(voice): return not voice.playing), style + " stops every loop when the race ends")
 		player.free()
 	var car := Car.new()
 	car.stats = Catalog.cars()[0]

@@ -59,6 +59,10 @@ Use Android's frame pacing and thermal guidance to design the device benchmark. 
 
 The most transferable reference features are adjustable co-driver lead and short training exercises from EA SPORTS WRC, and the combination of results, replay and photo sharing shown by art of rally. For control and HUD review, use the Xbox guidelines on input choices and redundant cues. These are references for Paper Rally's original designs. [EA SPORTS WRC features](https://www.ea.com/games/ea-sports-wrc/wrc/news/deep-dive-features) · [EA accessibility options](https://www.ea.com/able/resources/ea-sports-wrc) · [art of rally](https://store.steampowered.com/app/550320/Art_of_rally/) · [Xbox accessibility guidelines](https://learn.microsoft.com/gaming/accessibility/guidelines)
 
+## Engine rev playback · 1.0.19
+
+Each RPM recording now plays through its own audio player. The previous mixer stored Godot's 64-bit voice IDs as 32-bit values, so gain and pitch updates missed the higher bands and left an idle-like note in the mix. A desktop engine-bus capture now tracks a pull, a lift and a second pull. Confirm the change in chase and cockpit on the reported Android handset.
+
 ## Lift-off, tyre feedback and cockpit fit · 1.0.18
 
 The player engine keeps the recorded power and overrun loops running through lift-off, braking and the next throttle input. Downshifts keep the engine mix up. A turbo exhaust shot can follow a gradual high-RPM lift, as well as a quick one. Rolling sounds sit higher in the mix, gravel uses a separate recorded scrub for slides, and the road tyre sound responds to slide and brake load. The engine ducks under full-phrase British English co-driver clips rendered offline. [Recording credits](../audio/recorded/ATTRIBUTION.md) · [Pace-note credits](../audio/codriver/ATTRIBUTION.md)

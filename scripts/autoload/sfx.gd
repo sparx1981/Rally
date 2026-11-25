@@ -18,7 +18,6 @@ const ANTILAG_STYLES := ["quattro", "t16", "integrale", "gt4", "impreza", "evo",
 var _streams := {}
 var _pool: Array[AudioStreamPlayer] = []
 var _pool_i := 0
-var _engine: AudioStreamPlayer
 var _engine_voice: RecordedEngine
 var _skid: AudioStreamPlayer
 var _gravel_scrub: AudioStreamPlayer
@@ -69,9 +68,6 @@ func _ready() -> void:
 		p.bus = "SFX"
 		add_child(p)
 		_pool.append(p)
-	_engine = AudioStreamPlayer.new()
-	_engine.bus = RecordedEngine.BUS
-	add_child(_engine)
 	_cabin_filter.cutoff_hz = 19000.0
 	var engine_bus := AudioServer.get_bus_index("Engine")
 	if engine_bus >= 0:
@@ -212,8 +208,9 @@ func cheer() -> void:
 
 
 func engine_start(style: String) -> void:
-	_engine.stop()
-	_engine_voice = RecordedEngine.new(_engine, style, true)
+	if _engine_voice:
+		_engine_voice.stop()
+	_engine_voice = RecordedEngine.new(self, style, true)
 	_antilag = style in ANTILAG_STYLES
 	_rpm = 900.0
 	_thr = 0.0
@@ -237,13 +234,14 @@ func engine_start(style: String) -> void:
 
 
 func engine_stop() -> void:
+	if _engine_voice:
+		_engine_voice.stop()
 	_engine_voice = null
 	_in_cockpit = false
 	_co_driver_speaking = false
 	_interior_mix = 0.0
 	_voice_duck = 0.0
 	_cabin_filter.cutoff_hz = 19000.0
-	_engine.stop()
 	_skid.stop()
 	_gravel_scrub.stop()
 	_gravel_roll.stop()

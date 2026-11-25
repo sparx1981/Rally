@@ -11,28 +11,41 @@ const FAMILIES := {
 const BUS := &"Engine"
 static var _loops := {}
 
-var _bank: Array[AudioStreamWAV] = []
-var _voices := PackedInt32Array()
+var _voices: Array[Node] = []
 var _levels := PackedFloat32Array()
-var _playback: AudioStreamPlaybackPolyphonic
 var _with_coast: bool
 
 
-func _init(player: Node, style: String, with_coast: bool) -> void:
+func _init(parent: Node, style: String, with_coast: bool, exhaust_position := Vector3.ZERO) -> void:
 	_with_coast = with_coast
 	var family: String = FAMILIES.get(style, "turbo")
 	var states := ["power", "coast"] if with_coast else ["power"]
 	for state: String in states:
 		for band in RPM_BANDS.size():
-			_bank.append(loop_from_file("%s_%s_%d.wav" % [family, state, band]))
-	_voices.resize(_bank.size())
-	_voices.fill(AudioStreamPlaybackPolyphonic.INVALID_ID)
-	_levels.resize(_bank.size())
-	var stream := AudioStreamPolyphonic.new()
-	stream.polyphony = _bank.size() if with_coast else 4
-	player.stream = stream
-	player.play()
-	_playback = player.get_stream_playback() as AudioStreamPlaybackPolyphonic
+			# One stream per band keeps pitch and gain independently adjustable.
+			var voice: Node
+			if with_coast:
+				voice = AudioStreamPlayer.new()
+			else:
+				var exhaust := AudioStreamPlayer3D.new()
+				exhaust.unit_size = 4.5
+				exhaust.max_distance = 65.0
+				exhaust.position = exhaust_position
+				voice = exhaust
+			voice.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
+			voice.bus = BUS
+			voice.stream = loop_from_file("%s_%s_%d.wav" % [family, state, band])
+			voice.volume_db = -80.0
+			parent.add_child(voice)
+			_voices.append(voice)
+	_levels.resize(_voices.size())
+
+
+func stop() -> void:
+	for voice in _voices:
+		voice.stop()
+		voice.queue_free()
+	_voices.clear()
 
 
 static func loop_from_file(file: String) -> AudioStreamWAV:
@@ -46,7 +59,7 @@ static func loop_from_file(file: String) -> AudioStreamWAV:
 
 
 func mix(rpm: float, load_amount: float, gain: float) -> void:
-	if _playback == null:
+	if _voices.is_empty():
 		return
 	var low := 0
 	var last := RPM_BANDS.size() - 1
@@ -65,20 +78,18 @@ func mix(rpm: float, load_amount: float, gain: float) -> void:
 		_levels[low + RPM_BANDS.size()] = gain * coast * sqrt(1.0 - blend)
 		_levels[high + RPM_BANDS.size()] = gain * coast * sqrt(blend)
 
-	for i in _bank.size():
+	for i in _voices.size():
 		var amplitude := _levels[i]
 		var voice := _voices[i]
 		# Keep the player's loops running quietly between uses. A second
 		# throttle press then returns to the current phase of each loop.
 		if amplitude < 0.001 and not _with_coast:
-			if voice != AudioStreamPlaybackPolyphonic.INVALID_ID:
-				_playback.stop_stream(voice)
-				_voices[i] = AudioStreamPlaybackPolyphonic.INVALID_ID
+			if voice.playing:
+				voice.stop()
 			continue
-		var pitch := clampf(rpm / RPM_BANDS[i % RPM_BANDS.size()], 0.64, 1.95)
-		var db := linear_to_db(maxf(0.0001, amplitude))
-		if voice == AudioStreamPlaybackPolyphonic.INVALID_ID:
-			_voices[i] = _playback.play_stream(_bank[i], 0.0, db, pitch, AudioServer.PLAYBACK_TYPE_STREAM, BUS)
-		else:
-			_playback.set_stream_volume(voice, db)
-			_playback.set_stream_pitch_scale(voice, pitch)
+		voice.pitch_scale = clampf(rpm / RPM_BANDS[i % RPM_BANDS.size()], 0.64, 1.95)
+		voice.volume_db = linear_to_db(maxf(0.0001, amplitude))
+		if not _with_coast:
+			(voice as AudioStreamPlayer3D).max_db = voice.volume_db - 9.0
+		if not voice.playing:
+			voice.play()

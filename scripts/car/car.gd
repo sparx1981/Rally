@@ -113,14 +113,7 @@ func setup(car_stats: Dictionary, num: int, stg: Stage, mat: Material) -> void:
 	_make_rear_lamps()
 	if not is_player:
 		# AI engines are positional: you hear rivals close behind and alongside.
-		var exhaust := AudioStreamPlayer3D.new()
-		exhaust.bus = RecordedEngine.BUS
-		exhaust.unit_size = 4.5
-		exhaust.max_distance = 65.0
-		exhaust.max_db = -9.0
-		exhaust.position = Vector3(0, 0.45, -half_len + 0.13)
-		add_child(exhaust)
-		_rival_engine = RecordedEngine.new(exhaust, stats.style, false)
+		_rival_engine = RecordedEngine.new(self, stats.style, false, Vector3(0, 0.45, -half_len + 0.13))
 
 
 const SHADOW_DIVISIONS := 4
