@@ -152,8 +152,7 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 			_truck_bed(b, P, body_c, acc)
 		# Cabin: raked windscreen and rear window printed as glass strips.
 		var cw := W * 0.84
-		var cab := PackedVector2Array([Vector2(cab_r, top_y - 0.01), Vector2(cab_f, top_y - 0.01),
-			Vector2(cab_f - float(P["rake"]), top_y + cab_h), Vector2(cab_r + float(P["back"]), top_y + cab_h)])
+		var cab := _cabin_outline(P, top_y)
 		var cab_col := body_c
 		if P.get("roof2", false):
 			cab_col = PaperKit.CREAM if body_c.v < 0.8 else Color("#2b2b2b")
@@ -177,17 +176,9 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 				if not bonded:
 					b.quad(surround[2],surround[3],surround[3]-frame.basis.z*0.017,surround[2]-frame.basis.z*0.017,frame.basis.z,PaperKit.lin(ink))
 		# Two laid-down wipers follow the rake of this particular screen.
-		var screen_up := Vector3(0, cab_h + 0.01, -float(P["rake"]))
-		var windshield := Transform3D(Basis(Vector3.RIGHT, screen_up.normalized(), Vector3.RIGHT.cross(screen_up).normalized()), Vector3(0, top_y - 0.01, cab_f))
-		for side_x: float in [-0.24, 0.24]:
-			var blade := windshield * Transform3D(Basis(Vector3.BACK, 0.12), Vector3(cw * side_x, screen_up.length() * 0.13, 0.014))
-			b.box(Vector3.ZERO, Vector3(cw * 0.39, 0.024, 0.018), blade, ink)
+		_windscreen_wipers(b, cab, cw, ink)
 		# Side windows: the cabin side outline inset, printed as glass.
-		var inset := PackedVector2Array()
-		var cc := Vector2((cab_r + cab_f) * 0.5, top_y + cab_h * 0.5)
-		for q in cab:
-			var d := (q - cc)
-			inset.append(cc + Vector2(d.x * 0.86, d.y * 0.7) + Vector2(0, 0.02))
+		var inset := _side_window(cab)
 		for xs in [1.0, -1.0]:
 			var side := Transform3D(Basis(Vector3.UP, xs * PI * 0.5), Vector3(xs * (cw * 0.5 + 0.012), 0, 0))
 			var win2 := PackedVector2Array()
@@ -516,6 +507,34 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 		"lamp": Vector3(0, y0 + float(P["nose"]) * 0.7, L * 0.5 + 0.1), "style": style, "beam_mounts": beams, "rear_lenses": rear_lenses}
 
 
+static func _cabin_outline(profile: Dictionary, sill: float) -> PackedVector2Array:
+	var front: float = profile["cab_f"]
+	var rear: float = profile["cab_r"]
+	var roof := sill + float(profile["cab_h"])
+	return PackedVector2Array([
+		Vector2(rear, sill - 0.01), Vector2(front, sill - 0.01),
+		Vector2(front - float(profile["rake"]), roof),
+		Vector2(rear + float(profile["back"]), roof)
+	])
+
+
+static func _side_window(cabin: PackedVector2Array) -> PackedVector2Array:
+	var center := Vector2((cabin[0].x + cabin[1].x) * 0.5, (cabin[0].y + cabin[2].y + 0.01) * 0.5)
+	var outline := PackedVector2Array()
+	for corner in cabin:
+		outline.append(center + (corner - center) * Vector2(0.86, 0.70) + Vector2(0, 0.02))
+	return outline
+
+
+static func _windscreen_wipers(b: PaperKit.Builder, cabin: PackedVector2Array, width: float, color: Color) -> void:
+	var up := Vector3(0, cabin[2].y - cabin[1].y, cabin[2].x - cabin[1].x)
+	var axis := up.normalized()
+	var frame := Transform3D(Basis(Vector3.RIGHT, axis, Vector3.RIGHT.cross(axis)), Vector3(0, cabin[1].y, cabin[1].x))
+	for side: float in [-0.24, 0.24]:
+		var blade := frame * Transform3D(Basis(Vector3.BACK, 0.12), Vector3(width * side, up.length() * 0.13, 0.014))
+		b.box(Vector3.ZERO, Vector3(width * 0.39, 0.024, 0.018), blade, color)
+
+
 static func _bonnet_print(b: PaperKit.Builder, paint: String, acc: Color, width: float, rear_z: float, tip_z: float, rear_y: float, tip_y: float) -> void:
 	var bands := [Vector2(-0.42, 0.42)] if paint == "safari" else [Vector2(-0.10, 0.10)]
 	if paint == "twins":
@@ -722,12 +741,52 @@ static func _wheel_mesh(hub: Color, r: float, width: float, style: String) -> Ar
 
 ## In-car view: dashboard, A-pillars, roof edge, steering wheel and a rev dial whose needle moves.
 ## Returns {"root", "wheel" (rotates with steering), "needle" (rotates with rpm)}.
+## Retain the real bodywork forward of the windscreen, including paint, vents and dents.
+static func cockpit_nose(shell: Mesh, scuttle: float) -> ArrayMesh:
+	var source := shell.surface_get_arrays(0)
+	var vertices: PackedVector3Array = source[Mesh.ARRAY_VERTEX]
+	var normals: PackedVector3Array = source[Mesh.ARRAY_NORMAL]
+	var colors: PackedColorArray = source[Mesh.ARRAY_COLOR]
+	var result := PaperKit.Builder.new()
+	for first in range(0, vertices.size(), 3):
+		var front_count := int(vertices[first].z >= scuttle) + int(vertices[first + 1].z >= scuttle) + int(vertices[first + 2].z >= scuttle)
+		if front_count == 0:
+			continue
+		if front_count == 3:
+			for point in range(first, first + 3):
+				result.v.append(vertices[point])
+				result.n.append(normals[point])
+				result.c.append(colors[point])
+			continue
+		var cut_vertices := PackedVector3Array()
+		var cut_normals := PackedVector3Array()
+		var cut_colors := PackedColorArray()
+		for corner in 3:
+			var a := first + corner
+			var next := first + (corner + 1) % 3
+			var inside := vertices[a].z >= scuttle
+			if inside:
+				cut_vertices.append(vertices[a])
+				cut_normals.append(normals[a])
+				cut_colors.append(colors[a])
+			if inside != (vertices[next].z >= scuttle):
+				var fraction := inverse_lerp(vertices[a].z, vertices[next].z, scuttle)
+				cut_vertices.append(vertices[a].lerp(vertices[next], fraction))
+				cut_normals.append(normals[a].lerp(normals[next], fraction).normalized())
+				cut_colors.append(colors[a].lerp(colors[next], fraction))
+		for corner in range(1, cut_vertices.size() - 1):
+			for point: int in [0, corner, corner + 1]:
+				result.v.append(cut_vertices[point])
+				result.n.append(cut_normals[point])
+				result.c.append(cut_colors[point])
+	return result.mesh()
+
+
 static func build_cockpit(car: Dictionary, model: Dictionary, mat: Material) -> Dictionary:
 	var style: String = car.get("style", "saloon")
 	var P := shape(style)
 	var head: Vector3 = model["head"]
 	var W: float = P["W"]
-	var L: float = P["L"]
 	var top_y: float = float(P["ride"]) + float(P["low"])
 	var cab_h: float = P["cab_h"]
 	var cab_z: float = P["cab_z"]
@@ -736,7 +795,7 @@ static func build_cockpit(car: Dictionary, model: Dictionary, mat: Material) -> 
 	var dark := Color("#3a3430")
 	var b := PaperKit.Builder.new(21)
 	var I := Transform3D()
-	var dash_z := head.z + 0.55
+	var dash_z := minf(head.z + 0.55, float(P["cab_f"]) - 0.20)
 	var trip_display: Label3D
 	var dash: Array = DASHBOARDS.get(style, DASHBOARDS["evo"])
 	var cluster_x := head.x + float(dash[0])
@@ -764,12 +823,9 @@ static func build_cockpit(car: Dictionary, model: Dictionary, mat: Material) -> 
 		var trim := Color(body_c).darkened(0.35)
 		var lining := Color("#8f877c")
 		var Lt := func(c: Color) -> Color: return PaperKit.lin(c, 1.0)
-		var outline := [Vector2(cab_r, top_y), Vector2(cab_f, top_y), Vector2(cab_f - rake, roof_y), Vector2(cab_r + back, roof_y)]
+		var outline := _cabin_outline(P, top_y)
 		var cc := Vector2((cab_r + cab_f) * 0.5, top_y + cab_h * 0.5)
-		var inset: Array = []
-		for q in outline:
-			var d: Vector2 = q - cc
-			inset.append(cc + Vector2(d.x * 0.86, d.y * 0.7) + Vector2(0, 0.02))
+		var inset := _side_window(outline)
 		for xs in [-1.0, 1.0]:
 			var x: float = xs * hx
 			var inward := Vector3(-xs, 0, 0)
@@ -802,23 +858,24 @@ static func build_cockpit(car: Dictionary, model: Dictionary, mat: Material) -> 
 		var r1: Vector2 = outline[2]
 		b.quad(Vector3(-hx, roof_y, r0.x), Vector3(hx, roof_y, r0.x), Vector3(hx, roof_y, r1.x), Vector3(-hx, roof_y, r1.x), Vector3.DOWN, Lt.call(lining))
 		# Windscreen and rear window glass.
-		gb.quad(Vector3(-hx, top_y, cab_f), Vector3(hx, top_y, cab_f), Vector3(hx, roof_y, cab_f - rake), Vector3(-hx, roof_y, cab_f - rake), Vector3(0, -rake, -cab_h).normalized(), Color.WHITE)
+		var screen_base := outline[1]
+		var screen_top := outline[2]
+		gb.quad(Vector3(-hx, screen_base.y, screen_base.x), Vector3(hx, screen_base.y, screen_base.x), Vector3(hx, screen_top.y, screen_top.x), Vector3(-hx, screen_top.y, screen_top.x), Vector3(0, -rake, -cab_h).normalized(), Color.WHITE)
+		_windscreen_wipers(b, outline, cw, Color("#2b2725"))
 		gb.quad(Vector3(-hx, top_y + 0.12, cab_r + back * 0.12), Vector3(hx, top_y + 0.12, cab_r + back * 0.12), Vector3(hx, roof_y, cab_r + back), Vector3(-hx, roof_y, cab_r + back), Vector3(0, -back, cab_h).normalized(), Color.WHITE)
 		# Rear bulkhead below the rear window, floor, and the footwell under the dash.
 		b.quad(Vector3(-W * 0.47, floor_y, cab_r - 0.1), Vector3(W * 0.47, floor_y, cab_r - 0.1), Vector3(W * 0.47, top_y + 0.12, cab_r - 0.1), Vector3(-W * 0.47, top_y + 0.12, cab_r - 0.1), Vector3.BACK, Lt.call(trim.darkened(0.2)))
 		b.quad(Vector3(-hx, top_y + 0.12, cab_r - 0.1), Vector3(hx, top_y + 0.12, cab_r - 0.1), Vector3(hx, top_y + 0.12, cab_r + back * 0.12), Vector3(-hx, top_y + 0.12, cab_r + back * 0.12), Vector3.UP, Lt.call(dark))
 		b.quad(Vector3(-W * 0.47, floor_y, cab_r - 0.1), Vector3(W * 0.47, floor_y, cab_r - 0.1), Vector3(W * 0.47, floor_y, cab_f + 0.35), Vector3(-W * 0.47, floor_y, cab_f + 0.35), Vector3.UP, Lt.call(Color("#3a3430")))
 		b.quad(Vector3(-W * 0.47, floor_y, cab_f + 0.35), Vector3(W * 0.47, floor_y, cab_f + 0.35), Vector3(W * 0.47, top_y + 0.02, cab_f + 0.35), Vector3(-W * 0.47, top_y + 0.02, cab_f + 0.35), Vector3.FORWARD, Lt.call(dark))
-		# Bonnet seen through the screen, then the dashboard and cowl.
-		b.box(Vector3(0, top_y - 0.05, (cab_f + L * 0.5) * 0.5), Vector3(W, 0.1, L * 0.5 - cab_f), I, body_c, body_c.lightened(0.05))
-		_bonnet_print(b, car.get("paint", "sweep"), car["accent"], W, maxf(cab_f, L * 0.5 - float(P["bon"])), L * 0.5 - 0.25, top_y + 0.006, top_y + 0.006)
-		b.box(Vector3(0, top_y - 0.05, cab_f - 0.05), Vector3(W * 0.9, 0.18, 0.5), I, Color("#4e4640"), Color("#6a6058"))
+		# Dashboard and scuttle sit behind the original bodywork.
+		b.box(Vector3(0, top_y - 0.05, cab_f - 0.12), Vector3(W * 0.83, 0.18, 0.24), I, Color("#4e4640"), Color("#6a6058"))
 		b.box(Vector3(0, top_y + 0.03, dash_z + 0.05), Vector3(W * 0.86, 0.12, 0.36), I, panel, panel.lightened(0.10))
 		# Recessed demister slots across the scuttle, with raised folded lips.
 		for section in 3:
 			var slot_x := W * 0.23 * (section - 1)
 			for row in 2:
-				b.box(Vector3(slot_x, top_y + 0.047, cab_f + 0.05 + row * 0.028), Vector3(W * 0.16, 0.008, 0.013), I, dark)
+				b.box(Vector3(slot_x, top_y + 0.047, cab_f - 0.14 + row * 0.028), Vector3(W * 0.16, 0.008, 0.013), I, dark)
 		# Rear-view mirror, seats, centre console and a roll cage.
 		var mirror := Vector3(0, roof_y - 0.063, cab_f - rake + 0.04)
 		b.box(mirror + Vector3.UP * 0.035, Vector3(0.022, 0.075, 0.026), I, dark)
@@ -993,6 +1050,15 @@ static func build_cockpit(car: Dictionary, model: Dictionary, mat: Material) -> 
 	mi.material_override = mat
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	root.add_child(mi)
+	var nose: MeshInstance3D
+	var nose_clip := float(P["cab_f"]) + 0.004
+	if style != "buggy":
+		var shell := (model["body"] as Node3D).get_child(0) as MeshInstance3D
+		nose = MeshInstance3D.new()
+		nose.mesh = cockpit_nose(shell.mesh, nose_clip)
+		nose.material_override = shell.material_override
+		nose.layers = shell.layers
+		root.add_child(nose)
 	# Soft cabin fill so the dash, dials and switches read instead of sitting in black shadow.
 	var fill := OmniLight3D.new()
 	fill.position = Vector3(0.0, head.y + 0.1, head.z + 0.15)
@@ -1058,4 +1124,4 @@ static func build_cockpit(car: Dictionary, model: Dictionary, mat: Material) -> 
 		root.add_child(trip_display)
 	if speed_pivot:
 		root.add_child(speed_pivot)
-	return {"root": root, "wheel": wheel, "needle": npiv, "speed_hand": speed_mesh, "trip_display": trip_display, "shift_leds": leds, "gear_readout": gear_readout, "speed_readout": speed_readout}
+	return {"root": root, "nose": nose, "nose_clip": nose_clip, "wheel": wheel, "needle": npiv, "speed_hand": speed_mesh, "trip_display": trip_display, "shift_leds": leds, "gear_readout": gear_readout, "speed_readout": speed_readout}

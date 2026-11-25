@@ -7,6 +7,8 @@ func _ready() -> void:
 	_check_brake()
 	_check_lighting()
 	_check_engine_audio()
+	_check_surface_audio()
+	_check_cockpits()
 	if ResourceLoader.exists(Race.CO_DRIVER_SCRIPT):
 		_check_voice()
 	if ResourceLoader.exists(Race.CROSSING_AUDIO_SCRIPT):
@@ -33,11 +35,15 @@ func _check_engine_audio() -> void:
 		add_child(player)
 		var engine := RecordedEngine.new(player, style, true)
 		engine.mix(2500.0, 0.5, 0.8)
-		_expect(engine._voices.count(AudioStreamPlaybackPolyphonic.INVALID_ID) == 6,
-			style + " blends two powered and two overrun loops between RPM bands")
-		engine.mix(3700.0, 1.0, 0.8)
-		_expect(engine._voices.count(AudioStreamPlaybackPolyphonic.INVALID_ID) == 8,
-			style + " uses only powered loops under full throttle")
+		var voices := engine._voices.duplicate()
+		_expect(voices.count(AudioStreamPlaybackPolyphonic.INVALID_ID) == 0,
+			style + " starts all power and overrun loops")
+		engine.mix(3700.0, 0.0, 0.8)
+		_expect(engine._levels[2] > 0.01 and engine._levels[7] > engine._levels[2],
+			style + " keeps engine character under the stronger overrun loop off throttle")
+		engine.mix(2800.0, 1.0, 0.8)
+		_expect(engine._voices == voices and is_zero_approx(engine._levels[7]),
+			style + " reuses the same playing loops on throttle reapplication")
 		player.stop()
 		player.free()
 	var car := Car.new()
@@ -52,6 +58,57 @@ func _check_engine_audio() -> void:
 	_expect(car.gear == 2 and car.acoustic_rpm > 3500.0 and car.acoustic_rpm < before - 1800.0,
 		"An upshift drops the exhaust pitch into the next gear's working RPM range")
 	car.free()
+
+
+func _check_surface_audio() -> void:
+	Sfx.engine_start("impreza")
+	Sfx.set_surface("dry", 19.0, 1.0, 0.52)
+	Sfx.set_skid(0.68, "dry")
+	for i in 12:
+		Sfx._process(1.0 / 60.0)
+	_expect(Sfx._gravel_roll.playing and Sfx._gravel_roll.volume_db > -8.0
+		and Sfx._gravel_scrub.playing and Sfx._gravel_scrub.volume_db > -8.0,
+		"Gravel tyres have separate audible rolling and sliding recordings")
+	Sfx.set_skid(0.75, "rain")
+	Sfx.set_surface("rain", 19.0, 0.0, 0.36)
+	for i in 12:
+		Sfx._process(1.0 / 60.0)
+	_expect(Sfx._skid.volume_db > -8.0 and Sfx._gravel_scrub.volume_db <= -78.0,
+		"Wet road slides use tyre scrub instead of gravel")
+	Sfx.set_skid(0.0)
+	Sfx.set_surface("dry", 0.0, 0.0, 0.0)
+	for i in 12:
+		Sfx._process(1.0 / 60.0)
+	_expect(Sfx._skid.volume_db <= -78.0 and Sfx._gravel_roll.volume_db <= -78.0,
+		"Tyre loops fade at the end of a slide and when ground speed falls to zero")
+	Sfx.set_engine(5100.0, 0.90)
+	Sfx._process(1.0 / 60.0)
+	Sfx.engine_shift(false)
+	_expect(is_zero_approx(Sfx._shift_time), "A downshift leaves the engine mix up")
+	for pressure: float in [0.72, 0.57, 0.44, 0.30, 0.18]:
+		Sfx.set_engine(4500.0, pressure)
+		Sfx._process(1.0 / 60.0)
+	_expect(Sfx._pop_cd > 0.0, "An analog high-RPM lift triggers a recorded exhaust pop")
+	Sfx.engine_stop()
+
+
+func _check_cockpits() -> void:
+	var material := StandardMaterial3D.new()
+	for stats: Dictionary in Catalog.cars():
+		var model := CarModel.build(stats, 7, material)
+		var cockpit := CarModel.build_cockpit(stats, model, material)
+		var nose := cockpit.nose as MeshInstance3D
+		if stats.style == "buggy":
+			_expect(nose == null, "The open buggy uses its full exterior mesh")
+		else:
+			var shell := (model.body as Node3D).get_child(0) as MeshInstance3D
+			var bounds := nose.mesh.get_aabb()
+			_expect(bounds.position.z >= float(cockpit.nose_clip) - 0.001
+				and is_equal_approx(bounds.end.z, shell.mesh.get_aabb().end.z)
+				and nose.material_override == shell.material_override,
+				"%s cockpit bonnet matches the forward exterior" % stats.style)
+		cockpit.root.free()
+		model.root.free()
 
 
 func _axis(device: int, pressure: float, axis := JOY_AXIS_TRIGGER_LEFT) -> void:

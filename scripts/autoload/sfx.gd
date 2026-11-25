@@ -21,6 +21,7 @@ var _pool_i := 0
 var _engine: AudioStreamPlayer
 var _engine_voice: RecordedEngine
 var _skid: AudioStreamPlayer
+var _gravel_scrub: AudioStreamPlayer
 var _roll: AudioStreamPlayer
 var _gravel_roll: AudioStreamPlayer
 var _amb: AudioStreamPlayer
@@ -29,7 +30,6 @@ var _amb2: AudioStreamPlayer
 var _cabin_filter := AudioEffectLowPassFilter.new()
 var _rpm := 900.0
 var _thr := 0.0
-var _prev_thr := 0.0
 var _load := 0.0
 var _interior_mix := 0.0
 var _voice_duck := 0.0
@@ -45,8 +45,12 @@ var _rolling_speed := 0.0
 var _rolling_kind := ""
 var _gravel_contact := 0.0
 var _gravel_slip := 0.0
+var _scrub := 0.0
+var _scrub_target := 0.0
+var _scrub_kind := ""
 var _pebble_t := 0.0
 var _pop_cd := 0.0
+var _recent_load := 0.0
 var _rng := RandomNumberGenerator.new()
 var _synthesis_task := -1
 var _srng := RandomNumberGenerator.new()   # synthesis thread only
@@ -73,6 +77,7 @@ func _ready() -> void:
 	if engine_bus >= 0:
 		AudioServer.add_bus_effect(engine_bus, _cabin_filter)
 	_skid = _looping_player(SKID_OGG, "SFX")
+	_gravel_scrub = _looping_player(RecordedEngine.loop_from_file("gravel_scrub.wav"), "SFX")
 	_gravel_roll = _looping_player(RecordedEngine.loop_from_file("gravel_roll.wav"), "SFX")
 	_roll = AudioStreamPlayer.new()
 	_roll.bus = "SFX"
@@ -126,9 +131,6 @@ func _synth_done(out: Dictionary) -> void:
 	_ready_synth = true
 	if _pending_amb != "":
 		set_ambience(_pending_amb)
-	if _engine_voice != null and _roll_kind != "":
-		_roll.stream = _streams.get(_roll_kind)
-		_roll.play()
 
 
 func _looping_player(src: AudioStream, bus: String) -> AudioStreamPlayer:
@@ -215,17 +217,21 @@ func engine_start(style: String) -> void:
 	_antilag = style in ANTILAG_STYLES
 	_rpm = 900.0
 	_thr = 0.0
-	_prev_thr = 0.0
 	_load = 0.0
 	_shift_time = 0.0
 	_shift_gain = 1.0
 	_pop_cd = 0.0
+	_recent_load = 0.0
 	_rolling_speed = 0.0
 	_gravel_contact = 0.0
 	_gravel_mix = 0.0
+	_scrub = 0.0
+	_scrub_target = 0.0
 	_pebble_t = 0.0
 	if not _skid.playing:
 		_skid.play()
+	_gravel_scrub.volume_db = -80.0
+	_gravel_scrub.play()
 	_gravel_roll.volume_db = -80.0
 	_gravel_roll.play()
 
@@ -239,6 +245,7 @@ func engine_stop() -> void:
 	_cabin_filter.cutoff_hz = 19000.0
 	_engine.stop()
 	_skid.stop()
+	_gravel_scrub.stop()
 	_gravel_roll.stop()
 	_roll.stop()
 	_roll_kind = ""
@@ -251,19 +258,16 @@ func set_engine(rpm: float, throttle: float, in_cockpit := false, co_driver_spea
 	_co_driver_speaking = co_driver_speaking
 
 
-func engine_shift() -> void:
+func engine_shift(upshift := true) -> void:
 	if _engine_voice != null:
-		_shift_time = 0.085
-		play("gear", -14.0, _rng.randf_range(0.94, 1.08))
+		if upshift:
+			_shift_time = 0.072
+		play("gear", -12.0 if upshift else -15.0, _rng.randf_range(0.94, 1.08))
 
 
 func set_skid(amount: float, kind := "dry") -> void:
-	if amount < 0.03:
-		_skid.volume_db = -80.0
-		return
-	var base: float = {"dry": 0.0, "rain": -4.0, "snow": -7.0}.get(kind, 0.0)
-	_skid.volume_db = linear_to_db(clampf(amount, 0.0, 1.0) * 0.6) + base
-	_skid.pitch_scale = (0.7 if kind == "snow" else 0.85) + amount * 0.25
+	_scrub_target = amount
+	_scrub_kind = kind
 
 
 ## Ground contact drives a separate recorded gravel layer underneath the base surface.
@@ -280,17 +284,25 @@ func _mix_surface(delta: float) -> void:
 		"rain", "wet", "mud": name = "roll_wet"
 		"snow", "ice", "deep snow": name = "roll_snow"
 		"cobble": name = "roll_cobble"
-	if name != _roll_kind and _ready_synth:
+	if name != _roll_kind and (name.is_empty() or _streams.has(name)):
 		_roll_kind = name
 		_roll.stream = _streams.get(name)
 		if _roll.stream:
 			_roll.play()
 	var k := clampf(_rolling_speed / 28.0, 0.0, 1.0)
+	var roll_gain := pow(k, 0.58)
 	_gravel_mix = move_toward(_gravel_mix, _gravel_contact, delta * 6.0)
-	_gravel_roll.volume_db = linear_to_db(maxf(0.0001, k * _gravel_mix * (0.36 + minf(_gravel_slip, 0.5) * 0.44)))
+	_gravel_roll.volume_db = linear_to_db(maxf(0.0001, roll_gain * _gravel_mix * (0.82 + minf(_gravel_slip, 0.5) * 0.20)))
 	_gravel_roll.pitch_scale = 0.76 + k * 0.48
-	_roll.volume_db = linear_to_db(maxf(0.0001, k * 0.54 * (1.0 - _gravel_mix)))
+	_roll.volume_db = linear_to_db(maxf(0.0001, roll_gain * 0.80 * (1.0 - _gravel_mix)))
 	_roll.pitch_scale = 0.8 + k * 0.4
+	_scrub = move_toward(_scrub, _scrub_target, delta * (14.0 if _scrub_target > _scrub else 6.0))
+	var winter := _scrub_kind == "snow"
+	var tyre_gain := _scrub * (1.0 - _gravel_mix) * (0.50 if winter else 0.95)
+	_skid.volume_db = linear_to_db(maxf(0.0001, tyre_gain))
+	_skid.pitch_scale = (0.72 if winter else 0.84) + _scrub * 0.28
+	_gravel_scrub.volume_db = linear_to_db(maxf(0.0001, _scrub * _gravel_mix * 0.90))
+	_gravel_scrub.pitch_scale = 0.85 + k * 0.32
 	_pebble_t -= delta
 	if _gravel_mix > 0.1 and _gravel_slip > 0.16 and _rolling_speed > 6.0 and _pebble_t <= 0.0:
 		play("pebble", -26.0 + k * 6.0, _rng.randf_range(0.7, 1.5))
@@ -321,23 +333,24 @@ func set_ambience(kind: String) -> void:
 func _process(delta: float) -> void:
 	if _engine_voice == null:
 		return
-	_load = lerpf(_load, _thr, 1.0 - exp(-delta * 18.0))
+	_load = lerpf(_load, _thr, 1.0 - exp(-delta * (10.0 if _thr > _load else 8.0)))
 	_interior_mix = move_toward(_interior_mix, float(_in_cockpit), delta * 7.0)
 	_voice_duck = move_toward(_voice_duck, float(_co_driver_speaking), delta * (18.0 if _co_driver_speaking else 4.0))
 	_cabin_filter.cutoff_hz = lerpf(19000.0, 3400.0, _interior_mix)
 	_shift_time = maxf(0.0, _shift_time - delta)
-	_shift_gain = 1.0 - 0.43 * smoothstep(0.0, 0.085, _shift_time)
+	_shift_gain = 1.0 - 0.35 * smoothstep(0.0, 0.072, _shift_time)
 	var idle_level := lerpf(0.72, 1.0, smoothstep(1000.0, 2500.0, _rpm))
-	var gain := idle_level * _shift_gain * db_to_linear(-3.0 * _voice_duck + _interior_mix)
+	var gain := idle_level * _shift_gain * db_to_linear(-1.5 - 4.5 * _voice_duck + _interior_mix)
 	_engine_voice.mix(_rpm, _load, gain)
 	_mix_surface(delta)
-	# Exhaust pops when the throttle snaps shut at high revs.
+	# Allow a short high-load window for gradual releases on an analog trigger.
 	_pop_cd -= delta
-	if _antilag and _prev_thr > 0.62 and _thr < 0.14 and _rpm > 4500.0 and _pop_cd <= 0.0 and _shift_time == 0.0:
-		_pop_cd = 0.6
+	_recent_load = 0.65 if _thr >= 0.60 and _rpm > 3600.0 else maxf(0.0, _recent_load - delta)
+	if _antilag and _recent_load > 0.0 and _thr < 0.24 and _rpm > 3000.0 and _pop_cd <= 0.0:
+		_recent_load = 0.0
+		_pop_cd = 0.44
 		popped.emit()
-		play("pop_%d" % _rng.randi_range(0, 2), -13.0 - _interior_mix * 4.0, _rng.randf_range(0.93, 1.06))
-	_prev_thr = _thr
+		play("pop_%d" % _rng.randi_range(0, 2), -4.5 - _interior_mix * 3.0, _rng.randf_range(0.93, 1.06))
 
 
 # --- synthesis helpers -------------------------------------------------------------------------------

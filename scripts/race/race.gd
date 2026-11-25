@@ -603,9 +603,9 @@ func _on_splashed(c: Car, v: float) -> void:
 	camera.kick(0.4)
 
 
-func _on_gear(_g: int) -> void:
+func _on_gear(gear: int, previous: int) -> void:
 	Haptics.impulse(0.18, 0.035)
-	Sfx.engine_shift()
+	Sfx.engine_shift(gear > previous and previous > 0)
 
 
 func _feedback(dt: float) -> void:
@@ -626,7 +626,6 @@ func _feedback(dt: float) -> void:
 	Haptics.rumble(weak, strong)
 	Sfx.set_engine(p.acoustic_rpm, p.throttle if not p.frozen or state == State.COUNTDOWN else 0.0,
 		_last_view == ChaseCamera.COCKPIT, _voice != null and _voice.playing)
-	Sfx.set_skid((clampf((p.slip - 0.1) * 2.0, 0.0, 1.0) * sf if p.on_road else 0.0) * (0.0 if p.airborne else 1.0), kind)
 	var surf := "cobble" if stage.def.loc_id == "harbour" else kind
 	var loose := 0.0
 	var supported := 0.0
@@ -638,7 +637,13 @@ func _feedback(dt: float) -> void:
 			loose += contact
 		elif surface == "mud":
 			loose += contact * 0.42
-	Sfx.set_surface(surf, 0.0 if p.airborne or p.in_water else sp, loose / maxf(supported, 0.001), p.slip)
+	var loose_fraction := loose / maxf(supported, 0.001)
+	var grounded_speed := 0.0 if p.airborne or p.in_water else p.speed()
+	var sideways := smoothstep(0.06, 0.44, p.slip)
+	var locked := maxf(p.handbrake * 0.74, smoothstep(0.72, 1.0, p.service_brake) * 0.50)
+	var scrub := maxf(sideways, locked) * smoothstep(2.0, 13.0, grounded_speed)
+	Sfx.set_skid(scrub, surf)
+	Sfx.set_surface(surf, grounded_speed, loose_fraction, p.slip)
 	# The crowd cheers as you fly past them at jumps and splashes.
 	for f in stage.track.features:
 		if f["type"] in ["jump", "splash"] and absf(p.s - float(f["s"]) - 6.0) < 1.5 and sp > 8.0 and not _cheered.has(f["s"]):

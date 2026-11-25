@@ -10,6 +10,7 @@ Paper Rally edits these source recordings into short mono game sounds. Edits inc
 | supra.mp3 | [Import car revs on Chassis Dyno with Turbo.wav](https://freesound.org/people/editboy23/sounds/496171/) | editboy23, [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | Turbo bank |
 | cortina.mp3 | [DR09DynoRun70ishFordCortina328HP-finalA.wav](https://freesound.org/people/Ears68/sounds/177183/) | Ears68, [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | Heavy bank |
 | gravel.mp3 | [Car driving on a gravel dirt road, close recording of front wheel from outside](https://freesound.org/people/felix.blume/sounds/685231/) | felix.blume, [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | Gravel loop |
+| gravel_tires.mp3 | [Car Tires Start and Stop on Gravel Shoulder.wav](https://freesound.org/people/UnplugTheFridge/sounds/529225/) | UnplugTheFridge, [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | Sliding and braking on gravel |
 | wet_pass.mp3 | [Passing Car (Wet road)](https://freesound.org/people/Breviceps/sounds/462862/) | Breviceps, [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | Wet tyre loop |
 | antilag.mp3 | [Car Antilag (No cleanup, 32float)](https://freesound.org/people/modusmogulus/sounds/797835/) | modusmogulus, [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | Three high-RPM lift-off bursts |
 

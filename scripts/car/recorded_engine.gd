@@ -29,7 +29,7 @@ func _init(player: Node, style: String, with_coast: bool) -> void:
 	_voices.fill(AudioStreamPlaybackPolyphonic.INVALID_ID)
 	_levels.resize(_bank.size())
 	var stream := AudioStreamPolyphonic.new()
-	stream.polyphony = 8 if with_coast else 4
+	stream.polyphony = _bank.size() if with_coast else 4
 	player.stream = stream
 	player.play()
 	_playback = player.get_stream_playback() as AudioStreamPlaybackPolyphonic
@@ -54,25 +54,29 @@ func mix(rpm: float, load_amount: float, gain: float) -> void:
 		low += 1
 	var high := low + 1
 	var blend := smoothstep(RPM_BANDS[low], RPM_BANDS[high], rpm)
-	var power := sqrt(load_amount) if _with_coast else 1.0
+	# Keep the loaded recording present on overrun. The separate coast
+	# layer changes the character without swapping the whole engine voice.
+	var power := sqrt(lerpf(0.11, 1.0, load_amount)) if _with_coast else 1.0
 	_levels.fill(0.0)
 	_levels[low] = gain * power * sqrt(1.0 - blend)
 	_levels[high] = gain * power * sqrt(blend)
 	if _with_coast:
-		var coast := sqrt(1.0 - load_amount) * 0.49
+		var coast := sqrt(1.0 - load_amount) * 0.64
 		_levels[low + RPM_BANDS.size()] = gain * coast * sqrt(1.0 - blend)
 		_levels[high + RPM_BANDS.size()] = gain * coast * sqrt(blend)
 
 	for i in _bank.size():
 		var amplitude := _levels[i]
 		var voice := _voices[i]
-		if amplitude < 0.001:
+		# Keep the player's loops running quietly between uses. A second
+		# throttle press then returns to the current phase of each loop.
+		if amplitude < 0.001 and not _with_coast:
 			if voice != AudioStreamPlaybackPolyphonic.INVALID_ID:
 				_playback.stop_stream(voice)
 				_voices[i] = AudioStreamPlaybackPolyphonic.INVALID_ID
 			continue
 		var pitch := clampf(rpm / RPM_BANDS[i % RPM_BANDS.size()], 0.64, 1.95)
-		var db := linear_to_db(amplitude)
+		var db := linear_to_db(maxf(0.0001, amplitude))
 		if voice == AudioStreamPlaybackPolyphonic.INVALID_ID:
 			_voices[i] = _playback.play_stream(_bank[i], 0.0, db, pitch, AudioServer.PLAYBACK_TYPE_STREAM, BUS)
 		else:

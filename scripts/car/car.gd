@@ -4,7 +4,7 @@ extends Node3D
 ## grip (so cars slide and drift when demand exceeds grip), handbrake turns, auto gearbox.
 ## Car forward is +Z in local space; heading h rotates +Z toward +X.
 
-signal gear_changed(gear: int)
+signal gear_changed(gear: int, previous: int)
 signal impact(strength: float)
 signal landed(strength: float)
 signal compressed(strength: float)
@@ -428,6 +428,9 @@ func add_damage(at: Vector2, strength: float) -> void:
 	var dented := ArrayMesh.new()
 	dented.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	shell.mesh = dented
+	var nose := _cockpit.get("nose") as MeshInstance3D
+	if nose:
+		nose.mesh = CarModel.cockpit_nose(dented, _cockpit["nose_clip"])
 	_damage_count += 1
 
 
@@ -819,8 +822,9 @@ func _update_gear(vl: float, thr: float) -> void:
 	if vl < -0.5:
 		g = 0
 	if g != gear and not frozen:
+		var previous := gear
 		gear = g
-		gear_changed.emit(g)
+		gear_changed.emit(g, previous)
 	var lo: float = GEARS[maxi(gear - 1, 0)] * float(stats["top"])
 	var hi: float = (GEARS[gear] if gear < GEARS.size() else GEARS[-1] + 6.0) * float(stats["top"])
 	var t := clampf((v - lo) / maxf(hi - lo, 1.0), 0.0, 1.0)

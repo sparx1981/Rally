@@ -136,6 +136,9 @@ def main():
     gravel = sosfiltfilt(butter(3, (235, 10200), btype="bandpass", fs=RATE, output="sos"),
                          gravel[round(20 * RATE):round(24.2 * RATE)])
     write_wav(out / "gravel_roll.wav", close_loop(gravel, RATE / 88, 2.65), 0.105)
+    scrub = read_source(args.sources, "gravel_tires")[round(18.55 * RATE):round(21.35 * RATE)]
+    scrub = sosfiltfilt(butter(3, (225, 10000), btype="bandpass", fs=RATE, output="sos"), scrub)
+    write_wav(out / "gravel_scrub.wav", close_loop(scrub, RATE / 95, 1.30), 0.17)
     wet = read_source(args.sources, "wet_pass")[round(1.30 * RATE):round(3.16 * RATE)]
     wet = sosfiltfilt(butter(3, (800, 10500), btype="bandpass", fs=RATE, output="sos"), wet)
     write_wav(out / "wet_roll.wav", close_loop(wet, RATE / 115, 1.44), 0.116)

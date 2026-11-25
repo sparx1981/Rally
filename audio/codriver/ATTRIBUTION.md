@@ -1,7 +1,5 @@
 # Co-driver recordings
 
-Paper Rally's English pace notes were synthesised offline with Piper 1.8 and its Cori voice. The project ships the generated Ogg recordings.
+Paper Rally's English pace notes were rendered offline with the George (`bm_george`) British English voice in Kokoro-82M. Each turn and combined hazard was rendered as a complete phrase. Paper Rally supplied the text and edited the resulting audio for level, clarity and timing. The project ships the resulting Ogg clips and requires no speech service or model on the device.
 
-The model uses the Hi-Fi Multi-Speaker English TTS dataset, which NVIDIA Corporation released under CC BY 4.0. The model card credits Cori Samuel's public-domain LibriVox recordings. Paper Rally supplied the pace-note text and edited the resulting audio for game playback.
-
-[Piper Cori model card](https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_GB/cori/medium/MODEL_CARD) · [Hi-Fi TTS](https://www.openslr.org/109/) · [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
+[Kokoro-82M model card](https://huggingface.co/hexgrad/Kokoro-82M) · [Kokoro ONNX](https://github.com/thewh1teagle/kokoro-onnx) · [Apache 2.0 licence](https://www.apache.org/licenses/LICENSE-2.0)
