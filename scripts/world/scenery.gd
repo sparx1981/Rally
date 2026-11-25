@@ -9,6 +9,7 @@ extends Node3D
 const CHUNK := 160.0
 const RISE_AHEAD := 70.0
 const FALL_BEHIND := 34.0
+const CHAPTER_BLEND := Vector4(0.30, 0.37, 0.63, 0.72)
 
 var track: Track
 var landmark: RegionalLandmark
@@ -88,13 +89,20 @@ func _measure_footprints() -> void:
 			piece["shore_radius"] = maxf(piece["r"], reach.length())
 
 
-func _weighted_kinds() -> Array:
+func _weighted_kinds(weights := {}) -> Array:
 	var out: Array = []
 	var kinds: Dictionary = stage_def["kinds"]
 	for k in kinds.keys():
-		for i in int(kinds[k]):
+		var copies := int(kinds[k]) if weights.is_empty() else roundi(float(kinds[k]) * float(weights.get(k, 1.0)) * 4.0)
+		for i in copies:
 			out.append(k)
 	return out
+
+
+func _chapter_blend(s: float) -> Vector2:
+	var progress := track.chapter_progress(s)
+	return Vector2(smoothstep(CHAPTER_BLEND.x, CHAPTER_BLEND.y, progress),
+		smoothstep(CHAPTER_BLEND.z, CHAPTER_BLEND.w, progress))
 
 
 func _place(density: float) -> void:
@@ -105,14 +113,23 @@ func _place(density: float) -> void:
 	_place_gates(furniture_rng)
 	_place_signage(furniture_rng)
 	var pool := _weighted_kinds()
+	var chapter_pools: Array[Array] = []
+	if not track.chapters.is_empty() and track.chapters[0].has("weights"):
+		for chapter: Dictionary in track.chapters:
+			chapter_pools.append(_weighted_kinds(chapter.weights))
 	var w := track.width
 	var big := ["house", "barn", "cabin", "mesa", "tent", "net_shed", "wood_store", "vine_row"]
 	var spacing := 5.5 / clampf(density, 0.2, 1.0)
 	var s := 4.0
 	while s < track.length - 4.0:
+		var blend := _chapter_blend(s) if not chapter_pools.is_empty() else Vector2.ZERO
 		for side in [-1.0, 1.0]:
 			if rng.randf() < 0.12:
 				continue
+			if not chapter_pools.is_empty():
+				var sample := rng.randf()
+				var chapter := 2 if sample < blend.y else (1 if sample < blend.x else 0)
+				pool = chapter_pools[chapter]
 			var i := track.index_at(s + rng.randf_range(-3.0, 3.0))
 			var lat = side * (w * 0.5 + 3.0 + pow(rng.randf(), 1.6) * 34.0)
 			var center = track.pts[i] + track.nrm[i] * lat
@@ -206,9 +223,14 @@ func _place_forest(rng: RandomNumberGenerator, density: float) -> void:
 	var s := 6.0
 	while s < track.length - 10.0:
 		var i := track.index_at(s)
+		var cover := 1.0
+		if not track.chapters.is_empty() and track.chapters[0].has("forest"):
+			var blend := _chapter_blend(s)
+			cover = lerpf(lerpf(track.chapters[0].forest, track.chapters[1].forest, blend.x),
+				track.chapters[2].forest, blend.y)
 		for side in [-1.0, 1.0]:
 			for band in bands:
-				if rng.randf() > float(band[2]):
+				if rng.randf() > float(band[2]) * cover:
 					continue
 				var lat: float = side * (hw + rng.randf_range(band[0], band[1]))
 				var p := track.pts[i] + track.nrm[i] * lat + track.tang[i] * rng.randf_range(-1.8, 1.8)

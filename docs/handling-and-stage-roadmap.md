@@ -37,7 +37,9 @@ This is the active backlog. Update it in the same change that ships, replaces or
 | Outstanding work | Acceptance |
 | --- | --- |
 | Co-driver and crossing mix on Android | Judge intelligibility over engine and rain on a phone speaker and headphones. Check Late, Normal, Early, Off and the separate voice volume. Timber, stone and steel joints should remain distinct, and the tunnel reflection should be audible at crawl and race speeds. |
-| Blind chapter and preview recognition | Test whether drivers can order the three Slate Gorge rock chapters from unlabelled screenshots. Ask players to recognise the four variants from the route previews and to spot an elevation change before confirming. The Classic preview should distinguish its stacked truss from the other spans. |
+| Blind chapter and preview recognition | Give drivers unlabelled screenshots of Slate Gorge, Autumn Ridge, Harbour Lanes and Alpine Pass. Check whether they can put each set in route order and recognise a landmark without the setup description. Confirm the Slate Gorge Classic preview distinguishes the stacked truss from the other spans. |
+| Autumn leaf litter on Android | Drive over a patch at low speed, pass a drift at racing speed and park beside one. Check that leaves lift from their existing positions, scatter and settle. Repeat in bonnet and low chase, then check frame pacing on Autumn Ridge Marathon with a full AI pack and low and high particle settings. |
+| Reference audio and a phone-speaker mix | Compare timestamped gameplay clips for gear changes, surface transitions and calls over engine noise. Use original or licensed recordings for new assets. Audition three engine families in the same car views and test a ducked co-driver mix on phone speakers and headphones. |
 | More stacked routes, if the Classic opening holds up in play | Drive the Classic crossing with a pack, recover at each deck and play back a saved ghost. Check the overhead cutaway from photo mode and the two road surfaces in rain or darkness before adding another stacked route. |
 
 ### P3 · Extend repeat play after the foundations
@@ -53,6 +55,12 @@ Android's controller guide documents duplicate trigger channels and devices that
 Use Android's frame pacing and thermal guidance to design the device benchmark. Verify store packaging against the current requirements when shipping, and use MediaStore for gallery-visible photos. [Android frame rates](https://developer.android.com/games/optimize/framerate) · [Thermal API](https://developer.android.com/games/optimize/adpf/thermal) · [Target SDK requirements](https://developer.android.com/google/play/requirements/target-sdk) · [16 KB page sizes](https://developer.android.com/guide/practices/page-sizes) · [Shared media](https://developer.android.com/training/data-storage/shared/media)
 
 The most transferable reference features are adjustable co-driver lead and short training exercises from EA SPORTS WRC, and the combination of results, replay and photo sharing shown by art of rally. For control and HUD review, use the Xbox guidelines on input choices and redundant cues. These are references for Paper Rally's original designs. [EA SPORTS WRC features](https://www.ea.com/games/ea-sports-wrc/wrc/news/deep-dive-features) · [EA accessibility options](https://www.ea.com/able/resources/ea-sports-wrc) · [art of rally](https://store.steampowered.com/app/550320/Art_of_rally/) · [Xbox accessibility guidelines](https://learn.microsoft.com/gaming/accessibility/guidelines)
+
+## Route chapters and leaf litter · 1.0.14
+
+All distances on Alpine Pass move from wooded slopes through the ski-lift slopes and out onto exposed snowfields. Harbour Lanes moves from the working waterfront through the fishing village to the open headland. Autumn Ridge starts in vineyard lanes, closes in through copper woods and opens up on the final ridge. Ground palettes and scenery weights blend between chapters. The stage confirmation screen shows the sequence.
+
+Autumn Ridge has seeded leaf drifts on the road and verges, with more drifts in the wooded section. A slow tyre pass lifts a few leaves. At speed the wake also catches leaves beside the car, and those leaves tumble and settle in new positions. Both player and AI cars can scatter them. The weather-particle setting limits simultaneous flight and the draw-distance setting controls their visibility.
 
 ## Co-driver, crossings and route previews · 1.0.13
 

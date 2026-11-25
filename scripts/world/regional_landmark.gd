@@ -35,8 +35,13 @@ func build(region: String, course: Track, mat: Material) -> bool:
 				if not track.terrain.is_sea(p + axis * 20) or track.terrain.is_sea(p - axis * 4):
 					continue
 				score -= absf(y - track.terrain.sea_y - 1.8)
+				score -= 32.0 * absf(track.chapter_progress(s) - 0.16)
 			elif region in ["alpine", "canyon"]:
 				score = minf(slope, 6.0) + 8.0 * (1.0 - track.tang[i-9].dot(track.tang[i+9]))
+			if region == "alpine":
+				score -= 21.0 * absf(track.chapter_progress(s) - 0.53)
+			if region == "autumn":
+				score -= 22.0 * absf(track.chapter_progress(s) - 0.17)
 			if region == "cliffs":
 				if not track.terrain.supports_prop(p,5.0):
 					continue

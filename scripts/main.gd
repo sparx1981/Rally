@@ -576,8 +576,11 @@ func _stage_details(location: int) -> void:
 	details.add_child(right)
 	var description := _note(sd.desc)
 	description.custom_minimum_size.x = 0.0
-	if sd.id == "gorge":
-		description.text += "\nScree slopes  ·  Split slate  ·  Pale shelves"
+	if Catalog.CHAPTERS.has(sd.id):
+		var chapter_names := PackedStringArray()
+		for chapter: Dictionary in Catalog.CHAPTERS[sd.id]:
+			chapter_names.append(chapter.name)
+		description.text += "\n" + "  ·  ".join(chapter_names)
 	right.add_child(description)
 	var map := StageRouteMap.new()
 	map.custom_minimum_size.y = 136

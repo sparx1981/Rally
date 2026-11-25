@@ -33,7 +33,7 @@ var gate_distances := PackedFloat32Array()
 var bridges: Array = []              # {s, kind: stone | covered, half, a, b (river ends), water_y}
 var tunnels: Array[Dictionary] = []
 var stacked_crossing := {}
-var geological_chapters := false
+var chapters: Array = []
 
 
 
@@ -45,7 +45,7 @@ static func cache_key(seed_v: int, target_len: float, twist: float) -> String:
 
 ## Build the same road data for racing, the route map and elevation preview.
 func build_stage_route(stage_def: Dictionary, surface_kind: String) -> void:
-	geological_chapters = stage_def.loc_id == "gorge"
+	chapters = Catalog.CHAPTERS.get(stage_def.loc_id, [])
 	generate(stage_def.seed, float(stage_def.length) + POST_FINISH, stage_def.twist, stage_def.width)
 	if stage_def.get("stacked", false):
 		_add_stacked_opening()
@@ -386,6 +386,10 @@ func _find_corners() -> void:
 
 
 # --- queries -------------------------------------------------------------------------------------
+
+func chapter_progress(s: float) -> float:
+	return clampf(s / finish_s, 0.0, 1.0)
+
 
 func index_at(s: float) -> int:
 	return clampi(int(s / STEP), 0, pts.size() - 1)

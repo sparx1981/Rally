@@ -249,18 +249,22 @@ func _process(delta: float) -> void:
 	_update_state(dt)
 	_acc += dt
 	var steps := 0
+	var leaves := stage.leaf_litter
 	while _acc >= FIXED and steps < 8:
 		_acc -= FIXED
 		steps += 1
 		for c in cars:
 			if drivers.has(c):
 				drivers[c].update(FIXED, cars, _clock)
+			var previous: Vector2 = c.pos
 			c.step(FIXED)
 			if c.y < stage.track.terrain.min_h - 10.0 and not c.frozen:
 				c.reset_to_track()   # over the cliff or into the river: back on the road
 				if c == player:
 					_seek_stage_audio()
 					Haptics.impulse(0.8, 0.25)
+			elif leaves and not c.airborne and not c.in_water and not c.frozen:
+				leaves.disturb(previous, c.pos, c.s, c.vel, c.half_wid)
 		_collide()
 		if state == State.RACING:
 			race_time += FIXED

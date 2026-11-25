@@ -1,5 +1,5 @@
 extends Node
-## Integration checks for authored crossings, birds and controller brake release.
+## Integration checks for crossings, stage dressing and controller brake release.
 var _failures := 0
 
 
@@ -172,6 +172,11 @@ func _check_stage(stage: Stage) -> void:
 	var id: String = stage.def.id
 	var track := stage.track
 	_expect(stage.has_node("Birds"), id + " has no birds")
+	_check_chapters(stage)
+	if stage.def.loc_id == "autumn":
+		_check_leaves(stage)
+	else:
+		_expect(stage.leaf_litter == null, id + " has autumn leaf litter")
 	if stage.def.get("stacked", false):
 		var center: Vector2 = track.stacked_crossing.center
 		var lower: float = track.stacked_crossing.lower
@@ -204,3 +209,56 @@ func _check_stage(stage: Stage) -> void:
 			var middle := track.point_at(bridge.s)
 			_expect(track.terrain.height(middle) < track.road_h(bridge.s) - 4.0, id + " missing the dry bridge cutting")
 	print(id, " • ", track.tunnels.size(), " tunnels")
+
+
+func _check_chapters(stage: Stage) -> void:
+	var track := stage.track
+	var site: String = stage.def.loc_id
+	if site not in ["gorge", "alpine", "harbour", "autumn"]:
+		_expect(track.chapters.is_empty(), stage.def.id + " has unexpected chapters")
+		return
+	_expect(track.chapters.size() == 3 and track.terrain._route_progress.size() == track.terrain.h.size(),
+		stage.def.id + " has three chapters and a terrain progress map")
+	if site == "gorge":
+		return
+	var kind: String = {"alpine": "pine_snow", "harbour": "house", "autumn": "tree"}[site]
+	var count := [0, 0, 0]
+	var total := [0, 0, 0]
+	for prop: Dictionary in stage.scenery.placements:
+		if prop.s > track.finish_s:
+			continue
+		var chapter := mini(2, int(track.chapter_progress(prop.s) * 3.0))
+		total[chapter] += 1
+		if prop.kind == kind:
+			count[chapter] += 1
+	var dense := 0 if site == "alpine" else 1
+	_expect(count[dense] > 2 * count[2] and count[dense] * total[2] > 1.7 * count[2] * total[dense],
+		stage.def.id + " scenery distinguishes the dense and exposed chapters")
+
+
+func _check_leaves(stage: Stage) -> void:
+	var litter := stage.leaf_litter
+	_expect(litter != null and litter._cells.size() > 40, stage.def.id + " has leaf drifts along the route")
+	if litter == null or litter._cells.is_empty():
+		return
+	var drift: LeafLitter.Drift = litter._cells.values()[0][0]
+	var leaf := drift.leaves[0]
+	var original := leaf.at
+	var point := drift.origin + Vector2(original.x, original.z)
+	var direction := drift.tang
+	var side := Vector2(-direction.y, direction.x)
+	var from := point - direction * 1.5
+	var to := point - direction * 0.2
+	litter.disturb(to, to, drift.station, Vector2.ZERO, 0.95)
+	litter.disturb(from + side * 8.0, to + side * 8.0, drift.station, direction * 25.0, 0.95)
+	_expect(litter._moving_count == 0, stage.def.id + " leaves ignore parked and distant cars")
+	litter.disturb(from + side * 1.8, to + side * 1.8, drift.station, direction * 25.0, 0.95)
+	_expect(leaf.age > 0.0 and leaf.at == original and litter._moving_count <= litter._flight_limit,
+		stage.def.id + " a fast pass can lift the existing leaves from the side")
+	litter.advance(0.04)
+	_expect(leaf.at.y > original.y and not is_zero_approx(leaf.at.distance_to(original)),
+		stage.def.id + " disturbed leaves lift and drift")
+	for i in 150:
+		litter.advance(1.0 / 60.0)
+	_expect(litter._moving_count == 0 and leaf.age == 0.0 and is_equal_approx(leaf.at.y, leaf.ground_y) and leaf.at != original,
+		stage.def.id + " leaves settle where they land")

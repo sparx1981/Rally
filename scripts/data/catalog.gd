@@ -203,6 +203,38 @@ const SUNSET := 3
 const SUNRISE := 4
 const TOD_NAMES := ["Day", "Dusk", "Night", "Sunset", "Sunrise"]
 
+# Names, terrain ink multipliers and regional scenery weights in route order.
+const CHAPTERS := {
+	"gorge": [
+		{"name": "Scree slopes"}, {"name": "Split slate"}, {"name": "Pale shelves"}
+	],
+	"alpine": [
+		{"name": "Wooded slopes", "ink": Vector3(0.83, 0.92, 0.96),
+			"weights": {"pine_snow": 3.6, "logs": 2.4, "snowbank": 0.65, "rock": 0.55}},
+		{"name": "Ski lift slopes", "ink": Vector3(1.0, 1.02, 1.04),
+			"weights": {"cabin": 3.3, "snowbank": 2.3, "pine_snow": 0.9}},
+		{"name": "Exposed snowfields", "ink": Vector3(1.12, 1.14, 1.19),
+			"weights": {"pine_snow": 0.12, "logs": 0.15, "cabin": 0.25, "rock": 2.9, "snowbank": 2.5}}
+	],
+	"harbour": [
+		{"name": "Working waterfront", "ink": Vector3(0.91, 0.96, 1.03),
+			"weights": {"net_shed": 3.0, "crates": 2.7, "bulrush": 2.0, "house": 0.6}},
+		{"name": "Fishing village", "ink": Vector3(1.10, 1.04, 0.94),
+			"weights": {"house": 3.6, "lamp": 3.0, "net_shed": 0.4, "rock": 0.6}},
+		{"name": "Open headland", "ink": Vector3(0.85, 1.02, 0.85),
+			"weights": {"house": 0.14, "net_shed": 0.1, "crates": 0.15, "lamp": 0.35,
+				"tuft": 4.0, "bush": 3.0, "rock": 2.9}}
+	],
+	"autumn": [
+		{"name": "Vineyard lanes", "ink": Vector3(1.01, 1.08, 0.84), "forest": 0.18,
+			"weights": {"vine_row": 4.0, "cabin": 2.3, "tree": 0.24, "pine": 0.35}},
+		{"name": "Copper woods", "ink": Vector3(1.04, 0.78, 0.66), "forest": 1.0,
+			"weights": {"tree": 3.2, "fern": 2.4, "logs": 2.0, "vine_row": 0.08}},
+		{"name": "Open ridge", "ink": Vector3(1.16, 1.06, 0.88), "forest": 0.10,
+			"weights": {"tree": 0.16, "pine": 0.38, "vine_row": 0.1, "tuft": 3.3, "rock": 3.0, "bush": 2.0}}
+	]
+}
+
 
 # The four routes pass through different parts of each location. Double one
 # existing scenery weight per route without increasing the placement budget.

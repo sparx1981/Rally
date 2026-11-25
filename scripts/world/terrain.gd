@@ -120,7 +120,7 @@ func build(track: Track, hills: float, seed_v: int, roughness := 1.0, bank_heigh
 	nx = int(ceil(b.size.x / cell)) + 1
 	nz = int(ceil(b.size.y / cell)) + 1
 	var total := nx * nz
-	if track.geological_chapters:
+	if not track.chapters.is_empty():
 		_route_progress.resize(total)
 	var road_e := PackedFloat32Array()
 	road_e.resize(total)
@@ -163,7 +163,7 @@ func build(track: Track, hills: float, seed_v: int, roughness := 1.0, bank_heigh
 					mind[k] = d
 					near_e[k] = e
 					if not _route_progress.is_empty():
-						_route_progress[k] = clampf(track.dist[i] / track.finish_s, 0.0, 1.0)
+						_route_progress[k] = track.chapter_progress(track.dist[i])
 				filled[k] = 1
 	for k in total:
 		if filled[k] == 1:

@@ -29,6 +29,8 @@ var fill_light: DirectionalLight3D
 var env: Environment
 var weather_fx: Node3D
 var _particles: CPUParticles3D
+var _wind_leaves: CPUParticles3D
+var leaf_litter: LeafLitter
 var birds: Birds
 var _tunnel_roof: MeshInstance3D
 var _stacked_deck: MeshInstance3D
@@ -167,6 +169,12 @@ func apply_settings() -> void:
 	key_light.directional_shadow_max_distance = 60.0 if sh <= 1 else 90.0
 	if _particles:
 		_particles.amount = maxi(16, int(_particles.get_meta("base_amount") * float(Settings.g("particles"))))
+	if leaf_litter:
+		var quality := float(Settings.g("particles"))
+		var amount := roundi(lerpf(24.0, 75.0, quality))
+		if _wind_leaves.amount != amount:
+			_wind_leaves.amount = amount
+		leaf_litter.configure(quality, float(Settings.g("draw_distance")))
 
 
 func _make_materials() -> void:
@@ -188,7 +196,13 @@ func _make_materials() -> void:
 	ground_mat.set_shader_parameter("g0", pal["ground"])
 	ground_mat.set_shader_parameter("g1", pal["ground2"])
 	ground_mat.set_shader_parameter("sea_y", track.terrain.sea_y if def.has("coast") else -10000.0)
-	ground_mat.set_shader_parameter("gorge_chapters", track.geological_chapters)
+	if not track.chapters.is_empty():
+		var gorge: bool = def.loc_id == "gorge"
+		ground_mat.set_shader_parameter("chapter_style", 2 if gorge else 1)
+		if not gorge:
+			ground_mat.set_shader_parameter("chapter_first", track.chapters[0].ink)
+			ground_mat.set_shader_parameter("chapter_middle", track.chapters[1].ink)
+			ground_mat.set_shader_parameter("chapter_last", track.chapters[2].ink)
 	ground_mat.set_shader_parameter("rock_amount", 0.9 if def.has("coast") else 0.55)
 	ground_mat.set_shader_parameter("rock", Color(pal["stone"]).lightened(0.25))
 	ground_mat.set_shader_parameter("g2", pal["ground3"])
@@ -1263,7 +1277,7 @@ func _make_leaves() -> void:
 	var lm := st.commit()
 	lm.surface_set_material(0, mat)
 	lp.mesh = lm
-	lp.amount = 220
+	lp.amount = roundi(lerpf(24.0, 75.0, float(Settings.g("particles"))))
 	lp.lifetime = 5.0
 	lp.preprocess = 5.0
 	lp.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
@@ -1288,6 +1302,7 @@ func _make_leaves() -> void:
 	lp.color_initial_ramp = g
 	lp.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	weather_fx.add_child(lp)
+	_wind_leaves = lp
 
 
 func _make_weather() -> void:
@@ -1297,6 +1312,10 @@ func _make_weather() -> void:
 	Sfx.set_ambience(kind)
 	if def.get("leaves", false):
 		_make_leaves()
+		leaf_litter = LeafLitter.new()
+		leaf_litter.name = "LeafLitter"
+		add_child(leaf_litter)
+		leaf_litter.build(track, int(def.seed))
 	if kind == "":
 		return
 	_particles = CPUParticles3D.new()
@@ -1415,6 +1434,8 @@ func update(dt: float, focus: Vector3, radius: float, player_s: float, cam: Came
 	_time += dt
 	if scenery:
 		scenery.update(Vector2(focus.x, focus.z), radius, dt)
+	if leaf_litter:
+		leaf_litter.advance(dt)
 	weather_fx.position = focus
 	if cam:
 		fill_light.global_basis = cam.global_basis
@@ -1464,7 +1485,9 @@ func _overhead_crossing() -> void:
 	var ski: bool = def.loc_id == "alpine"
 	var choice := -1
 	var score := -INF
-	for i in range(track.index_at(track.finish_s*0.26), track.index_at(track.finish_s*0.75), 5):
+	var start_fraction := 0.38 if ski else 0.26
+	var end_fraction := 0.64 if ski else 0.75
+	for i in range(track.index_at(track.finish_s * start_fraction), track.index_at(track.finish_s * end_fraction), 5):
 		var s := track.dist[i]
 		if not track.bridge_at(s, 35).is_empty() or absf(track.heights[i]) > 0.05 or track.overlaps_water(track.pts[i], 18):
 			continue
@@ -1763,7 +1786,7 @@ func _make_switchback_tunnel() -> void:
 
 ## Route-based rock forms reinforce the three printed terrain sections.
 func _make_gorge_outcrops() -> void:
-	if not track.geological_chapters:
+	if def.loc_id != "gorge":
 		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = int(def.seed) + 83
