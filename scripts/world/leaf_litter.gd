@@ -4,6 +4,8 @@ extends Node3D
 
 const CELL := 24.0
 const COLORS := [Color("#b84f30"), Color("#de8538"), Color("#e9b857"), Color("#89492d")]
+const DISTURB_REACH := 15.0
+const SCATTER_REACH := 10.0
 
 class Leaf:
 	var at := Vector3.ZERO
@@ -64,24 +66,25 @@ func configure(quality: float, draw_distance: float) -> void:
 func _add_drift(shape: Mesh, station: float, lateral: float) -> void:
 	var i := _track.index_at(station)
 	var center := _track.point_at(station) + _track.nrm[i] * lateral
-	if not _track.bridge_at(station, 8.0).is_empty() or _track.tunnel_at(station, 8.0):
+	if not _track.bridge_at(station, 11.0).is_empty() or _track.tunnel_at(station, 11.0):
 		return
-	if not _track.feature_at(station, "jump", 9.0).is_empty() or _track.overlaps_water(center, 6.0):
+	if not _track.feature_at(station, "jump", 11.0).is_empty() or _track.overlaps_water(center, 10.0):
 		return
 	var drift := Drift.new()
 	drift.station = station
 	drift.origin = center
 	drift.tang = _track.tang[i]
 	var base_y := _track.road_h(station)
-	var long_spread := _rng.randf_range(0.65, 1.9)
-	var width_spread := _rng.randf_range(0.35, 0.85)
+	var long_spread := _rng.randf_range(3.7, 5.5)
+	var width_spread := _rng.randf_range(1.65, 2.65)
+	var skew := _rng.randf_range(-0.45, 0.45)
 	var instances := MultiMesh.new()
 	instances.transform_format = MultiMesh.TRANSFORM_3D
 	instances.use_colors = true
 	instances.mesh = shape
-	instances.instance_count = _rng.randi_range(20, 33)
+	instances.instance_count = _rng.randi_range(59, 83)
 	# Fixed bounds cover flight and settling, including small roadside drops.
-	instances.custom_aabb = AABB(Vector3(-10, -5, -10), Vector3(20, 11, 20))
+	instances.custom_aabb = AABB(Vector3(-13, -6, -13), Vector3(26, 13, 26))
 	var mesh := MultiMeshInstance3D.new()
 	mesh.multimesh = instances
 	mesh.position = Vector3(center.x, base_y, center.y)
@@ -89,9 +92,16 @@ func _add_drift(shape: Mesh, station: float, lateral: float) -> void:
 	add_child(mesh)
 	drift.mesh = mesh
 	for j in instances.instance_count:
-		var along := clampf(_rng.randfn(0.0, 0.52), -1.3, 1.3) * long_spread
-		var across := clampf(_rng.randfn(0.0, 0.52), -1.3, 1.3) * width_spread
-		var offset := drift.tang * along + _track.nrm[i] * across
+		# Two overlapping pockets with fewer leaves at their edges and downstream tip.
+		var pocket := -1.0 if j % 3 == 0 else 1.0
+		var angle := _rng.randf() * TAU
+		var radius := pow(_rng.randf(), 0.73)
+		var along := (cos(angle) * radius + pocket * 0.26) * long_spread
+		var across := (sin(angle) * radius + pocket * skew) * width_spread
+		var leaf_station := station + along
+		var leaf_index := _track.index_at(leaf_station)
+		var p := _track.point_at(leaf_station) + _track.nrm[leaf_index] * (lateral + across)
+		var offset := p - center
 		var leaf := Leaf.new()
 		leaf.index = j
 		leaf.size = _rng.randf_range(0.64, 1.28)
@@ -121,10 +131,10 @@ func disturb(from: Vector2, to: Vector2, station: float, velocity: Vector2, half
 	var cell := floori(station / CELL)
 	for i in range(cell - 1, cell + 2):
 		for drift: Drift in _cells.get(i, []):
-			if absf(drift.station - station) > 12.0 or drift.origin.distance_squared_to(to) > 125.0:
+			if absf(drift.station - station) > DISTURB_REACH or drift.origin.distance_squared_to(to) > DISTURB_REACH * DISTURB_REACH:
 				continue
 			for leaf: Leaf in drift.leaves:
-				if leaf.age > 0.0 or Vector2(leaf.at.x, leaf.at.z).length_squared() > 36.0:
+				if leaf.age > 0.0 or Vector2(leaf.at.x, leaf.at.z).length_squared() > SCATTER_REACH * SCATTER_REACH:
 					continue
 				var point := drift.origin + Vector2(leaf.at.x, leaf.at.z)
 				var nearest := Geometry2D.get_closest_point_to_segment(point, nose_from, nose_to)
@@ -175,6 +185,7 @@ func advance(dt: float) -> void:
 func _ground(drift: Drift, offset: Vector2) -> float:
 	var p := drift.origin + offset
 	var station := drift.station + offset.dot(drift.tang)
+	station += (p - _track.point_at(station)).dot(_track.tang[_track.index_at(station)])
 	var i := _track.index_at(station)
 	var lateral := (p - _track.point_at(station)).dot(_track.nrm[i])
 	var floor_y := _track.terrain.height(p)

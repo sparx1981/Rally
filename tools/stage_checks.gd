@@ -247,10 +247,18 @@ func _check_leaves(stage: Stage) -> void:
 	var point := drift.origin + Vector2(original.x, original.z)
 	var direction := drift.tang
 	var side := Vector2(-direction.y, direction.x)
+	var lateral_min := INF
+	var lateral_max := -INF
+	for resting: LeafLitter.Leaf in drift.leaves:
+		var lateral := Vector2(resting.at.x, resting.at.z).dot(side)
+		lateral_min = minf(lateral_min, lateral)
+		lateral_max = maxf(lateral_max, lateral)
+	_expect(drift.leaves.size() >= 59 and lateral_max - lateral_min > 2.6,
+		stage.def.id + " has broad, visibly populated leaf drifts")
 	var from := point - direction * 1.5
 	var to := point - direction * 0.2
 	litter.disturb(to, to, drift.station, Vector2.ZERO, 0.95)
-	litter.disturb(from + side * 8.0, to + side * 8.0, drift.station, direction * 25.0, 0.95)
+	litter.disturb(from + side * 12.0, to + side * 12.0, drift.station, direction * 25.0, 0.95)
 	_expect(litter._moving_count == 0, stage.def.id + " leaves ignore parked and distant cars")
 	litter.disturb(from + side * 1.8, to + side * 1.8, drift.station, direction * 25.0, 0.95)
 	_expect(leaf.age > 0.0 and leaf.at == original and litter._moving_count <= litter._flight_limit,
