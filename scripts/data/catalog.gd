@@ -274,11 +274,20 @@ static func stages() -> Array:
 				st["seed"] = int(loc["seed"]) + v * 977
 				st["tod"] = int(loc.get("tod", 0))
 				_stages.append(st)
+		var arena: Dictionary = locations()[1].duplicate(true)
+		arena.merge({"id": "sandstone_arena", "loc_id": "arena", "name": "Sandstone Eight",
+			"variant_name": "Rallycross", "loc": -1, "variant": 0, "circuit": true,
+			"length": 965.0, "width": 12.0, "seed": 7641, "elev": {"hills": 2.4},
+			"barriers": [], "kinds": {"tree": 6, "rock": 5, "bush": 2, "tuft": 3},
+			"desc": "A sandy figure-eight with grandstands, a bridge crossing and a shallow ford."}, true)
+		_stages.append(arena)
 	return _stages
 
 
 static func stage_preview(stage: Dictionary) -> Texture2D:
 	var variant_path := "res://ui/previews/routes/%s.jpg" % stage.id
+	if stage.get("circuit", false) and not ResourceLoader.exists(variant_path):
+		return load("res://ui/previews/canyon.png")
 	return load(variant_path) if ResourceLoader.exists(variant_path) else load("res://ui/previews/%s.png" % stage.loc_id)
 
 

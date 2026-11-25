@@ -289,17 +289,18 @@ func _mix_surface(delta: float) -> void:
 			_roll.play()
 	var k := clampf(_rolling_speed / 28.0, 0.0, 1.0)
 	var roll_gain := pow(k, 0.58)
+	var tyre_duck := 3.0 * _voice_duck
 	_gravel_mix = move_toward(_gravel_mix, _gravel_contact, delta * 6.0)
-	_gravel_roll.volume_db = linear_to_db(maxf(0.0001, roll_gain * _gravel_mix * (0.82 + minf(_gravel_slip, 0.5) * 0.20)))
+	_gravel_roll.volume_db = linear_to_db(maxf(0.0001, roll_gain * _gravel_mix * (0.82 + minf(_gravel_slip, 0.5) * 0.20))) - tyre_duck
 	_gravel_roll.pitch_scale = 0.76 + k * 0.48
-	_roll.volume_db = linear_to_db(maxf(0.0001, roll_gain * 0.80 * (1.0 - _gravel_mix)))
+	_roll.volume_db = linear_to_db(maxf(0.0001, roll_gain * 0.80 * (1.0 - _gravel_mix))) - tyre_duck
 	_roll.pitch_scale = 0.8 + k * 0.4
 	_scrub = move_toward(_scrub, _scrub_target, delta * (14.0 if _scrub_target > _scrub else 6.0))
 	var winter := _scrub_kind == "snow"
 	var tyre_gain := _scrub * (1.0 - _gravel_mix) * (0.50 if winter else 0.95)
-	_skid.volume_db = linear_to_db(maxf(0.0001, tyre_gain))
+	_skid.volume_db = linear_to_db(maxf(0.0001, tyre_gain)) - tyre_duck
 	_skid.pitch_scale = (0.72 if winter else 0.84) + _scrub * 0.28
-	_gravel_scrub.volume_db = linear_to_db(maxf(0.0001, _scrub * _gravel_mix * 0.90))
+	_gravel_scrub.volume_db = linear_to_db(maxf(0.0001, _scrub * _gravel_mix * 0.90)) - tyre_duck
 	_gravel_scrub.pitch_scale = 0.85 + k * 0.32
 	_pebble_t -= delta
 	if _gravel_mix > 0.1 and _gravel_slip > 0.16 and _rolling_speed > 6.0 and _pebble_t <= 0.0:
@@ -338,7 +339,7 @@ func _process(delta: float) -> void:
 	_shift_time = maxf(0.0, _shift_time - delta)
 	_shift_gain = 1.0 - 0.35 * smoothstep(0.0, 0.072, _shift_time)
 	var idle_level := lerpf(0.72, 1.0, smoothstep(1000.0, 2500.0, _rpm))
-	var gain := idle_level * _shift_gain * db_to_linear(-1.5 - 4.5 * _voice_duck + _interior_mix)
+	var gain := idle_level * _shift_gain * db_to_linear(-1.5 - 9.0 * _voice_duck + _interior_mix)
 	_engine_voice.mix(_rpm, _load, gain)
 	_mix_surface(delta)
 	# Allow a short high-load window for gradual releases on an analog trigger.

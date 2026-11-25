@@ -13,6 +13,8 @@ enum State { COUNTDOWN, RACING, DONE }
 const FIXED := 1.0 / 120.0
 const CO_DRIVER_SCRIPT := "res://scripts/race/co_driver_voice.gd"
 const CROSSING_AUDIO_SCRIPT := "res://scripts/race/crossing_audio.gd"
+const RECOVERY_WARNING := 10.0
+const RECOVERY_LIMIT := 15.0
 
 var stage_index := 0
 var mode := 0
@@ -35,6 +37,9 @@ var _count := 3.5
 var _last_count := 4
 var _done_t := 0.0
 var _reset_cd := 0.0
+var _off_track_time := 0.0
+var _laps := 0
+var _circuit_progress := {}
 var _hud_layer: CanvasLayer
 var _clock := 0.0
 var _entrants: Array = []
@@ -52,6 +57,7 @@ func setup(stage_i: int, mode_v: int, entrants: Array, attract_v := false, tod :
 	add_child(stage)
 	stage.build(Catalog.stages()[stage_i], tod)
 	var tr := stage.track
+	_laps = clampi(Game.circuit_laps, 3, 12) if tr.circuit else 0
 	var n := entrants.size()
 	var player_slot := n - 1 if mode != Game.Mode.TIME_TRIAL else 0
 	var order: Array = []
@@ -74,6 +80,8 @@ func setup(stage_i: int, mode_v: int, entrants: Array, attract_v := false, tod :
 		var lat := 0.0 if n == 1 else (-2.2 if i % 2 == 0 else 2.2)
 		car.place_at(tr.start_s - 5.0 - row * 8.0, lat)
 		cars.append(car)
+		if _laps > 0:
+			_circuit_progress[car] = {"completed": 0, "gate": 0, "previous": car.s, "started": false}
 		car.landed.connect(func(v): _on_landed(car, v))
 		if car.is_player and not attract:
 			car.compressed.connect(Sfx.suspension)
@@ -97,7 +105,7 @@ func setup(stage_i: int, mode_v: int, entrants: Array, attract_v := false, tod :
 	camera.current = true
 	if attract:
 		camera.force_view = 0
-	if mode == Game.Mode.TIME_TRIAL and not attract:
+	if mode == Game.Mode.TIME_TRIAL and not attract and _laps == 0:
 		ghost = Ghost.new()
 		add_child(ghost)
 		ghost.setup(Catalog.record_id(Catalog.stages()[stage_i]), player.stats, stage.track, Game.show_ghost)
@@ -229,6 +237,8 @@ func _reset_player() -> void:
 	if state != State.RACING or _reset_cd > 0.0 or get_tree().paused:
 		return
 	player.reset_to_track()
+	_off_track_time = 0.0
+	_sync_circuit_station(player)
 	_seek_stage_audio()
 	_reset_cd = 1.5
 	camera.snap()
@@ -260,14 +270,22 @@ func _process(delta: float) -> void:
 			c.step(FIXED)
 			if c.y < stage.track.terrain.min_h - 10.0 and not c.frozen:
 				c.reset_to_track()   # over the cliff or into the river: back on the road
+				_sync_circuit_station(c)
 				if c == player:
+					_off_track_time = 0.0
 					_seek_stage_audio()
 					Haptics.impulse(0.8, 0.25)
 			elif leaves and not c.airborne and not c.in_water and not c.frozen:
 				leaves.disturb(previous, c.pos, c.s, c.vel, c.half_wid)
+			if _laps > 0 and not c.frozen and not c.finished:
+				_update_circuit(c)
 		_collide()
 		if state == State.RACING:
 			race_time += FIXED
+			if not attract:
+				_update_recovery(FIXED)
+		if _laps > 0:
+			_check_finish()
 	for c: Car in cars:
 		c.render_fraction = clampf(_acc / FIXED, 0.0, 1.0)
 	if sim_dt > 0.0 and OS.get_cmdline_user_args().has("--trace") and Engine.get_process_frames() % 10 == 0:
@@ -282,7 +300,8 @@ func _process(delta: float) -> void:
 		ghost.update(race_time)
 	if not attract and player:
 		stage.scenery.scare(player.pos)
-	_check_finish()
+	if _laps == 0:
+		_check_finish()
 	if state == State.RACING:
 		if _voice:
 			_voice.call_ahead(player.s, maxf(player.v_long, 0.0))
@@ -297,7 +316,8 @@ func _process(delta: float) -> void:
 		player.cockpit(vi == ChaseCamera.COCKPIT)
 		player.set_low_view(vi == ChaseCamera.LOW)
 	var vf: Array = camera.view_focus()
-	if stage.advance_lighting(player.s):
+	var lighting_station := clampf(_race_distance(player) / _laps, 0.0, stage.track.length) if _laps > 0 else player.s
+	if stage.advance_lighting(lighting_station):
 		player.set_headlight_level(stage.headlight_level)
 		lighting_changed.emit()
 	stage.update(dt, vf[0], float(vf[1]), player.s, camera)
@@ -336,24 +356,26 @@ func _update_state(dt: float) -> void:
 
 func _check_finish() -> void:
 	var tr := stage.track
+	if attract and tr.circuit:
+		return
 	for c in cars:
 		if c.finished or c.frozen:
 			continue
-		if c.s >= tr.finish_s:
+		var lap_finish: bool = _laps > 0 and _circuit_progress[c].completed >= _laps
+		if lap_finish or (_laps == 0 and c.s >= tr.finish_s):
 			if attract:
 				c.place_at(tr.start_s, 0.0)
 				camera.snap()
 				continue
 			c.finished = true
 			c.finish_time = race_time
-			# Every finisher coasts on into the parc fermé and parks in its own bay.
 			if not drivers.has(c) or c == player:
 				drivers[c] = AIDriver.new(c, 0.7)
-			var bay := _bays_used
-			_bays_used += 1
-			var slot: Array = Stage.parc_bay(tr.length, bay)
-			drivers[c].stop_at_s = slot[0]
-			drivers[c].park_lat = slot[1]
+			if _laps == 0:
+				var slot: Array = Stage.parc_bay(tr.length, _bays_used)
+				_bays_used += 1
+				drivers[c].stop_at_s = slot[0]
+				drivers[c].park_lat = slot[1]
 			if c == player:
 				state = State.DONE
 				_stop_stage_audio()
@@ -365,6 +387,53 @@ func _check_finish() -> void:
 						ghost.save(Catalog.record_id(Catalog.stages()[stage_index]))
 				hud.show_center("FINISH", 2.6, 84)
 				Sfx.play("finish", -6.0)
+
+
+func _sync_circuit_station(car: Car) -> void:
+	if _laps > 0:
+		_circuit_progress[car].previous = car.s
+
+
+func _update_recovery(delta: float) -> void:
+	_off_track_time = 0.0 if player.on_road else _off_track_time + delta
+	if _off_track_time >= RECOVERY_LIMIT:
+		_reset_player()
+
+
+func _update_circuit(car: Car) -> void:
+	var tr := stage.track
+	var progress: Dictionary = _circuit_progress[car]
+	var previous: float = progress.previous
+	progress.previous = car.s
+	var advance := fposmod(car.s - previous, tr.length)
+	if not car.on_road or advance <= 0.0 or advance > 8.0 or car.vel.dot(tr.tang[car.track_i]) <= 0.0:
+		return
+	var checkpoint := float(progress.gate) * tr.length * 0.25
+	var to_gate := fposmod(checkpoint - previous, tr.length)
+	if to_gate > advance or is_zero_approx(to_gate):
+		return
+	if progress.gate == 0:
+		if progress.started:
+			progress.completed += 1
+		progress.started = true
+		if car == player:
+			_seek_stage_audio()
+	progress.gate = (int(progress.gate) + 1) % 4
+
+
+func _race_distance(car: Car) -> float:
+	var tr := stage.track
+	if _laps == 0:
+		return car.s - tr.start_s
+	var progress: Dictionary = _circuit_progress[car]
+	if not progress.started:
+		return wrapf(car.s, -tr.length * 0.5, tr.length * 0.5)
+	var gate: int = progress.gate
+	var sector_limit := tr.length * (1.0 if gate == 0 else gate * 0.25)
+	var station := car.s
+	if gate == 1 and station > tr.length * 0.9:
+		station -= tr.length
+	return float(progress.completed) * tr.length + minf(station, sector_limit)
 
 
 ## Collisions use each car's oriented box (its real paper body), not a circle: props are circles,
@@ -494,7 +563,9 @@ func _collide() -> void:
 		for j in range(i + 1, cars.size()):
 			var a := cars[i]
 			var b := cars[j]
-			if absf(a.y-b.y) > 2.0 or (mode == Game.Mode.RACE and not Game.ai_contact and not attract and (a == player or b == player)):
+			if absf(a.y-b.y) > 2.0 or (_laps > 0 and (a.finished or b.finished)):
+				continue
+			if mode == Game.Mode.RACE and not Game.ai_contact and not attract and (a == player or b == player):
 				continue
 			var d := a.pos - b.pos
 			if d.length_squared() > 30.0:
@@ -668,7 +739,7 @@ func _positions() -> Array:
 			return a.finish_time < b.finish_time
 		if a.finished != b.finished:
 			return a.finished
-		return a.s > b.s)
+		return _race_distance(a) > _race_distance(b))
 	return arr
 
 
@@ -680,21 +751,25 @@ func _update_hud() -> void:
 	var marks: Array = []
 	for c in cars:
 		var col: Color = c.stats["body"]
-		marks.append([(c.s - tr.start_s) / (tr.finish_s - tr.start_s), col, c == player])
+		var total := tr.length * _laps if _laps > 0 else tr.finish_s - tr.start_s
+		marks.append([1.0 if c.finished else clampf(_race_distance(c) / total, 0.0, 1.0), col, c == player])
 	hud.strip.marks = marks
 	hud.strip.queue_redraw()
 	if mode != Game.Mode.TIME_TRIAL:
 		var pos := _positions().find(player) + 1
-		hud.set_position_text("P%d/%d" % [pos, cars.size()])
+		var lap := mini(int(_circuit_progress[player].completed) + 1, _laps) if _laps > 0 else 0
+		var lap_text := "  ·  Lap %d/%d" % [lap, _laps] if _laps > 0 else ""
+		hud.set_position_text("P%d/%d%s" % [pos, cars.size(), lap_text])
 	var wrong := player.vel.length() > 3.0 and player.vel.normalized().dot(tr.tang[player.track_i]) < -0.4
-	var lost := absf(player.lat) > tr.width * 1.6 and state == State.RACING
-	hud.show_reset(lost and touch.visible)
+	var lost := _off_track_time >= RECOVERY_WARNING and state == State.RACING
+	var seconds := maxi(1, ceili(RECOVERY_LIMIT - _off_track_time))
+	hud.show_reset(lost and touch.visible, seconds)
 	if lost and touch.visible:
 		hud.show_hint("")
+	elif lost:
+		hud.show_hint("Return to track in %ds  ·  Y / R to reset now" % seconds)
 	elif wrong:
 		hud.show_hint("WRONG WAY")
-	elif lost:
-		hud.show_hint("Lost? Press RESET (Y / R)")
 	else:
 		hud.show_hint("")
 
@@ -706,8 +781,10 @@ func _results() -> Dictionary:
 		var t: float = c.finish_time
 		if not c.finished:
 			# Estimate the remaining time from the car's average pace so far.
-			var avg := maxf((c.s - tr.start_s) / maxf(race_time, 1.0), 8.0)
-			t = race_time + (tr.finish_s - c.s) / avg
+			var distance := _race_distance(c)
+			var total := tr.length * _laps if _laps > 0 else tr.finish_s - tr.start_s
+			var avg := maxf(distance / maxf(race_time, 1.0), 8.0)
+			t = race_time + (total - distance) / avg
 		rows.append({"name": c.driver_name, "time": t, "car": Catalog.cars().map(func(x): return x["id"]).find(c.stats["id"]), "player": c == player})
 	rows.sort_custom(func(a, b): return a["time"] < b["time"])
 	var medal := 3

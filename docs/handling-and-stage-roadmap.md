@@ -36,6 +36,7 @@ This is the active backlog. Update it in the same change that ships, replaces or
 
 | Outstanding work | Acceptance |
 | --- | --- |
+| Expand the rallycross calendar after testing Sandstone Eight | Consider seven original layouts taking cues from Lydden Hill, Höljes, Lohéac, Barcelona-Catalunya, Montalegre, Mettet and Hell. Give each a distinct braking zone, elevation profile and overtaking line. Test every layout with the three- and twelve-lap settings, mixed AI grids, race restarts and missed checkpoints. |
 | Co-driver and crossing mix on Android | Judge the new pace-note clips over engine and rain on a phone speaker and headphones. Check Late, Normal, Early, Off and the separate voice volume. Timber, stone and steel joints should remain distinct, and the tunnel reflection should be audible at crawl and race speeds. |
 | Compare co-driver voices in play | Check all five voice packs on Android with engine and weather active. Compare clarity and phrasing at matched playback level. Check dense corners and long turn-to-hazard calls with each timing option. |
 | Blind chapter and preview recognition | Give drivers unlabelled screenshots of Slate Gorge, Autumn Ridge, Harbour Lanes and Alpine Pass. Check whether they can put each set in route order and recognise a landmark without the setup description. Confirm the Slate Gorge Classic preview distinguishes the stacked truss from the other spans. |
@@ -58,6 +59,12 @@ Android's controller guide documents duplicate trigger channels and devices that
 Use Android's frame pacing and thermal guidance to design the device benchmark. Verify store packaging against the current requirements when shipping, and use MediaStore for gallery-visible photos. [Android frame rates](https://developer.android.com/games/optimize/framerate) · [Thermal API](https://developer.android.com/games/optimize/adpf/thermal) · [Target SDK requirements](https://developer.android.com/google/play/requirements/target-sdk) · [16 KB page sizes](https://developer.android.com/guide/practices/page-sizes) · [Shared media](https://developer.android.com/training/data-storage/shared/media)
 
 The most transferable reference features are adjustable co-driver lead and short training exercises from EA SPORTS WRC, and the combination of results, replay and photo sharing shown by art of rally. For control and HUD review, use the Xbox guidelines on input choices and redundant cues. These are references for Paper Rally's original designs. [EA SPORTS WRC features](https://www.ea.com/games/ea-sports-wrc/wrc/news/deep-dive-features) · [EA accessibility options](https://www.ea.com/able/resources/ea-sports-wrc) · [art of rally](https://store.steampowered.com/app/550320/Art_of_rally/) · [Xbox accessibility guidelines](https://learn.microsoft.com/gaming/accessibility/guidelines)
+
+## Sandstone Eight and timed recovery · 1.0.21
+
+Race vs AI now includes a 965 m sandy figure-eight circuit with a grade-separated bridge, a shallow ford and two covered grandstands. Races can run for 3–12 laps. Each lap requires three intermediate checkpoints and a forward crossing at the timing line. The launch screen shows the route map and the HUD shows the current lap and race position.
+
+Nick is the default co-driver and prior explicit selections are retained. Calls have 3 dB more gain and the engine and tyres sit lower while a call plays. The return-to-track warning appears after ten continuous seconds off the road. The player can reset immediately or drive back onto the road before the five-second countdown expires. A fall below the landscape still uses the emergency recovery.
 
 ## Selectable co-driver voices · 1.0.20
 

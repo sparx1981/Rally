@@ -34,6 +34,8 @@ static func selected_voice(voices: Array[String]) -> String:
 	var saved := str(Settings.g("codriver_voice"))
 	if saved in voices:
 		return saved
+	if "nick" in voices:
+		return "nick"
 	return voices[0] if not voices.is_empty() else "george"
 
 
@@ -76,7 +78,7 @@ func call_ahead(station: float, speed: float) -> void:
 		path = clip_path("george", call)
 	if ResourceLoader.exists(path, "AudioStream"):
 		stream = load(path)
-		volume_db = linear_to_db(volume)
+		volume_db = linear_to_db(volume) + 3.0
 		play()
 
 

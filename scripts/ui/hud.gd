@@ -161,7 +161,8 @@ func _input(event: InputEvent) -> void:
 			reset_requested.emit()
 
 
-func show_reset(active: bool) -> void:
+func show_reset(active: bool, seconds := 5) -> void:
+	reset_button.text = "Return to track · %ds" % seconds
 	reset_button.visible = active
 
 

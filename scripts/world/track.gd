@@ -20,6 +20,8 @@ var corners: Array = []              # {s0, s1, dir (-1 left / +1 right on scree
 var grid := {}
 var start_s := 14.0
 var finish_s := 0.0
+var circuit := false
+var _sample_step := STEP
 
 # Hazards (rally-game staples: crests, jumps, water splashes, hay-bale chicanes, loose surfaces).
 var heights := PackedFloat32Array()  # hazard ramps per sample (crests and jump ramps are built paper ramps)
@@ -45,6 +47,9 @@ static func cache_key(seed_v: int, target_len: float, twist: float) -> String:
 
 ## Build the same road data for racing, the route map and elevation preview.
 func build_stage_route(stage_def: Dictionary, surface_kind: String) -> void:
+	if stage_def.get("circuit", false):
+		_build_sand_circuit(float(stage_def.width))
+		return
 	chapters = Catalog.CHAPTERS.get(stage_def.loc_id, [])
 	generate(stage_def.seed, float(stage_def.length) + POST_FINISH, stage_def.twist, stage_def.width)
 	if stage_def.get("stacked", false):
@@ -65,6 +70,49 @@ func build_stage_route(stage_def: Dictionary, surface_kind: String) -> void:
 		var first := float(bridge.s) - float(bridge.half)
 		notes.append({"s0": first, "s1": float(bridge.s) + float(bridge.half), "kind": "bridge",
 			"dir": 0.0, "sev": 0, "hairpin": false})
+	notes.sort_custom(func(a, b): return a.s0 < b.s0)
+
+
+func _build_sand_circuit(road_width: float) -> void:
+	circuit = true
+	width = road_width
+	var curve := Curve2D.new()
+	curve.bake_interval = 0.25
+	for i in 241:
+		var angle := 0.58 + TAU * i / 240.0
+		curve.add_point(Vector2(140.0 * sin(angle), 88.0 * sin(2.0 * angle)))
+	var metres := curve.get_baked_length()
+	var segments := roundi(metres / STEP)
+	for i in range(segments + 1):
+		pts.append(curve.sample_baked(metres * i / segments))
+	pts[-1] = pts[0]
+	_finalize()
+	_rebuild_grid()
+	_sample_step = length / segments
+	start_s = 0.0
+	finish_s = length
+	var lower := 1
+	var upper := segments - 1
+	for i in range(1, segments):
+		if i < segments / 2:
+			if pts[i].length_squared() < pts[lower].length_squared():
+				lower = i
+		elif pts[i].length_squared() < pts[upper].length_squared():
+			upper = i
+	stacked_crossing = {"center": Vector2.ZERO, "lower": dist[lower], "upper": dist[upper], "half": 21.0}
+	var splash := index_at(dist[lower] + 110.0)
+	var water_s := dist[splash]
+	for i in pts.size():
+		var bridge_distance := absf(wrapf(dist[i] - float(dist[upper]), -length * 0.5, length * 0.5))
+		elev[i] = 8.2 * (1.0 - smoothstep(29.0, 98.0, bridge_distance))
+		elev[i] -= 0.78 * (1.0 - smoothstep(0.0, 16.0, absf(dist[i] - water_s)))
+	features.append({"type": "splash", "i": splash, "s": water_s, "s0": water_s - 3.5,
+		"s1": water_s + 3.5, "water_y": road_h(water_s) + Stage.ROAD_Y + 0.20})
+	notes.append({"kind": "splash", "s0": water_s - 3.5, "s1": water_s + 3.5,
+		"dir": 0.0, "sev": 0, "hairpin": false})
+	_register_stacked_bridge()
+	notes.append({"kind": "bridge", "s0": dist[upper] - 21.0, "s1": dist[upper] + 21.0,
+		"dir": 0.0, "sev": 0, "hairpin": false})
 	notes.sort_custom(func(a, b): return a.s0 < b.s0)
 
 
@@ -392,11 +440,15 @@ func chapter_progress(s: float) -> float:
 
 
 func index_at(s: float) -> int:
-	return clampi(int(s / STEP), 0, pts.size() - 1)
+	return clampi(int(route_station(s) / _sample_step), 0, pts.size() - 1)
+
+
+func route_station(s: float) -> float:
+	return fposmod(s, length) if circuit and (s < 0.0 or s > length) else s
 
 
 func point_at(s: float) -> Vector2:
-	var f := clampf(s / STEP, 0.0, pts.size() - 1.001)
+	var f := clampf(route_station(s) / _sample_step, 0.0, pts.size() - 1.001)
 	var i := int(f)
 	return pts[i].lerp(pts[i + 1], f - i)
 
@@ -408,7 +460,11 @@ func project(p: Vector2, hint: int, altitude := INF) -> Array:
 	var bd := INF
 	var lo := clampi(hint - 24, 0, n - 1)
 	var hi := clampi(hint + 24, 0, n - 1)
-	for i in range(lo, hi + 1):
+	if circuit:
+		lo = hint - 24
+		hi = hint + 24
+	for candidate in range(lo, hi + 1):
+		var i := posmod(candidate, n - 1) if circuit else candidate
 		var d := p.distance_squared_to(pts[i])
 		if d < bd:
 			bd = d
@@ -432,6 +488,9 @@ func project(p: Vector2, hint: int, altitude := INF) -> Array:
 	if best > 0 and (p - pts[best]).dot(tang[best]) < 0.0:
 		i0 = best - 1
 		i1 = best
+	elif circuit and best == 0 and (p - pts[best]).dot(tang[best]) < 0.0:
+		i0 = n - 2
+		i1 = n - 1
 	var seg := pts[i1] - pts[i0]
 	var t := 0.0
 	if seg.length_squared() > 1e-6:
@@ -512,7 +571,8 @@ func speed_profile(a_lat: float, a_brake: float, a_acc: float, v_top: float) -> 
 			v[i] *= sqrt(float(p["grip"]))
 	for i in range(n - 2, -1, -1):
 		v[i] = minf(v[i], sqrt(v[i + 1] * v[i + 1] + 2.0 * a_brake * STEP))
-	v[0] = 0.0
+	if not circuit:
+		v[0] = 0.0
 	for i in range(1, n):
 		v[i] = minf(v[i], sqrt(v[i - 1] * v[i - 1] + 2.0 * a_acc * STEP))
 	return v
@@ -593,7 +653,7 @@ func build_elevation(params: Dictionary, seed_v: int) -> void:
 
 ## Road surface (altitude + hazard ramps) at distance s.
 func road_h(s: float) -> float:
-	var f := clampf(s / STEP, 0.0, pts.size() - 1.001)
+	var f := clampf(route_station(s) / _sample_step, 0.0, pts.size() - 1.001)
 	var i := int(f)
 	return lerpf(elev[i] + heights[i], elev[i + 1] + heights[i + 1], f - i)
 
@@ -749,7 +809,7 @@ func _bump(f: Dictionary, s: float) -> float:
 func height_at(s: float, lat: float) -> float:
 	if absf(lat) > width * 0.5 + 0.1:
 		return 0.0
-	var f := clampf(s / STEP, 0.0, pts.size() - 1.001)
+	var f := clampf(route_station(s) / _sample_step, 0.0, pts.size() - 1.001)
 	var i := int(f)
 	return lerpf(heights[i], heights[i + 1], f - i)
 

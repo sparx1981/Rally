@@ -227,7 +227,8 @@ func build(track: Track, hills: float, seed_v: int, roughness := 1.0, bank_heigh
 				var hollow := smoothstep(2.8, 5.8, edge) * (1.0 - smoothstep(6.2, 11.0, edge))
 				v -= (0.55 + sector * 0.35) * hollow * smoothstep(-0.15, 0.24, noise.get_noise_2d(wx * 2.0 - 630.0, wz * 2.0))
 		if d < hw + 2.5:
-			v = road_e[k] - 0.1
+			# Keep the sampled terrain clear of the circuit's banked bridge approaches.
+			v = road_e[k] - (0.42 if track.circuit else 0.1)
 		h[k] = v
 		far[k] = 1 if d > hw + 300.0 else 0
 		min_h = minf(min_h, v)

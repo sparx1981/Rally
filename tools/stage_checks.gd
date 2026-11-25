@@ -19,6 +19,7 @@ func _ready() -> void:
 		stage.build(stage_def)
 		_check_stage(stage)
 		stage.free()
+	_check_circuit_race()
 	print("Stage and controller checks: %d failures" % _failures)
 	get_tree().quit(1 if _failures > 0 else 0)
 
@@ -274,7 +275,7 @@ func _check_stage(stage: Stage) -> void:
 		_check_leaves(stage)
 	else:
 		_expect(stage.leaf_litter == null, id + " has autumn leaf litter")
-	if stage.def.get("stacked", false):
+	if stage.def.get("stacked", false) or track.circuit:
 		var center: Vector2 = track.stacked_crossing.center
 		var lower: float = track.stacked_crossing.lower
 		var upper: float = track.stacked_crossing.upper
@@ -286,6 +287,13 @@ func _check_stage(stage: Stage) -> void:
 		_expect(absf(track.project(center, track.index_at(lower), high_y)[1] - upper) < 3.0, "Wrong hint still finds upper deck")
 		_expect(stage.has_node("StackedBridge") and stage._stacked_road != null, "Stacked road has an actual deck and cutaway mesh")
 		_expect(absf(track.terrain.height(center)-low_y) < 0.5, "Terrain underneath the bridge agrees with the lower deck")
+	if track.circuit:
+		_expect(track.pts[0].distance_to(track.pts[-1]) < 0.01, "Circuit closes at the timing line")
+		_expect(track.features.size() == 1 and track.features[0].type == "splash", "Circuit has one ford")
+		var ford: Dictionary = track.features[0]
+		_expect(track.inside_ford(track.point_at(ford.s), ford.s), "Circuit ford has driving contact")
+		var ahead := track.project(track.point_at(5.0), track.pts.size() - 3, track.road_h(5.0))
+		_expect(absf(ahead[1] - 5.0) < 1.0, "Circuit projection wraps forward at the timing line")
 
 	for tunnel in track.tunnels:
 		_expect(stage.has_node("TunnelRoof"), id + " tunnel has no roof")
@@ -306,6 +314,55 @@ func _check_stage(stage: Stage) -> void:
 			var middle := track.point_at(bridge.s)
 			_expect(track.terrain.height(middle) < track.road_h(bridge.s) - 4.0, id + " missing the dry bridge cutting")
 	print(id, " • ", track.tunnels.size(), " tunnels")
+
+
+func _check_circuit_race() -> void:
+	var old_laps := Game.circuit_laps
+	Game.circuit_laps = 12
+	var race := Race.new()
+	add_child(race)
+	race.setup(Catalog.stages().size() - 1, Game.Mode.RACE,
+		[{"name": "You", "car": 0, "skill": 1.0, "player": true}])
+	race.state = Race.State.RACING
+	var car := race.player
+	car.frozen = false
+	var tr := race.stage.track
+	var progress: Dictionary = race._circuit_progress[car]
+	_cross_circuit_gate(race, 0.0)
+	_expect(progress.started and progress.completed == 0, "Rolling over the start line starts lap one")
+	_cross_circuit_gate(race, 0.0)
+	_expect(progress.completed == 0, "A shortcut that skips the checkpoints cannot complete a lap")
+	for lap in 12:
+		for quarter in range(1, 4):
+			_cross_circuit_gate(race, tr.length * quarter * 0.25)
+		_cross_circuit_gate(race, 0.0)
+		race._check_finish()
+		_expect(car.finished == (lap == 11), "Twelve-lap race finishes only on the final lap")
+	race.state = Race.State.RACING
+	car.on_road = false
+	race._update_recovery(10.0)
+	_expect(race._off_track_time == Race.RECOVERY_WARNING, "Continuous off-road clock warns at ten seconds")
+	car.on_road = true
+	race._update_recovery(1.0 / 120.0)
+	_expect(is_zero_approx(race._off_track_time), "Driving back onto the road cancels recovery")
+	car.on_road = false
+	race._update_recovery(14.99)
+	_expect(race._reset_cd == 0.0, "Car is not moved before the five-second warning expires")
+	race._update_recovery(0.02)
+	_expect(race._reset_cd > 0.0 and is_zero_approx(race._off_track_time), "Car is automatically recovered after fifteen seconds")
+	race.free()
+	Game.circuit_laps = old_laps
+
+
+func _cross_circuit_gate(race: Race, station: float) -> void:
+	var tr := race.stage.track
+	var car := race.player
+	race._circuit_progress[car].previous = tr.route_station(station - 0.25)
+	car.s = station + 0.25
+	car.track_i = tr.index_at(car.s)
+	car.vel = tr.tang[car.track_i] * 20.0
+	car.on_road = true
+	race._update_circuit(car)
 
 
 func _check_chapters(stage: Stage) -> void:

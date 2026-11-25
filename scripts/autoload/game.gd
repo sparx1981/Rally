@@ -9,6 +9,7 @@ var mode: int = Mode.TIME_TRIAL
 var car_index := 11
 var livery := 0
 var stage_index := 0
+var circuit_laps := 5
 var series_index := 0
 var show_ghost := true
 var ai_contact := true

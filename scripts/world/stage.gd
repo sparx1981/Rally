@@ -109,7 +109,8 @@ func build(stage_def: Dictionary, time_of_day := -1) -> void:
 			var i: int = f["i"]
 			var reach := track.nrm[i] * (track.width * 0.5 + 16.0)
 			track.terrain.carve_river(track.pts[i] - reach, track.pts[i] + reach, f["water_y"], 3.6, 0.38, true)
-	track.terrain.flatten_disc(parc_center(), 26.0, track.road_h_i(track.index_at(track.length - PARC_BACK)) - 0.1)
+	if not track.circuit:
+		track.terrain.flatten_disc(parc_center(), 26.0, track.road_h_i(track.index_at(track.length - PARC_BACK)) - 0.1)
 	_make_materials()
 	_make_lights()
 	var landmark: RegionalLandmark
@@ -136,7 +137,10 @@ func build(stage_def: Dictionary, time_of_day := -1) -> void:
 	_make_gantries()
 	scenery.setup(track, def, paper_mat, float(Settings.g("density")), float(Settings.g("draw_distance")), bool(Settings.g("popups")))
 	_make_puddles()
-	_make_parc_ferme()
+	if track.circuit:
+		_make_circuit_stands()
+	else:
+		_make_parc_ferme()
 	_make_bridges()
 	_make_switchback_tunnel()
 	_make_hazards()
@@ -438,7 +442,8 @@ func _quad_idx(idx: PackedInt32Array, v: PackedVector3Array, a: int, b: int, c: 
 
 
 func _make_gantries() -> void:
-	for pair in [[track.start_s, false], [track.finish_s, true]]:
+	var timing_lines := [[track.start_s, false]] if track.circuit else [[track.start_s, false], [track.finish_s, true]]
+	for pair in timing_lines:
 		var s: float = pair[0]
 		var i := track.index_at(s)
 		var p := track.pts[i]
@@ -1819,3 +1824,32 @@ func _make_gorge_outcrops() -> void:
 			outcrop.position = Vector3(base.x, 0, base.y)
 			outcrop.visibility_range_end = 190.0
 			add_child(outcrop)
+
+
+func _make_circuit_stands() -> void:
+	var b := PaperKit.Builder.new(47)
+	for station: float in [16.0, 47.0]:
+		var i := track.index_at(station)
+		var p := track.pts[i] - track.nrm[i] * (track.width * 0.5 + 8.0)
+		var xf := Transform3D(Basis(Vector3.UP, track.heading_at(i) - PI * 0.5),
+			Vector3(p.x, track.terrain.height(p) - 0.35, p.y))
+		var frame := Color("#736456")
+		b.box(Vector3(0, 0.45, 0), Vector3(24.0, 1.8, 6.8), xf, frame)
+		for tier in 5:
+			var h := 1.42 + tier * 0.45
+			b.box(Vector3(0, h - 0.6, 2.35 - tier * 1.08), Vector3(23.5, 1.2, 1.15), xf, Color("#b49d7e"))
+			for seat in 31:
+				if (tier * 13 + seat * 7) % 9 < 3:
+					continue
+				var col: Color = [Color("#c8553d"), Color("#2f8a8a"), Color("#e8b04a"), Color("#526d9d")][(tier + seat) % 4]
+				var at := Vector3((seat - 15) * 0.71, h + 0.32, 2.35 - tier * 1.08)
+				b.box(at, Vector3(0.28, 0.54, 0.26), xf, col)
+				b.box(at + Vector3.UP * 0.35, Vector3(0.18, 0.18, 0.19), xf, Color("#d7ab82"))
+		for x: float in [-11.5, 0.0, 11.5]:
+			b.box(Vector3(x, 2.65, -2.8), Vector3(0.21, 6.0, 0.24), xf, frame)
+		b.box(Vector3(0, 5.64, -0.38), Vector3(24.8, 0.20, 6.3), xf, Color("#a64b37"))
+		b.box(Vector3(0, 5.43, 2.7), Vector3(24.8, 0.35, 0.19), xf, Color("#e6c68e"))
+	var stand := MeshInstance3D.new()
+	stand.mesh = b.mesh()
+	stand.material_override = paper_mat
+	add_child(stand)

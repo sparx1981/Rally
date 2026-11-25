@@ -25,7 +25,7 @@ var data := {
 	"touch_mode": 0, "tilt_sens": 1.0, "tilt_invert": false, "touch_controls": 0,
 	"haptics": true, "haptic_strength": 1.0, "phone_vibration": true,
 	"master_vol": 0.8, "sfx_vol": 0.8, "engine_vol": 0.7,
-	"codriver_voice": "", "codriver_timing": 2, "codriver_volume": 0.66, "crossing_audio": true,
+	"codriver_voice": "nick", "codriver_timing": 2, "codriver_volume": 0.66, "crossing_audio": true,
 }
 
 

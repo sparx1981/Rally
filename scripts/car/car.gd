@@ -467,6 +467,7 @@ func bonnet_transform() -> Transform3D:
 
 
 func place_at(s_pos: float, lateral: float) -> void:
+	s_pos = track.route_station(s_pos)
 	var i := track.index_at(s_pos)
 	pos = track.point_at(s_pos) + track.nrm[i] * lateral
 	h = track.heading_at(i)
@@ -502,7 +503,8 @@ func place_at(s_pos: float, lateral: float) -> void:
 
 func reset_to_track() -> void:
 	var hit: Array = track.project(pos, track_i, y)
-	place_at(maxf(float(hit[1]) - 4.0, 2.0), 0.0)
+	var back := float(hit[1]) - 4.0
+	place_at(back if track.circuit else maxf(back, 2.0), 0.0)
 
 
 func fwd() -> Vector2:
@@ -571,7 +573,7 @@ func _sample_wheels(dt: float) -> void:
 	for i in 4:
 		var point: Vector3 = _wheel_base[i]
 		var offset := forward * point.z + right * point.x
-		var station := clampf(s + offset.dot(course), 0.0, track.length)
+		var station := clampf(track.route_station(s + offset.dot(course)), 0.0, track.length)
 		var lateral := lat + offset.dot(normal)
 		var loose := absf(lateral) > track.road_half_width(station)
 		var patch := track.patch_at(station, lateral)

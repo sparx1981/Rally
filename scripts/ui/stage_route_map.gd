@@ -4,11 +4,13 @@ extends Control
 var _road := PackedVector2Array()
 var _height := PackedFloat32Array()
 var _ascent := 0.0
+var route_length := 0.0
 
 
 func show_route(stage_def: Dictionary) -> void:
 	var route := Track.new()
 	route.build_stage_route(stage_def, Catalog.weather(stage_def.weather).kind)
+	route_length = route.finish_s - route.start_s
 	_road.clear()
 	_height.clear()
 	_ascent = 0.0

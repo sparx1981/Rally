@@ -122,7 +122,8 @@ func _loading_stage(sdef: Dictionary, startup := false) -> void:
 		if tod_i < 0:
 			tod_i = int(sdef.get("tod", 0))
 		var info := Label.new()
-		info.text = "%.1f km  ·  %s  ·  %s     |     %s" % [float(sdef["length"]) / 1000.0, Catalog.weather(sdef["weather"])["label"], Catalog.TOD_NAMES[clampi(tod_i, 0, Catalog.TOD_NAMES.size() - 1)], TIPS.pick_random()]
+		var distance := "%d laps" % Game.circuit_laps if sdef.get("circuit", false) else "%.1f km" % (float(sdef["length"]) / 1000.0)
+		info.text = "%s  ·  %s  ·  %s     |     %s" % [distance, Catalog.weather(sdef["weather"])["label"], Catalog.TOD_NAMES[clampi(tod_i, 0, Catalog.TOD_NAMES.size() - 1)], TIPS.pick_random()]
 		info.add_theme_font_size_override("font_size", 17)
 		info.add_theme_color_override("font_color", PaperTheme.EDGE)
 		info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -527,12 +528,17 @@ func _stage_select(focus_location := -1) -> void:
 	var selected := int(Catalog.stages()[Game.stage_index].loc) if focus_location < 0 else focus_location
 	var rows: Array = []
 	var cards: Array[Control] = []
-	for location in Catalog.locations().size():
-		var sd: Dictionary = Catalog.locations()[location]
+	var locations := Catalog.locations().duplicate()
+	var stage_route_count := locations.size() * Catalog.VARIANTS.size()
+	if Game.mode == Game.Mode.RACE:
+		locations.append_array(Catalog.stages().slice(stage_route_count))
+	for location in locations.size():
+		var sd: Dictionary = locations[location]
+		var circuit: bool = sd.get("circuit", false)
 		var wx := Catalog.weather(sd.weather)
-		var b := _button("%s\n%s" % [sd.name, wx.label], _stage_details.bind(location))
+		var b := _button("%s\n%s" % [sd.name, "Rallycross" if circuit else wx.label], _stage_details.bind(location))
 		var variant := int(Catalog.stages()[Game.stage_index].variant)
-		b.icon = Catalog.stage_preview(Catalog.stages()[location * Catalog.VARIANTS.size() + variant])
+		b.icon = Catalog.stage_preview(sd if circuit else Catalog.stages()[location * Catalog.VARIANTS.size() + variant])
 		b.expand_icon = true
 		b.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
 		b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -547,15 +553,20 @@ func _stage_select(focus_location := -1) -> void:
 		rows[-1].append(b)
 		cards.append(b)
 	rows.append(_focus_controls(pg.bar))
-	_focus_rows(rows, cards[selected])
+	if selected < 0 and Game.mode == Game.Mode.RACE:
+		selected = Catalog.locations().size() + Game.stage_index - stage_route_count
+	_focus_rows(rows, cards[clampi(selected, 0, cards.size() - 1)])
 
 
 func _stage_details(location: int) -> void:
 	var routes := Catalog.VARIANTS.size()
-	var sd: Dictionary = Catalog.locations()[location]
+	var location_count := Catalog.locations().size()
+	var circuit := location >= location_count
+	var circuit_index := location_count * routes + location - location_count
+	var sd: Dictionary = Catalog.stages()[circuit_index] if circuit else Catalog.locations()[location]
 	var pg := _page(sd.name, _stage_select.bind(location))
 	var content: VBoxContainer = pg.content
-	var selection := {"variant": int(Catalog.stages()[Game.stage_index].variant), "time": Game.time_of_day}
+	var selection := {"variant": int(Catalog.stages()[Game.stage_index].variant), "time": Game.time_of_day, "laps": Game.circuit_laps}
 	var overview := HBoxContainer.new()
 	overview.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	overview.add_theme_constant_override("separation", 16)
@@ -587,7 +598,7 @@ func _stage_details(location: int) -> void:
 	map.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	right.add_child(map)
 	var map_key := Label.new()
-	map_key.text = "● Start                 ■ Finish"
+	map_key.text = "■ Start / Finish" if circuit else "● Start                 ■ Finish"
 	map_key.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	map_key.add_theme_font_size_override("font_size", 15)
 	right.add_child(map_key)
@@ -600,14 +611,21 @@ func _stage_details(location: int) -> void:
 		distance_names.append("%s · %.0f km" % [variant[0], float(variant[1]) / 1000.0])
 	var time_names := ["Default · %s" % Catalog.TOD_NAMES[int(sd.get("tod", 0))]] + Catalog.TOD_NAMES
 	var refresh := func():
-		var index := location * routes + int(selection.variant)
+		var index := circuit_index if circuit else location * routes + int(selection.variant)
 		map.show_route(Catalog.stages()[index])
 		preview.texture = Catalog.stage_preview(Catalog.stages()[index])
-		var record := Game.best_time(index)
-		caption.text = "%s    ·    Best %s" % [Catalog.weather(sd.weather).label, Game.fmt_time(record)]
-	var distance := _stage_options(content, "Distance", distance_names, selection.variant, func(index: int):
-		selection.variant = index
-		refresh.call())
+		caption.text = "%s    ·    %s" % [Catalog.weather(sd.weather).label,
+			"%.2f km per lap" % (map.route_length / 1000.0) if circuit else "Best %s" % Game.fmt_time(Game.best_time(index))]
+	var distance: Array
+	if circuit:
+		var lap_names: Array = range(3, 13).map(func(lap): return str(lap))
+		var lap_row := _choice("Laps", lap_names, int(selection.laps) - 3, func(index): selection.laps = index + 3)
+		content.add_child(lap_row)
+		distance = _focus_controls(lap_row)
+	else:
+		distance = _stage_options(content, "Distance", distance_names, selection.variant, func(index: int):
+			selection.variant = index
+			refresh.call())
 	var times := _stage_options(content, "Time of day", time_names, selection.time + 1, func(index: int):
 		selection.time = index - 1)
 	var race_option := _button("", func(): pass, 200)
@@ -620,7 +638,9 @@ func _stage_details(location: int) -> void:
 		race_option.text = option_label + (" · On" if enabled else " · Off"))
 	pg.bar.add_child(race_option)
 	var start := _button("Start race", func():
-		Game.stage_index = location * routes + int(selection.variant)
+		Game.stage_index = circuit_index if circuit else location * routes + int(selection.variant)
+		if circuit:
+			Game.circuit_laps = int(selection.laps)
 		Game.time_of_day = int(selection.time)
 		if ai_race:
 			Game.ai_contact = race_option.button_pressed
@@ -629,7 +649,7 @@ func _stage_details(location: int) -> void:
 		_start_race(), 200)
 	pg.bar.add_child(start)
 	refresh.call()
-	_focus_rows([distance, times, _focus_controls(pg.bar)], distance[selection.variant])
+	_focus_rows([distance, times, _focus_controls(pg.bar)], distance[0 if circuit else selection.variant])
 
 
 func _stage_options(parent: VBoxContainer, title: String, options: Array, active: int, on_change: Callable) -> Array:

@@ -38,6 +38,8 @@ func update(dt: float, others: Array, t: float) -> void:
 		if o == car or absf(o.y-car.y) > 3.0:
 			continue
 		var ds: float = o.s - car.s
+		if tr.circuit:
+			ds = fposmod(ds, tr.length)
 		if ds > 0.0 and ds < 9.0 and absf(o.lat - car.lat - _offset * 0.0) < 2.4:
 			want = o.lat + (2.8 if o.lat < 0.0 else -2.8)
 	want += sin(t * 0.3 + _wobble_seed) * 0.6
