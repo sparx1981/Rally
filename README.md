@@ -105,7 +105,7 @@ The [Yet to implement section](docs/handling-and-stage-roadmap.md#yet-to-impleme
 
 ## Building the APK
 
-The repository holds only source; Godot imports everything on first open.
+Godot imports the project the first time you open the source checkout.
 
 1. Install **Godot 4.4.1** and its export templates (Editor → Manage Export Templates).
 2. Install **JDK 17+** and the **Android SDK** (platform-tools, build-tools 34, platform 34), and point
@@ -117,6 +117,12 @@ The repository holds only source; Godot imports everything on first open.
    Debug builds use Godot's debug keystore. For a release build, set a release keystore in the export
    preset (or the `GODOT_ANDROID_KEYSTORE_RELEASE_*` environment variables) and use `--export-release`.
 4. Install the APK on a phone: `adb install -r build/PaperRally-debug.apk`, or copy it over and open it.
+
+For a public test build, use the versioned filename `PaperRally-VERSION-test.apk`. From the source
+checkout used to build it, run `sh tools/publish_test_apk.sh build/PaperRally-VERSION-test.apk`.
+The script publishes the file under a versioned GitHub tag and prints the direct download link
+after checking that the public download matches the local APK byte for byte. Use that link in each
+test build handoff. Use a new version for a rebuilt package.
 
 The export preset (`export_presets.cfg`) targets arm64-v8a and armeabi-v7a. It requests the `VIBRATE`
 permission, runs in immersive landscape (either way up) and uses the Compatibility (OpenGL ES 3) renderer.
