@@ -6,6 +6,10 @@ var _failures := 0
 func _ready() -> void:
 	_check_brake()
 	_check_lighting()
+	if ResourceLoader.exists(Race.CO_DRIVER_SCRIPT):
+		_check_voice()
+	if ResourceLoader.exists(Race.CROSSING_AUDIO_SCRIPT):
+		_check_crossing_audio()
 	for stage_def: Dictionary in Catalog.stages():
 		var stage := Stage.new()
 		add_child(stage)
@@ -120,10 +124,67 @@ func _check_lighting() -> void:
 		stage.free()
 
 
+func _check_voice() -> void:
+	var notes := Track.new()
+	notes.notes = [
+		{"s0": 65.0, "s1": 79.0, "kind": "corner", "dir": -1, "sev": 3, "hairpin": false},
+		{"s0": 85.0, "s1": 97.0, "kind": "tunnel"}
+	]
+	var voice = load(Race.CO_DRIVER_SCRIPT).new()
+	add_child(voice)
+	voice.setup(notes)
+	var timing = Settings.g("codriver_timing")
+	var volume = Settings.g("codriver_volume")
+	Settings.data.codriver_volume = 0.66
+	Settings.data.codriver_timing = 1
+	voice.call_ahead(20.0, 18.0)
+	_expect(not voice.playing, "Late mode waits for the closer approach")
+	Settings.data.codriver_timing = 3
+	voice.call_ahead(20.0, 18.0)
+	_expect(voice.playing and voice.stream.resource_path.ends_with("left3_into_tunnel.ogg"), "Early mode calls a complete turn into a hazard")
+	voice.seek_course(90.0)
+	_expect(not voice.playing and voice._cursor == 2, "Recovery stops stale voice audio")
+	Settings.data.codriver_timing = timing
+	Settings.data.codriver_volume = volume
+	voice.free()
+
+
+func _check_crossing_audio() -> void:
+	var crossing = load(Race.CROSSING_AUDIO_SCRIPT).new()
+	var notes := Track.new()
+	notes.bridges = [{"s": 80.0, "half": 10.0, "kind": "truss"}]
+	add_child(crossing)
+	crossing.setup(notes, 1.3)
+	crossing.seek_course(66.5)
+	crossing.feed(69.0, 12.0, false)
+	_expect(not crossing._players[0].playing, "Airborne axle does not play a joint")
+	var audio_setting = Settings.g("crossing_audio")
+	Settings.data.crossing_audio = true
+	crossing.feed(72.0, 12.0, true)
+	_expect(crossing._players[0].playing, "Grounded rear axle plays the steel joint")
+	crossing.seek_course(94.0)
+	_expect(not crossing._players[0].playing, "Crossing audio stops when seeking")
+	Settings.data.crossing_audio = audio_setting
+	crossing.free()
+
+
 func _check_stage(stage: Stage) -> void:
 	var id: String = stage.def.id
 	var track := stage.track
 	_expect(stage.has_node("Birds"), id + " has no birds")
+	if stage.def.get("stacked", false):
+		var center: Vector2 = track.stacked_crossing.center
+		var lower: float = track.stacked_crossing.lower
+		var upper: float = track.stacked_crossing.upper
+		var low_y := track.road_h(lower)
+		var high_y := track.road_h(upper)
+		_expect(track.point_at(lower).distance_to(track.point_at(upper)) < 2.5 and high_y-low_y > 7.0,
+			"Stacked road occupies one footprint at two drivable heights")
+		_expect(absf(track.project(center, track.index_at(upper), low_y)[1] - lower) < 3.0, "Wrong hint still finds lower deck")
+		_expect(absf(track.project(center, track.index_at(lower), high_y)[1] - upper) < 3.0, "Wrong hint still finds upper deck")
+		_expect(stage.has_node("StackedBridge") and stage._stacked_road != null, "Stacked road has an actual deck and cutaway mesh")
+		_expect(absf(track.terrain.height(center)-low_y) < 0.5, "Terrain underneath the bridge agrees with the lower deck")
+
 	for tunnel in track.tunnels:
 		_expect(stage.has_node("TunnelRoof"), id + " tunnel has no roof")
 		var centre: float = (tunnel.s0 + tunnel.s1) * 0.5

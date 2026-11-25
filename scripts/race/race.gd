@@ -11,6 +11,8 @@ signal pause_requested
 enum State { COUNTDOWN, RACING, DONE }
 
 const FIXED := 1.0 / 120.0
+const CO_DRIVER_SCRIPT := "res://scripts/race/co_driver_voice.gd"
+const CROSSING_AUDIO_SCRIPT := "res://scripts/race/crossing_audio.gd"
 
 var stage_index := 0
 var mode := 0
@@ -23,6 +25,8 @@ var camera: ChaseCamera
 var hud: Hud
 var touch: TouchControls
 var input := PlayerInput.new()
+var _voice
+var _crossing_audio
 var state := State.COUNTDOWN
 var race_time := 0.0
 var medals := [0.0, 0.0, 0.0]   # gold, silver, bronze
@@ -96,7 +100,7 @@ func setup(stage_i: int, mode_v: int, entrants: Array, attract_v := false, tod :
 	if mode == Game.Mode.TIME_TRIAL and not attract:
 		ghost = Ghost.new()
 		add_child(ghost)
-		ghost.setup(Catalog.stages()[stage_i]["id"], player.stats, stage.track)
+		ghost.setup(Catalog.record_id(Catalog.stages()[stage_i]), player.stats, stage.track, Game.show_ghost)
 	if stage.changing_light() or stage.wx.get("headlights", false):
 		# Rival lenses use the stage emissive material. Reserve the mobile
 		# renderer's per-object spotlight slots for the driver's lamp array.
@@ -114,6 +118,14 @@ func setup(stage_i: int, mode_v: int, entrants: Array, attract_v := false, tod :
 		state = State.RACING
 	else:
 		_make_hud()
+		if ResourceLoader.exists(CO_DRIVER_SCRIPT):
+			_voice = load(CO_DRIVER_SCRIPT).new()
+			add_child(_voice)
+			_voice.setup(tr)
+		if ResourceLoader.exists(CROSSING_AUDIO_SCRIPT):
+			_crossing_audio = load(CROSSING_AUDIO_SCRIPT).new()
+			add_child(_crossing_audio)
+			_crossing_audio.setup(tr, player.half_len - 0.78)
 		Sfx.engine_start(player.stats["style"])
 
 
@@ -143,6 +155,7 @@ func skip_to_s(s0: float) -> void:
 		cars[i].frozen = false
 	_count = 0.0
 	state = State.RACING
+	_seek_stage_audio()
 	camera.snap()
 
 
@@ -152,6 +165,8 @@ func set_overlay_visible(v: bool) -> void:
 		_hud_layer.visible = v
 	if touch and not v:
 		touch.release_all()
+	if not v:
+		_stop_stage_audio()
 
 
 func cycle_camera() -> void:
@@ -214,6 +229,7 @@ func _reset_player() -> void:
 	if state != State.RACING or _reset_cd > 0.0 or get_tree().paused:
 		return
 	player.reset_to_track()
+	_seek_stage_audio()
 	_reset_cd = 1.5
 	camera.snap()
 	hud.show_reset(false)
@@ -243,6 +259,7 @@ func _process(delta: float) -> void:
 			if c.y < stage.track.terrain.min_h - 10.0 and not c.frozen:
 				c.reset_to_track()   # over the cliff or into the river: back on the road
 				if c == player:
+					_seek_stage_audio()
 					Haptics.impulse(0.8, 0.25)
 		_collide()
 		if state == State.RACING:
@@ -262,6 +279,11 @@ func _process(delta: float) -> void:
 	if not attract and player:
 		stage.scenery.scare(player.pos)
 	_check_finish()
+	if state == State.RACING:
+		if _voice:
+			_voice.call_ahead(player.s, maxf(player.v_long, 0.0))
+		if _crossing_audio:
+			_crossing_audio.feed(player.s, player.speed(), player.on_road and not player.airborne)
 	player.sync_now()
 	camera.follow(dt)
 	var vi := camera.view_index()
@@ -330,12 +352,13 @@ func _check_finish() -> void:
 			drivers[c].park_lat = slot[1]
 			if c == player:
 				state = State.DONE
+				_stop_stage_audio()
 				_done_t = 0.0
 				Haptics.pattern_finish()
 				if ghost:
 					var best := Game.best_time(stage_index)
 					if best < 0.0 or race_time < best:
-						ghost.save(Catalog.stages()[stage_index]["id"])
+						ghost.save(Catalog.record_id(Catalog.stages()[stage_index]))
 				hud.show_center("FINISH", 2.6, 84)
 				Sfx.play("finish", -6.0)
 
@@ -397,6 +420,8 @@ const BREAK_KEEP := {"bale": 0.58, "snowbank": 0.72, "crates": 0.82, "tent": 0.8
 
 func _collide() -> void:
 	for c in cars:
+		if stage.track.on_stacked_span(c.s) and c.y > stage.track.terrain.height(c.pos) + 2.0:
+			continue
 		var f := c.fwd()
 		var r := c.right_axis()
 		for o in stage.scenery.props_near(c.pos):
@@ -465,6 +490,8 @@ func _collide() -> void:
 		for j in range(i + 1, cars.size()):
 			var a := cars[i]
 			var b := cars[j]
+			if absf(a.y-b.y) > 2.0 or (mode == Game.Mode.RACE and not Game.ai_contact and not attract and (a == player or b == player)):
+				continue
 			var d := a.pos - b.pos
 			if d.length_squared() > 30.0:
 				continue
@@ -680,3 +707,17 @@ func _results() -> Dictionary:
 func resume_input() -> void:
 	if touch:
 		touch.release_all()
+
+
+func _seek_stage_audio() -> void:
+	if _voice:
+		_voice.seek_course(player.s)
+	if _crossing_audio:
+		_crossing_audio.seek_course(player.s)
+
+
+func _stop_stage_audio() -> void:
+	if _voice:
+		_voice.stop()
+	if _crossing_audio:
+		_crossing_audio.stop()

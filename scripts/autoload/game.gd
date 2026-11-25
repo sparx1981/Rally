@@ -10,6 +10,8 @@ var car_index := 11
 var livery := 0
 var stage_index := 0
 var series_index := 0
+var show_ghost := true
+var ai_contact := true
 var time_of_day := -1        # -1 = stage default, otherwise an index into Catalog.TOD_NAMES
 
 # Championship in progress.
@@ -112,7 +114,7 @@ func standings() -> Array:
 # --- Times & medals ----------------------------------------------------------------------------------
 
 func best_time(stage_i: int) -> float:
-	var sid: String = Catalog.stages()[stage_i]["id"]
+	var sid: String = Catalog.record_id(Catalog.stages()[stage_i])
 	if best_times.has(sid):
 		return float(best_times[sid]["time"])
 	return -1.0
@@ -120,7 +122,7 @@ func best_time(stage_i: int) -> float:
 
 ## Returns true if this is a new record.
 func submit_time(stage_i: int, t: float) -> bool:
-	var sid: String = Catalog.stages()[stage_i]["id"]
+	var sid: String = Catalog.record_id(Catalog.stages()[stage_i])
 	if not best_times.has(sid) or t < float(best_times[sid]["time"]):
 		best_times[sid] = {"time": t, "car": car_index}
 		save()

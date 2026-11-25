@@ -531,7 +531,8 @@ func _stage_select(focus_location := -1) -> void:
 		var sd: Dictionary = Catalog.locations()[location]
 		var wx := Catalog.weather(sd.weather)
 		var b := _button("%s\n%s" % [sd.name, wx.label], _stage_details.bind(location))
-		b.icon = load("res://ui/previews/%s.png" % sd.id)
+		var variant := int(Catalog.stages()[Game.stage_index].variant)
+		b.icon = Catalog.stage_preview(Catalog.stages()[location * Catalog.VARIANTS.size() + variant])
 		b.expand_icon = true
 		b.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
 		b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -561,7 +562,6 @@ func _stage_details(location: int) -> void:
 	content.add_child(overview)
 
 	var preview := TextureRect.new()
-	preview.texture = load("res://ui/previews/%s.png" % sd.id)
 	preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	preview.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -576,13 +576,15 @@ func _stage_details(location: int) -> void:
 	details.add_child(right)
 	var description := _note(sd.desc)
 	description.custom_minimum_size.x = 0.0
+	if sd.id == "gorge":
+		description.text += "\nScree slopes  ·  Split slate  ·  Pale shelves"
 	right.add_child(description)
 	var map := StageRouteMap.new()
 	map.custom_minimum_size.y = 136
 	map.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	right.add_child(map)
 	var map_key := Label.new()
-	map_key.text = "Green  Start                 Red  Finish"
+	map_key.text = "● Start                 ■ Finish"
 	map_key.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	map_key.add_theme_font_size_override("font_size", 15)
 	right.add_child(map_key)
@@ -597,6 +599,7 @@ func _stage_details(location: int) -> void:
 	var refresh := func():
 		var index := location * routes + int(selection.variant)
 		map.show_route(Catalog.stages()[index])
+		preview.texture = Catalog.stage_preview(Catalog.stages()[index])
 		var record := Game.best_time(index)
 		caption.text = "%s    ·    Best %s" % [Catalog.weather(sd.weather).label, Game.fmt_time(record)]
 	var distance := _stage_options(content, "Distance", distance_names, selection.variant, func(index: int):
@@ -604,9 +607,22 @@ func _stage_details(location: int) -> void:
 		refresh.call())
 	var times := _stage_options(content, "Time of day", time_names, selection.time + 1, func(index: int):
 		selection.time = index - 1)
+	var race_option := _button("", func(): pass, 200)
+	race_option.toggle_mode = true
+	var ai_race := Game.mode == Game.Mode.RACE
+	var option_label := "Impact with AI" if ai_race else "Show ghost"
+	race_option.button_pressed = Game.ai_contact if ai_race else Game.show_ghost
+	race_option.text = option_label + (" · On" if race_option.button_pressed else " · Off")
+	race_option.toggled.connect(func(enabled: bool):
+		race_option.text = option_label + (" · On" if enabled else " · Off"))
+	pg.bar.add_child(race_option)
 	var start := _button("Start race", func():
 		Game.stage_index = location * routes + int(selection.variant)
 		Game.time_of_day = int(selection.time)
+		if ai_race:
+			Game.ai_contact = race_option.button_pressed
+		else:
+			Game.show_ghost = race_option.button_pressed
 		_start_race(), 200)
 	pg.bar.add_child(start)
 	refresh.call()
@@ -898,6 +914,12 @@ func _settings() -> void:
 			list.add_child(_slider("Master volume", 0.0, 1.0, 0.05, float(Settings.g("master_vol")), func(v): Settings.set_value("master_vol", v), "%d%%", 100.0))
 			list.add_child(_slider("Effects volume", 0.0, 1.0, 0.05, float(Settings.g("sfx_vol")), func(v): Settings.set_value("sfx_vol", v), "%d%%", 100.0))
 			list.add_child(_slider("Engine volume", 0.0, 1.0, 0.05, float(Settings.g("engine_vol")), func(v): Settings.set_value("engine_vol", v), "%d%%", 100.0))
+			if ResourceLoader.exists(Race.CO_DRIVER_SCRIPT):
+				list.add_child(_choice("Co-driver voice timing", ["Off", "Late", "Normal", "Early"], int(Settings.g("codriver_timing")),
+					func(i): Settings.set_value("codriver_timing", i)))
+				list.add_child(_slider("Co-driver volume", 0.0, 1.0, 0.05, float(Settings.g("codriver_volume")), func(v): Settings.set_value("codriver_volume", v), "%d%%", 100.0))
+			if ResourceLoader.exists(Race.CROSSING_AUDIO_SCRIPT):
+				list.add_child(_choice("Crossing sounds", ["Off", "On"], int(Settings.g("crossing_audio")), func(i): Settings.set_value("crossing_audio", i == 1)))
 	var rows: Array = [tab_btns]
 	for child in list.get_children():
 		var controls := _focus_controls(child)

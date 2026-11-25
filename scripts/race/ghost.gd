@@ -27,10 +27,10 @@ static func path_for(stage_id: String) -> String:
 	return "user://ghosts/%s.ghost" % stage_id
 
 
-func setup(stage_id: String, car: Dictionary, track: Track) -> bool:
+func setup(stage_id: String, car: Dictionary, track: Track, show_ghost := true) -> bool:
 	_track = track
 	_sig = signature(track)
-	if FileAccess.file_exists(path_for(stage_id)):
+	if show_ghost and FileAccess.file_exists(path_for(stage_id)):
 		var f := FileAccess.open(path_for(stage_id), FileAccess.READ)
 		if f:
 			var data = bytes_to_var(f.get_buffer(f.get_length()))
@@ -85,7 +85,7 @@ func update(t: float) -> void:
 	# snap to the surface unless the recorded car was clearly in the air.
 	if _track:
 		var p2 := Vector2(p.x, p.z)
-		var hit: Array = _track.project(p2, _hint)
+		var hit: Array = _track.project(p2, _hint, p.y)
 		_hint = int(hit[0])
 		var g := _track.surface_height(p2, float(hit[1]), float(hit[2]))
 		if p.y < g + 0.6:

@@ -15,6 +15,7 @@ var min_h := 0.0
 var max_h := 0.0
 var sea_y := -INF                 # coastal stages: the sea surface; land outside the road's reach drops into it
 var sea := PackedByteArray()      # 1 = open sea
+var _route_progress := PackedFloat32Array()
 var _mind := PackedFloat32Array() # distance from each cell to the road
 
 
@@ -119,6 +120,8 @@ func build(track: Track, hills: float, seed_v: int, roughness := 1.0, bank_heigh
 	nx = int(ceil(b.size.x / cell)) + 1
 	nz = int(ceil(b.size.y / cell)) + 1
 	var total := nx * nz
+	if track.geological_chapters:
+		_route_progress.resize(total)
 	var road_e := PackedFloat32Array()
 	road_e.resize(total)
 	var mind := PackedFloat32Array()
@@ -135,6 +138,8 @@ func build(track: Track, hills: float, seed_v: int, roughness := 1.0, bank_heigh
 	var r_cells := int(ceil(R / cell))
 	var n := track.pts.size()
 	for i in range(0, n, 2):
+		if track.on_stacked_span(track.dist[i]):
+			continue
 		var p := track.pts[i]
 		var e := track.elev[i]
 		var cx := int((p.x - origin.x) / cell)
@@ -157,6 +162,8 @@ func build(track: Track, hills: float, seed_v: int, roughness := 1.0, bank_heigh
 				if d < mind[k]:
 					mind[k] = d
 					near_e[k] = e
+					if not _route_progress.is_empty():
+						_route_progress[k] = clampf(track.dist[i] / track.finish_s, 0.0, 1.0)
 				filled[k] = 1
 	for k in total:
 		if filled[k] == 1:
@@ -183,6 +190,8 @@ func build(track: Track, hills: float, seed_v: int, roughness := 1.0, bank_heigh
 				filled[nb] = 1
 				road_e[nb] = road_e[k]
 				mind[nb] = mind[k] + cell
+				if not _route_progress.is_empty():
+					_route_progress[nb] = _route_progress[k]
 				queue.append(nb)
 	# 3. Hills and valleys away from the road.
 	var noise := FastNoiseLite.new()
@@ -272,6 +281,7 @@ func build_meshes(parent: Node3D, mat: Material, chunk := 28) -> void:
 				continue
 			var v := PackedVector3Array()
 			var nn := PackedVector3Array()
+			var chapter := PackedColorArray()
 			var idx := PackedInt32Array()
 			var w := x1 - cx + 1
 			# Vertices relative to the chunk centre: visibility ranges measure to the node origin.
@@ -279,6 +289,8 @@ func build_meshes(parent: Node3D, mat: Material, chunk := 28) -> void:
 			for z in range(cz, z1 + 1):
 				for x in range(cx, x1 + 1):
 					var k := z * nx + x
+					if not _route_progress.is_empty():
+						chapter.append(Color(_route_progress[k], 0.0, 0.0, 1.0))
 					v.append(Vector3(origin.x + x * cell, h[k], origin.y + z * cell) - cen)
 					var hl := h[z * nx + maxi(x - 1, 0)]
 					var hr := h[z * nx + mini(x + 1, nx - 1)]
@@ -294,6 +306,8 @@ func build_meshes(parent: Node3D, mat: Material, chunk := 28) -> void:
 			arr.resize(Mesh.ARRAY_MAX)
 			arr[Mesh.ARRAY_VERTEX] = v
 			arr[Mesh.ARRAY_NORMAL] = nn
+			if not chapter.is_empty():
+				arr[Mesh.ARRAY_COLOR] = chapter
 			arr[Mesh.ARRAY_INDEX] = idx
 			var m := ArrayMesh.new()
 			m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)

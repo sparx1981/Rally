@@ -504,7 +504,7 @@ func place_at(s_pos: float, lateral: float) -> void:
 
 
 func reset_to_track() -> void:
-	var hit: Array = track.project(pos, track_i)
+	var hit: Array = track.project(pos, track_i, y)
 	place_at(maxf(float(hit[1]) - 4.0, 2.0), 0.0)
 
 
@@ -686,7 +686,7 @@ func _axle_forces(vl: float, thr: float, brk: float, hb: float, dt: float) -> fl
 
 
 func step(dt: float) -> void:
-	var hit: Array = track.project(pos, track_i)
+	var hit: Array = track.project(pos, track_i, y)
 	track_i = hit[0]
 	s = hit[1]
 	lat = hit[2]

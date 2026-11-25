@@ -32,6 +32,8 @@ var barriers: Array = []             # {s0, s1, side (+1 = +nrm side), kind: arm
 var gate_distances := PackedFloat32Array()
 var bridges: Array = []              # {s, kind: stone | covered, half, a, b (river ends), water_y}
 var tunnels: Array[Dictionary] = []
+var stacked_crossing := {}
+var geological_chapters := false
 
 
 
@@ -39,6 +41,105 @@ var tunnels: Array[Dictionary] = []
 ## never pay for the self-avoiding search; anything else is generated and cached in user://.
 static func cache_key(seed_v: int, target_len: float, twist: float) -> String:
 	return "%d_%d_%d" % [seed_v, int(target_len), int(round(twist * 1000.0))]
+
+
+## Build the same road data for racing, the route map and elevation preview.
+func build_stage_route(stage_def: Dictionary, surface_kind: String) -> void:
+	geological_chapters = stage_def.loc_id == "gorge"
+	generate(stage_def.seed, float(stage_def.length) + POST_FINISH, stage_def.twist, stage_def.width)
+	if stage_def.get("stacked", false):
+		_add_stacked_opening()
+	build_elevation(stage_def.get("elev", {}), stage_def.seed)
+	if not stacked_crossing.is_empty():
+		_grade_stacked_opening()
+	build_hazards(stage_def.seed, surface_kind, stage_def.twist)
+	build_bridges(stage_def.seed, stage_def.get("bridges", []))
+	if not stacked_crossing.is_empty():
+		_register_stacked_bridge()
+	var tunnel: Vector2 = Stage.SWITCHBACK_TUNNELS.get(stage_def.id, Vector2.ZERO)
+	if tunnel != Vector2.ZERO:
+		add_switchback_tunnel(tunnel.x, tunnel.y)
+	if Stage.SWITCHBACK_BRIDGES.has(stage_def.id):
+		add_switchback_bridge(Stage.SWITCHBACK_BRIDGES[stage_def.id])
+	for bridge in bridges:
+		var first := float(bridge.s) - float(bridge.half)
+		notes.append({"s0": first, "s1": float(bridge.s) + float(bridge.half), "kind": "bridge",
+			"dir": 0.0, "sev": 0, "hairpin": false})
+	notes.sort_custom(func(a, b): return a.s0 < b.s0)
+
+
+## Slate Gorge Classic enters from the west, loops south of the bridge,
+## crosses the same point northbound, then joins the seeded route.
+func _add_stacked_opening() -> void:
+	var curve := Curve2D.new()
+	curve.bake_interval = 0.3
+	curve.add_point(Vector2(32, -186), Vector2.ZERO, Vector2(44, 0))
+	curve.add_point(Vector2(236, -186), Vector2(-40, 0), Vector2(27, 0))
+	curve.add_point(Vector2(285, -235), Vector2(0, 27), Vector2(0, -18))
+	curve.add_point(Vector2(285, -267), Vector2(0, 18), Vector2(0, -28))
+	curve.add_point(Vector2(234, -318), Vector2(28, 0), Vector2(-35, 0))
+	curve.add_point(Vector2(170, -254), Vector2(0, -35), Vector2(0, 40))
+	curve.add_point(Vector2(170, -102), Vector2(0, -40), Vector2(0, 30))
+	curve.add_point(Vector2(116, -48), Vector2(30, 0), Vector2(-23, 0))
+	curve.add_point(Vector2(48, -48), Vector2(23, 0), Vector2(-26, 0))
+	curve.add_point(Vector2.ZERO, Vector2(0, -26))
+	var prefix := PackedVector2Array()
+	var metres := curve.get_baked_length()
+	var segments := roundi(metres / STEP)
+	var middle := Vector2(170, -186)
+	var lower_index := 0
+	var upper_index := 0
+	var lower_error := INF
+	var upper_error := INF
+	for index in range(segments + 1):
+		var point := curve.sample_baked(metres * index / segments)
+		prefix.append(point)
+		var error := point.distance_squared_to(middle)
+		if index < 120 and error < lower_error:
+			lower_error = error
+			lower_index = index
+		elif index >= 120 and error < upper_error:
+			upper_error = error
+			upper_index = index
+	# Keep the Classic distance by trading the original tail for the new opening.
+	prefix.append_array(pts.slice(1, pts.size() - segments))
+	pts = prefix
+	_rebuild_grid()
+	_finalize()
+	stacked_crossing = {"center": middle, "lower": dist[lower_index], "upper": dist[upper_index],
+		"half": 25.0, "authored_end": dist[segments]}
+
+
+func _grade_stacked_opening() -> void:
+	var lower: float = stacked_crossing.lower
+	var upper: float = stacked_crossing.upper
+	var end: float = stacked_crossing.authored_end
+	var join_y := elev[index_at(end)]
+	for index in range(index_at(end) + 1):
+		var station := dist[index]
+		var climb := smoothstep(lower + 24.0, upper - 35.0, station)
+		elev[index] = lerpf(8.6 * climb, join_y, smoothstep(upper + 36.0, end, station))
+
+
+func _register_stacked_bridge() -> void:
+	var center: Vector2 = stacked_crossing.center
+	var upper: float = stacked_crossing.upper
+	var lower: float = stacked_crossing.lower
+	var i := index_at(upper)
+	bridges.append({"s": upper, "kind": "truss", "half": stacked_crossing.half, "i": i,
+		"a": center - Vector2(18, 0), "b": center + Vector2(18, 0),
+		"water_y": 0.0, "channel": 0.0, "dry": true, "stacked": true})
+	bridges.sort_custom(func(a, b): return a.s < b.s)
+	notes.append({"s0": lower - 7.0, "s1": lower + 7.0, "kind": "underpass", "dir": 0.0, "sev": 0, "hairpin": false})
+
+
+
+func on_stacked_span(station: float, margin := 0.0) -> bool:
+	return not stacked_crossing.is_empty() and absf(station - float(stacked_crossing.upper)) <= float(stacked_crossing.half) + margin
+
+
+func crossing_near(p: Vector2) -> bool:
+	return not stacked_crossing.is_empty() and p.distance_squared_to(stacked_crossing.center) < 40.0 * 40.0
 
 
 func generate(seed_v: int, target_len: float, twist: float, w: float) -> void:
@@ -297,7 +398,7 @@ func point_at(s: float) -> Vector2:
 
 
 ## Returns [index, s, lateral, tangent]. `hint` speeds up the local search.
-func project(p: Vector2, hint: int) -> Array:
+func project(p: Vector2, hint: int, altitude := INF) -> Array:
 	var n := pts.size()
 	var best := -1
 	var bd := INF
@@ -310,6 +411,18 @@ func project(p: Vector2, hint: int) -> Array:
 			best = i
 	if best < 0 or bd > 900.0:
 		best = nearest_global(p)
+	if is_finite(altitude) and crossing_near(p):
+		# Resolve a nearby return leg by both road height and horizontal
+		# distance. Keep the local hint's small tie-break near the approaches.
+		var score := p.distance_squared_to(pts[best])
+		score += pow((altitude - road_h_i(best)) * 2.0, 2.0)
+		for station: float in [stacked_crossing.lower, stacked_crossing.upper]:
+			var middle := index_at(station)
+			for index in range(middle - 22, middle + 23):
+				var d := p.distance_squared_to(pts[index]) + pow((altitude - road_h_i(index)) * 2.0, 2.0)
+				if d + 0.25 < score:
+					best = index
+					score = d
 	var i0 := best
 	var i1 := mini(best + 1, n - 1)
 	if best > 0 and (p - pts[best]).dot(tang[best]) < 0.0:
@@ -594,6 +707,8 @@ func _candidates(from_k: int, to_k: int, kmax: float) -> Array:
 	var out: Array = []
 	var n := pts.size()
 	for i in range(int(90.0 / STEP), n - int(110.0 / STEP), 3):
+		if not stacked_crossing.is_empty() and dist[i] < float(stacked_crossing.authored_end) + 38.0:
+			continue
 		var ok := true
 		for j in range(i + from_k, i + to_k):
 			if curv_abs[j] > kmax:

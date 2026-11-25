@@ -18,7 +18,6 @@ This is the active backlog. Update it in the same change that ships, replaces or
 
 | Outstanding work | Smallest worthwhile prototype | Acceptance |
 | --- | --- | --- |
-| Co-driver voice and adjustable timing | Reuse the existing pace-note queue, offer early/normal/late lead, add a distinct combined call for a turn into a hazard, and provide a separate voice volume. Use original recorded or licensed calls. | A player can run the same tight sequence using voice or visual notes. Pausing or resetting discards stale calls. Close notes never play over one another. |
 | Split times, usable comparisons and ghost provenance | Split a Sprint into three timed sectors. Compare deltas with the player's best valid run. Ghost data currently holds poses and a stage signature. Store the recording version and car identity alongside route, lighting and reset rules. | At each split the delta agrees with the saved sector times. A replay or ghost identifies the car that set the time. Older pose-based ghosts still play where the route matches. |
 | Practice and short challenges | Build three short exercises on existing roads. Cover an ice stop, a crest landing and a gravel hairpin. Start immediately before the exercise with fixed weather and car, and show one measurable goal. | Each exercise can be retried with one action. Teach one input at a time using the player's current bindings. Players can leave for the normal race flow at any point. |
 | Accessible controls and HUD | Add remappable gameplay actions, left-handed touch placement, size/contrast options and a reduced-motion setting for camera shake and UI. Retain alternate digital pedal actions. | A controller and touch player can configure options and complete a race using their chosen layout. The start and finish on the map, split direction and warning severity remain distinguishable without colour alone. |
@@ -30,12 +29,16 @@ This is the active backlog. Update it in the same change that ships, replaces or
 
 | Outstanding work | Smallest worthwhile prototype | Acceptance |
 | --- | --- | --- |
-| A true stacked self-crossing | The current generator avoids self-crossings. Author a short route that enters under its own bridge and crosses it later. Store an elevation-aware segment identity for the driving surface and race projection. | Choose the correct deck when driving, leaving the road, resetting or replaying. AI and pace notes follow the same deck. Overhead and bonnet cameras can see both approaches. |
-| Chapters inside a single location | Give Slate Gorge loose scree, upright dark slate and a pale band beyond the last crossing. Give Alpine's lift and Coastal Cliffs' lookout two readable approaches. | In a blind review, testers can put three screenshots into route order. The landmarks appear before braking points and remain distinct at thumbnail size. |
-| Variant-specific stage cards and elevation profiles | The route map changes with distance, but each location shares one still. Capture distinct Sprint and Classic views first where new crossings differ. Add a small elevation profile from the same track data. | Choose the right crossing from the map, preview and elevation profile. Crop and read them in wide landscape and narrower phone viewports. |
 | More localised surface and environmental effects | Repeat the original visual checks for broken ice print, drying cobbles, pier wakes and snowbank scuffs. Prioritise matching the texture boundary to physical grip. Add one shared wind direction before adding emitters. | Check rainy harbour and ice from bonnet and high chase. Wheel tracks follow the actual surface. A parked car stops emitting spray, and the extra effects fit the device frame budget. |
 | Material-specific damage and remaining cockpit details | Follow up the existing panel deformation, neutral silhouette tests and shift lamps. Give the same strike a different shape on a painted wing, lamp insert and plastic bumper. Reserve close cockpit details for places outside the apex sightline. | At matched classic and modern front-quarter impacts the struck part is readable. In snow and at dusk, gauges remain readable at the default 58° FOV. |
-| Crossing acoustics | Add a timber joint, steel seam or short tunnel reflection at an authored crossing. Trigger it from wheel or portal position and vary it with speed. | Sounds line up at both crawl and race speed, and do not obscure co-driver calls. Test the same crossing in bonnet, chase and replay. |
+
+### Follow-up validation
+
+| Outstanding work | Acceptance |
+| --- | --- |
+| Co-driver and crossing mix on Android | Judge intelligibility over engine and rain on a phone speaker and headphones. Check Late, Normal, Early, Off and the separate voice volume. Timber, stone and steel joints should remain distinct, and the tunnel reflection should be audible at crawl and race speeds. |
+| Blind chapter and preview recognition | Test whether drivers can order the three Slate Gorge rock chapters from unlabelled screenshots. Ask players to recognise the four variants from the route previews and to spot an elevation change before confirming. The Classic preview should distinguish its stacked truss from the other spans. |
+| More stacked routes, if the Classic opening holds up in play | Drive the Classic crossing with a pack, recover at each deck and play back a saved ghost. Check the overhead cutaway from photo mode and the two road surfaces in rain or darkness before adding another stacked route. |
 
 ### P3 · Extend repeat play after the foundations
 
@@ -50,6 +53,20 @@ Android's controller guide documents duplicate trigger channels and devices that
 Use Android's frame pacing and thermal guidance to design the device benchmark. Verify store packaging against the current requirements when shipping, and use MediaStore for gallery-visible photos. [Android frame rates](https://developer.android.com/games/optimize/framerate) · [Thermal API](https://developer.android.com/games/optimize/adpf/thermal) · [Target SDK requirements](https://developer.android.com/google/play/requirements/target-sdk) · [16 KB page sizes](https://developer.android.com/guide/practices/page-sizes) · [Shared media](https://developer.android.com/training/data-storage/shared/media)
 
 The most transferable reference features are adjustable co-driver lead and short training exercises from EA SPORTS WRC, and the combination of results, replay and photo sharing shown by art of rally. For control and HUD review, use the Xbox guidelines on input choices and redundant cues. These are references for Paper Rally's original designs. [EA SPORTS WRC features](https://www.ea.com/games/ea-sports-wrc/wrc/news/deep-dive-features) · [EA accessibility options](https://www.ea.com/able/resources/ea-sports-wrc) · [art of rally](https://store.steampowered.com/app/550320/Art_of_rally/) · [Xbox accessibility guidelines](https://learn.microsoft.com/gaming/accessibility/guidelines)
+
+## Co-driver, crossings and route previews · 1.0.13
+
+**Settings → Audio & Haptics** offers Off, Late, Normal and Early for co-driver timing, a separate voice volume, and a Crossing sounds switch. Lead increases with speed. A closely following hazard can share a single call, such as “three left into tunnel”. Voice playback cancels on pause, finish or recovery and skips notes the car has passed. Crossing sounds use short procedural timber, stone and steel impacts at axle crossings, plus a damped reflection at tunnel and underpass entrances.
+
+The optional scripts are `scripts/race/co_driver_voice.gd` and `scripts/race/crossing_audio.gd`. Removing either script hides its Settings controls and skips its race setup. Remove `audio/codriver/` as well to drop the voice assets. The pace-note cards and race logic work independently.
+
+Race vs AI confirmation offers **Impact with AI**. Off disables contact between the player and rival cars. Rivals still interact with one another and scenery. Time Trial confirmation offers **Show ghost**. Off hides the previous run and still records new best runs.
+
+Slate Gorge Classic now drives under its own truss about 124 m from the start and returns over it about 548 m from the start. The two decks are roughly 8.6 m apart. The revised Classic route keeps its nominal 8 km distance. It uses a new record key, so the old layout's records remain separate. All four Slate Gorge variants progress through warm scree, dark vertical slate and pale layered rock. Overhead views reveal the car beneath the truss and road-level cameras show the structure.
+
+All 44 route variants have a separate in-game preview. Each confirmation screen shows the route map, elevation profile and total ascent for the selected distance. The map honours the authored crossing and the elevation line uses the same grades and hazards as the race.
+
+Automated tests checked both decks at the same horizontal position with the wrong initial projection hint. An AI driver completed both passes and continued onto the original route. Same-deck car contact followed the Race vs AI setting. The voice timing and combined call, stale-call cancellation, and the axle joint trigger were checked in Godot. The phone-speaker mix and player recognition remain open above.
 
 ## Controller and Settings update · 1.0.12
 

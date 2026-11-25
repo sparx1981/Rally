@@ -31,6 +31,8 @@ var weather_fx: Node3D
 var _particles: CPUParticles3D
 var birds: Birds
 var _tunnel_roof: MeshInstance3D
+var _stacked_deck: MeshInstance3D
+var _stacked_road: MeshInstance3D
 var _time := 0.0
 
 
@@ -79,16 +81,8 @@ func build(stage_def: Dictionary, time_of_day := -1) -> void:
 	if changing_light():
 		_light_presets[1].elev = 9.0
 	wx = _light_presets[tod].duplicate()
-	track.generate(int(def["seed"]), float(def["length"]) + Track.POST_FINISH, float(def["twist"]), float(def["width"]))
+	track.build_stage_route(def, wx.kind)
 	var ep: Dictionary = def.get("elev", {})
-	track.build_elevation(ep, int(def["seed"]))
-	track.build_hazards(int(def["seed"]), wx["kind"], float(def["twist"]))
-	track.build_bridges(int(def["seed"]), def.get("bridges", []))
-	var tunnel: Vector2 = SWITCHBACK_TUNNELS.get(def.id, Vector2.ZERO)
-	if tunnel != Vector2.ZERO:
-		track.add_switchback_tunnel(tunnel.x, tunnel.y)
-	if SWITCHBACK_BRIDGES.has(def.id):
-		track.add_switchback_bridge(SWITCHBACK_BRIDGES[def.id])
 	track.index_watercourses()
 	track.build_barriers(int(def["seed"]), def.get("barriers", []))
 	track.terrain = Terrain.new()
@@ -101,7 +95,12 @@ func build(stage_def: Dictionary, time_of_day := -1) -> void:
 			lo = minf(lo, e)
 		track.terrain.make_coast(track, lo + float(cst["sea"]), float(cst["edge"]), bool(cst.get("beach", false)), int(def["seed"]) + 9)
 		track.add_cliff_barriers()
+	if not track.stacked_crossing.is_empty():
+		var center: Vector2 = track.stacked_crossing.center
+		track.terrain.flatten_disc(center, 14.5, track.road_h(track.stacked_crossing.lower) - 0.20, 11.0)
 	for br in track.bridges:
+		if br.get("stacked", false):
+			continue
 		track.terrain.carve_river(br["a"], br["b"], br["water_y"], br.channel)
 	for f in track.features:
 		if f["type"] == "splash":
@@ -130,6 +129,7 @@ func build(stage_def: Dictionary, time_of_day := -1) -> void:
 	if def.loc_id == "alpine":
 		_avalanche_gallery()
 	_make_ground()
+	_make_gorge_outcrops()
 	_make_road()
 	_make_gantries()
 	scenery.setup(track, def, paper_mat, float(Settings.g("density")), float(Settings.g("draw_distance")), bool(Settings.g("popups")))
@@ -188,6 +188,7 @@ func _make_materials() -> void:
 	ground_mat.set_shader_parameter("g0", pal["ground"])
 	ground_mat.set_shader_parameter("g1", pal["ground2"])
 	ground_mat.set_shader_parameter("sea_y", track.terrain.sea_y if def.has("coast") else -10000.0)
+	ground_mat.set_shader_parameter("gorge_chapters", track.geological_chapters)
 	ground_mat.set_shader_parameter("rock_amount", 0.9 if def.has("coast") else 0.55)
 	ground_mat.set_shader_parameter("rock", Color(pal["stone"]).lightened(0.25))
 	ground_mat.set_shader_parameter("g2", pal["ground3"])
@@ -353,8 +354,19 @@ func _make_road() -> void:
 	var n := track.pts.size()
 	var chunk := 60
 	var i0 := 0
+	var stack_start := -1
+	var stack_end := -1
+	if not track.stacked_crossing.is_empty():
+		var middle: float = track.stacked_crossing.upper
+		var half: float = track.stacked_crossing.half
+		stack_start = track.index_at(middle-half)
+		stack_end = track.index_at(middle+half)
 	while i0 < n - 1:
 		var i1 := mini(i0 + chunk, n - 1)
+		if stack_start > i0 and stack_start < i1:
+			i1 = stack_start
+		elif i0 == stack_start:
+			i1 = stack_end
 		var v := PackedVector3Array()
 		var nn := PackedVector3Array()
 		var uv := PackedVector2Array()
@@ -398,6 +410,8 @@ func _make_road() -> void:
 		mi.material_override = road_mat
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(mi)
+		if i0 == stack_start:
+			_stacked_road = mi
 		i0 = i1
 
 
@@ -813,10 +827,18 @@ func _make_bridges() -> void:
 			_long_bridge(b, br, hw)
 		else:
 			_covered_bridge(b, org, fx, fz, sc, half, hw, wy, ybase)
+		if br.get("stacked", false):
+			var soff := float(br.half)
+			var left := org - fx * soff + Vector3.UP * (ybase - 0.17)
+			var right := org + fx * soff + Vector3.UP * (ybase - 0.17)
+			b.slab(left-fz*hw, right-fz*hw, right+fz*hw, left+fz*hw, 0.65, Color("#66636b"))
 		var mi := MeshInstance3D.new()
 		mi.mesh = b.mesh()
 		mi.material_override = paper_mat
 		add_child(mi)
+		if br.get("stacked", false):
+			mi.name = "StackedBridge"
+			_stacked_deck = mi
 
 
 const STONE := Color("#d3c9b6")
@@ -1667,6 +1689,11 @@ func _avalanche_gallery() -> void:
 
 ## Keep the bore open to the driving and photo cameras when viewed from above.
 func update_tunnel_roof(cam: Camera3D, station: float) -> void:
+	if _stacked_deck:
+		var lower: float = track.stacked_crossing.lower
+		var cutaway := absf(station-lower) < 16.0 and cam.global_position.y > track.road_h(lower) + 9.0
+		_stacked_road.visible = not cutaway
+		_stacked_deck.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY if cutaway else GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	if not _tunnel_roof:
 		return
 	var overhead := cam.global_position.y > track.road_h(station) + 4.9
@@ -1732,3 +1759,40 @@ func _make_switchback_tunnel() -> void:
 	_tunnel_roof.mesh = roof.mesh()
 	_tunnel_roof.material_override = paper_mat
 	add_child(_tunnel_roof)
+
+
+## Route-based rock forms reinforce the three printed terrain sections.
+func _make_gorge_outcrops() -> void:
+	if not track.geological_chapters:
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(def.seed) + 83
+	for chapter in 3:
+		for cluster in 3:
+			var fraction := (float(chapter) + 0.30 + 0.22 * cluster) / 3.0
+			var i := track.index_at(track.finish_s * fraction)
+			var b := PaperKit.Builder.new(i)
+			var base := track.pts[i]
+			for sign_v: float in [1.0, -1.0]:
+				for slab in 8:
+					var at := base + track.nrm[i] * sign_v * rng.randf_range(11.0, 24.0) + track.tang[i] * rng.randf_range(-14, 14)
+					if track.clearance(at) < 9.5 or track.overlaps_water(at, 2.8):
+						continue
+					var y := track.terrain.height(at)
+					var width := rng.randf_range(1.1, 2.8)
+					var height := rng.randf_range(1.5, 3.4) if chapter == 1 else rng.randf_range(0.35, 1.65)
+					if height > 1.1:
+						scenery.fixed_supports.append(Vector3(at.x, at.y, width * 0.54))
+					var ink := [Color("#ae8968"), Color("#55515f"), Color("#d5c4aa")][chapter] as Color
+					var lean := rng.randf_range(-0.30, 0.30)
+					var tilt := Basis(Vector3.UP, rng.randf() * TAU) * Basis(Vector3.FORWARD, lean)
+					var origin := Vector3(at.x-base.x, y + height*0.29, at.y-base.y)
+					b.box(Vector3.ZERO, Vector3(width, height, 0.65 if chapter == 1 else width * 0.62), Transform3D(tilt, origin), ink.lightened(rng.randf_range(-0.12, 0.08)))
+					if chapter == 2:
+						b.box(Vector3.UP * height * 0.29, Vector3(width * 0.95, 0.12, width * 0.66), Transform3D(tilt, origin), Color("#efe0c7"))
+			var outcrop := MeshInstance3D.new()
+			outcrop.mesh = b.mesh()
+			outcrop.material_override = paper_mat
+			outcrop.position = Vector3(base.x, 0, base.y)
+			outcrop.visibility_range_end = 190.0
+			add_child(outcrop)

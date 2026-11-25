@@ -233,6 +233,7 @@ static func stages() -> Array:
 				st["variant"] = v
 				st["id"] = "%s_%s" % [loc["id"], VARIANTS[v][0].to_lower()]
 				st["loc_id"] = loc["id"]
+				st["stacked"] = loc.id == "gorge" and v == 1
 				st["name"] = loc["name"]
 				st["variant_name"] = VARIANTS[v][0]
 				st["length"] = float(VARIANTS[v][1])
@@ -242,6 +243,15 @@ static func stages() -> Array:
 				st["tod"] = int(loc.get("tod", 0))
 				_stages.append(st)
 	return _stages
+
+
+static func stage_preview(stage: Dictionary) -> Texture2D:
+	var variant_path := "res://ui/previews/routes/%s.jpg" % stage.id
+	return load(variant_path) if ResourceLoader.exists(variant_path) else load("res://ui/previews/%s.png" % stage.loc_id)
+
+
+static func record_id(stage: Dictionary) -> String:
+	return stage.id + "_overpass" if stage.get("stacked", false) else stage.id
 
 
 static func stage_title(i: int) -> String:

@@ -35,7 +35,7 @@ func update(dt: float, others: Array, t: float) -> void:
 	var want := clampf(-kav * 140.0, -1.0, 1.0) * tr.width * 0.27
 	# Avoid cars just ahead.
 	for o in others:
-		if o == car:
+		if o == car or absf(o.y-car.y) > 3.0:
 			continue
 		var ds: float = o.s - car.s
 		if ds > 0.0 and ds < 9.0 and absf(o.lat - car.lat - _offset * 0.0) < 2.4:
