@@ -37,7 +37,7 @@ This is the active backlog. Update it in the same change that ships, replaces or
 | Outstanding work | Acceptance |
 | --- | --- |
 | Co-driver and crossing mix on Android | Judge the new pace-note clips over engine and rain on a phone speaker and headphones. Check Late, Normal, Early, Off and the separate voice volume. Timber, stone and steel joints should remain distinct, and the tunnel reflection should be audible at crawl and race speeds. |
-| Human rally co-driver recording | Record a consenting co-driver calling the game's full vocabulary at pace, including grades one through six and complete turn-to-hazard calls. Compare with the current preview clips at matched loudness in a blind test. Keep the recordings and permission to distribute the edited clips with the game. |
+| Compare co-driver voices in play | Check all five voice packs on Android with engine and weather active. Compare clarity and phrasing at matched playback level. Check dense corners and long turn-to-hazard calls with each timing option. |
 | Blind chapter and preview recognition | Give drivers unlabelled screenshots of Slate Gorge, Autumn Ridge, Harbour Lanes and Alpine Pass. Check whether they can put each set in route order and recognise a landmark without the setup description. Confirm the Slate Gorge Classic preview distinguishes the stacked truss from the other spans. |
 | Autumn leaf litter on Android | Drive over a wide drift at low speed, pass it at racing speed and park beside it. Check that the wake affects the nearby leaves and the far edge stays down. Repeat in bonnet and low chase, then check frame pacing on Autumn Ridge Marathon with a full AI pack and low and high particle settings. |
 | Android audio and closer vehicle matches | Listen to the four recorded families on a phone speaker and headphones. Start with Nimbus Turbo on gravel and Harbour Lanes. Check a full pull, an analog lift, trail braking, throttle reapplication and a call over the tyres. Compare against the supplied clips at matched loudness. Refine model-specific donor recordings and add separate intake and gearbox layers where they are audible. Review snow, cobbles and impact material sounds after the engine mix. |
@@ -58,6 +58,10 @@ Android's controller guide documents duplicate trigger channels and devices that
 Use Android's frame pacing and thermal guidance to design the device benchmark. Verify store packaging against the current requirements when shipping, and use MediaStore for gallery-visible photos. [Android frame rates](https://developer.android.com/games/optimize/framerate) · [Thermal API](https://developer.android.com/games/optimize/adpf/thermal) · [Target SDK requirements](https://developer.android.com/google/play/requirements/target-sdk) · [16 KB page sizes](https://developer.android.com/guide/practices/page-sizes) · [Shared media](https://developer.android.com/training/data-storage/shared/media)
 
 The most transferable reference features are adjustable co-driver lead and short training exercises from EA SPORTS WRC, and the combination of results, replay and photo sharing shown by art of rally. For control and HUD review, use the Xbox guidelines on input choices and redundant cues. These are references for Paper Rally's original designs. [EA SPORTS WRC features](https://www.ea.com/games/ea-sports-wrc/wrc/news/deep-dive-features) · [EA accessibility options](https://www.ea.com/able/resources/ea-sports-wrc) · [art of rally](https://store.steampowered.com/app/550320/Art_of_rally/) · [Xbox accessibility guidelines](https://learn.microsoft.com/gaming/accessibility/guidelines)
+
+## Selectable co-driver voices · 1.0.20
+
+Audio & Haptics has a saved co-driver voice choice with Blake, Darren, James, Nick and Stephane. Each pack has 137 calls, including complete turn-to-hazard phrases. Blake is the default. The existing voice timing and volume controls apply to every pack.
 
 ## Engine rev playback · 1.0.19
 

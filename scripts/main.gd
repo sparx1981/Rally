@@ -918,6 +918,13 @@ func _settings() -> void:
 			list.add_child(_slider("Effects volume", 0.0, 1.0, 0.05, float(Settings.g("sfx_vol")), func(v): Settings.set_value("sfx_vol", v), "%d%%", 100.0))
 			list.add_child(_slider("Engine volume", 0.0, 1.0, 0.05, float(Settings.g("engine_vol")), func(v): Settings.set_value("engine_vol", v), "%d%%", 100.0))
 			if ResourceLoader.exists(Race.CO_DRIVER_SCRIPT):
+				var voice_script := load(Race.CO_DRIVER_SCRIPT)
+				var voices: Array[String] = voice_script.available_voices()
+				if voices.size() > 1:
+					var voice_names := voices.map(func(id): return voice_script.VOICE_NAMES[id])
+					var voice_index := voices.find(voice_script.selected_voice(voices))
+					list.add_child(_choice("Co-driver voice", voice_names, voice_index,
+						func(i): Settings.set_value("codriver_voice", voices[i])))
 				list.add_child(_choice("Co-driver voice timing", ["Off", "Late", "Normal", "Early"], int(Settings.g("codriver_timing")),
 					func(i): Settings.set_value("codriver_timing", i)))
 				list.add_child(_slider("Co-driver volume", 0.0, 1.0, 0.05, float(Settings.g("codriver_volume")), func(v): Settings.set_value("codriver_volume", v), "%d%%", 100.0))

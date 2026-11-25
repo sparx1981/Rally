@@ -3,11 +3,38 @@ extends AudioStreamPlayer
 ## Optional presentation layer. The HUD and race rules still own their pace notes.
 
 const CLIP_DIRECTORY := "res://audio/codriver/"
+const VOICE_NAMES := {
+	"blake": "Blake",
+	"darren": "Darren",
+	"james": "James",
+	"nick": "Nick",
+	"stephane": "Stephane",
+}
 const LEAD_SECONDS := [0.0, 1.25, 2.05, 2.85]
 const COMBINED_HAZARDS := ["jump", "crest", "splash", "chicane", "ice", "tunnel", "underpass", "bridge"]
 
 var _notes: Array
 var _cursor := 0
+
+
+static func clip_path(voice: String, call: String) -> String:
+	var folder := "" if voice == "george" else voice + "/"
+	return CLIP_DIRECTORY + folder + call + ".ogg"
+
+
+static func available_voices() -> Array[String]:
+	var voices: Array[String] = []
+	for voice: String in VOICE_NAMES:
+		if ResourceLoader.exists(clip_path(voice, "left1"), "AudioStream"):
+			voices.append(voice)
+	return voices
+
+
+static func selected_voice(voices: Array[String]) -> String:
+	var saved := str(Settings.g("codriver_voice"))
+	if saved in voices:
+		return saved
+	return voices[0] if not voices.is_empty() else "george"
 
 
 func setup(track: Track) -> void:
@@ -43,7 +70,10 @@ func call_ahead(station: float, speed: float) -> void:
 		if following.kind in COMBINED_HAZARDS and float(following.s0) - float(note.s1) < 28.0:
 			call += "_into_" + str(following.kind)
 			_cursor += 1
-	var path := CLIP_DIRECTORY + call + ".ogg"
+	var voice := selected_voice(available_voices())
+	var path := clip_path(voice, call)
+	if not ResourceLoader.exists(path, "AudioStream") and voice != "george":
+		path = clip_path("george", call)
 	if ResourceLoader.exists(path, "AudioStream"):
 		stream = load(path)
 		volume_db = linear_to_db(volume)

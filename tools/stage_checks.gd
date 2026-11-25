@@ -217,22 +217,32 @@ func _check_voice() -> void:
 		{"s0": 65.0, "s1": 79.0, "kind": "corner", "dir": -1, "sev": 3, "hairpin": false},
 		{"s0": 85.0, "s1": 97.0, "kind": "tunnel"}
 	]
-	var voice = load(Race.CO_DRIVER_SCRIPT).new()
+	var voice_script := load(Race.CO_DRIVER_SCRIPT)
+	var voice = voice_script.new()
 	add_child(voice)
 	voice.setup(notes)
 	var timing = Settings.g("codriver_timing")
 	var volume = Settings.g("codriver_volume")
+	var selection = Settings.g("codriver_voice")
 	Settings.data.codriver_volume = 0.66
 	Settings.data.codriver_timing = 1
 	voice.call_ahead(20.0, 18.0)
 	_expect(not voice.playing, "Late mode waits for the closer approach")
 	Settings.data.codriver_timing = 3
-	voice.call_ahead(20.0, 18.0)
-	_expect(voice.playing and voice.stream.resource_path.ends_with("left3_into_tunnel.ogg"), "Early mode calls a complete turn into a hazard")
-	voice.seek_course(90.0)
-	_expect(not voice.playing and voice._cursor == 2, "Recovery stops stale voice audio")
+	var voices: Array[String] = voice_script.available_voices()
+	if voices.is_empty():
+		voices.append("george")
+	for id: String in voices:
+		Settings.data.codriver_voice = id
+		voice.seek_course(0.0)
+		voice.call_ahead(20.0, 18.0)
+		_expect(voice.playing and voice.stream.resource_path == voice_script.clip_path(id, "left3_into_tunnel"),
+			id + " calls a complete turn into a hazard using the selected voice")
+		voice.seek_course(90.0)
+		_expect(not voice.playing and voice._cursor == 2, "Recovery stops stale voice audio")
 	Settings.data.codriver_timing = timing
 	Settings.data.codriver_volume = volume
+	Settings.data.codriver_voice = selection
 	voice.free()
 
 
