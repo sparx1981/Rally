@@ -46,6 +46,7 @@ var v_long := 0.0
 var gear := 1
 var _transmission_ratio := 1.0
 var rpm := 900.0
+var acoustic_rpm := 900.0
 var finished := false
 var finish_time := -1.0
 var surface := 1.0
@@ -83,7 +84,7 @@ var _spin := 0.0
 var _dust: CPUParticles3D
 var _last_puddle := false
 var _contact: MeshInstance3D
-var _eng3d: AudioStreamPlayer3D
+var _rival_engine: RecordedEngine
 
 
 func setup(car_stats: Dictionary, num: int, stg: Stage, mat: Material) -> void:
@@ -112,15 +113,14 @@ func setup(car_stats: Dictionary, num: int, stg: Stage, mat: Material) -> void:
 	_make_rear_lamps()
 	if not is_player:
 		# AI engines are positional: you hear rivals close behind and alongside.
-		_eng3d = AudioStreamPlayer3D.new()
-		_eng3d.stream = Sfx.engine_loop()
-		_eng3d.bus = "Engine"
-		_eng3d.unit_size = 10.0
-		_eng3d.max_distance = 90.0
-		_eng3d.volume_db = -8.0
-		_eng3d.position = Vector3(0, 0.6, 0)
-		add_child(_eng3d)
-		_eng3d.play()
+		var exhaust := AudioStreamPlayer3D.new()
+		exhaust.bus = RecordedEngine.BUS
+		exhaust.unit_size = 4.5
+		exhaust.max_distance = 65.0
+		exhaust.max_db = -9.0
+		exhaust.position = Vector3(0, 0.45, -half_len + 0.13)
+		add_child(exhaust)
+		_rival_engine = RecordedEngine.new(exhaust, stats.style, false)
 
 
 const SHADOW_DIVISIONS := 4
@@ -493,6 +493,7 @@ func place_at(s_pos: float, lateral: float) -> void:
 	gear = 1
 	_transmission_ratio = 1.0
 	rpm = 900.0
+	acoustic_rpm = 900.0
 	v_long = 0.0
 	slip = 0.0
 	_prev_gh = y
@@ -829,12 +830,20 @@ func _update_gear(vl: float, thr: float) -> void:
 	if slip > 0.3:
 		target += slip * 900.0
 	rpm = lerpf(rpm, target, 0.2)
+	# Exhaust pitch follows a fixed ratio in each gear. A shift drops to the
+	# next ratio, while the handling model keeps its original torque curve.
+	var speed_at_redline := GEARS[1] if gear == 0 else float(GEARS[gear])
+	var coupled := 6900.0 * v / (speed_at_redline * float(stats.top))
+	var free_rev := 900.0 + thr * 5500.0
+	var clutch := smoothstep(1.0, 4.0, v)
+	var driven_rpm := clampf(lerpf(minf(free_rev, 2500.0), coupled, clutch), 900.0, 7600.0)
+	acoustic_rpm = lerpf(acoustic_rpm, free_rev if frozen else driven_rpm, 0.20)
 
 
 func _process(delta: float) -> void:
 	_sync_visual(delta)
-	if _eng3d:
-		_eng3d.pitch_scale = 0.62 + clampf((rpm - 900.0) / 6200.0, 0.0, 1.0) * 1.25
+	if _rival_engine:
+		_rival_engine.mix(acoustic_rpm, throttle, lerpf(0.29, 0.74, throttle))
 
 
 func _sync_visual(delta: float) -> void:
@@ -861,9 +870,9 @@ func _sync_visual(delta: float) -> void:
 	_spin += v_long * delta / wheel_r
 	if not _cockpit.is_empty() and _cockpit["root"].visible:
 		(_cockpit["wheel"] as Node3D).rotation.z = steer * 1.6
-		(_cockpit["needle"] as Node3D).rotation.z = lerpf(-2.2, 1.8, clampf(rpm / 7500.0, 0.0, 1.0))
+		(_cockpit["needle"] as Node3D).rotation.z = lerpf(-2.2, 1.8, clampf(acoustic_rpm / 7500.0, 0.0, 1.0))
 		var leds: MultiMesh = _cockpit["shift_leds"]
-		leds.visible_instance_count = clampi(1 + floori((rpm - 4200.0) / 525.0), 0, 5) if gear > 0 else 0
+		leds.visible_instance_count = clampi(1 + floori((acoustic_rpm - 4200.0) / 525.0), 0, 5) if gear > 0 else 0
 		var gear_readout: Label3D = _cockpit["gear_readout"]
 		if gear_readout:
 			gear_readout.text = str(gear) if gear > 0 else "R"

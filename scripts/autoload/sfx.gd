@@ -1,13 +1,10 @@
 extends Node
 
 signal popped
-## Game audio. Recorded CC0 sounds (Kenney, see res://audio/kenney/LICENSE.txt) for the engine,
-## skids, impacts, landings, nature ambience and UI. Everything else is synthesised at start-up:
-## surface roll loops (gravel crackle, wet hiss, snow crunch, cobbles), stones pinging the underbody,
-## exhaust pops on lift-off, water splashes, rain and wind, paper flaps, bird flutters, crowd cheers.
+## Game audio. Engine banks, gravel and exhaust shots come from mechanically recorded sources.
+## Short effects combine recorded samples and synthesis.
 
 const RATE := 22050
-const ENGINE_OGG := preload("res://audio/kenney/engine.ogg")
 const SKID_OGG := preload("res://audio/kenney/skid.ogg")
 const IMPACT_OGG := preload("res://audio/kenney/impact.ogg")
 const LAND_OGG := preload("res://audio/kenney/land.ogg")
@@ -16,32 +13,19 @@ const UI_CLICKS := [preload("res://audio/kenney/placement-a.ogg"), preload("res:
 const UI_FOCUS := preload("res://audio/kenney/rotate.ogg")
 const UI_TOGGLE := preload("res://audio/kenney/toggle.ogg")
 
-# Combustion pulses per revolution, low pulse weight, bright harmonic and lift-off rasp.
-const ENGINE_VOICES := {
-	"stratos": Vector4(3.0, 0.30, 0.29, 0.10),
-	"quattro": Vector4(2.5, 0.65, 0.17, 0.22),
-	"impreza": Vector4(2.0, 0.78, 0.14, 0.17),
-	"mini": Vector4(2.0, 0.26, 0.30, 0.07),
-	"wrc": Vector4(2.0, 0.35, 0.31, 0.21),
-	"rally2": Vector4(2.0, 0.38, 0.23, 0.18),
-	"rally1": Vector4(2.0, 0.41, 0.28, 0.24),
-	"truck": Vector4(4.0, 0.76, 0.10, 0.11),
-	"buggy": Vector4(2.0, 0.67, 0.19, 0.11)
-}
-const DEFAULT_ENGINE_VOICE := Vector4(2.0, 0.42, 0.19, 0.13)
+const ANTILAG_STYLES := ["quattro", "t16", "integrale", "gt4", "impreza", "evo", "wrc", "rally1", "rally2"]
 
 var _streams := {}
 var _pool: Array[AudioStreamPlayer] = []
 var _pool_i := 0
-var _engine: AudioStreamPlayer      # recorded loop, pitched by rpm
-var _growl: AudioStreamPlayer       # synth layer for load / induction
-var _growl_pb: AudioStreamGeneratorPlayback
+var _engine: AudioStreamPlayer
+var _engine_voice: RecordedEngine
 var _skid: AudioStreamPlayer
 var _roll: AudioStreamPlayer
+var _gravel_roll: AudioStreamPlayer
 var _amb: AudioStreamPlayer
 var _amb2: AudioStreamPlayer
 
-var _engine_voice := DEFAULT_ENGINE_VOICE
 var _cabin_filter := AudioEffectLowPassFilter.new()
 var _rpm := 900.0
 var _thr := 0.0
@@ -53,14 +37,14 @@ var _shift_time := 0.0
 var _shift_gain := 1.0
 var _in_cockpit := false
 var _co_driver_speaking := false
-var _engine_on := false
-var _phase := 0.0
-var _phase2 := 0.0
-var _lp := 0.0
-var _lp2 := 0.0
+var _antilag := false
 var _last_flap := 0.0
 var _roll_kind := ""
-var _roll_speed := 0.0
+var _gravel_mix := 0.0
+var _rolling_speed := 0.0
+var _rolling_kind := ""
+var _gravel_contact := 0.0
+var _gravel_slip := 0.0
 var _pebble_t := 0.0
 var _pop_cd := 0.0
 var _rng := RandomNumberGenerator.new()
@@ -73,25 +57,23 @@ func _ready() -> void:
 	_rng.seed = 77
 	_streams["impact"] = IMPACT_OGG
 	_streams["land"] = LAND_OGG
+	_streams["roll_wet"] = RecordedEngine.loop_from_file("wet_roll.wav")
+	for i in 3:
+		_streams["pop_%d" % i] = load("res://audio/recorded/exhaust_pop_%d.wav" % i)
 	for i in 12:
 		var p := AudioStreamPlayer.new()
 		p.bus = "SFX"
 		add_child(p)
 		_pool.append(p)
-	_engine = _looping_player(ENGINE_OGG, "Engine")
+	_engine = AudioStreamPlayer.new()
+	_engine.bus = RecordedEngine.BUS
+	add_child(_engine)
 	_cabin_filter.cutoff_hz = 19000.0
 	var engine_bus := AudioServer.get_bus_index("Engine")
 	if engine_bus >= 0:
 		AudioServer.add_bus_effect(engine_bus, _cabin_filter)
-	_growl = AudioStreamPlayer.new()
-	var gen := AudioStreamGenerator.new()
-	gen.mix_rate = RATE
-	gen.buffer_length = 0.12
-	_growl.stream = gen
-	_growl.bus = "Engine"
-	_growl.volume_db = -9.0
-	add_child(_growl)
 	_skid = _looping_player(SKID_OGG, "SFX")
+	_gravel_roll = _looping_player(RecordedEngine.loop_from_file("gravel_roll.wav"), "SFX")
 	_roll = AudioStreamPlayer.new()
 	_roll.bus = "SFX"
 	add_child(_roll)
@@ -128,14 +110,11 @@ func _synth_all() -> void:
 	finish.append_array(_make_tone(880.0, 0.28, 10.0))
 	out["finish"] = _wav(finish, false)
 	out["gear"] = _wav(_make_gear(), false)
-	out["pop"] = _wav(_make_pop(), false)
 	out["pebble"] = _wav(_make_pebble(), false)
 	out["cheer"] = _wav(_make_cheer(), false)
 	out["thud"] = _wav(_make_thud(), false)
 	out["rain"] = _wav(_make_rain(), true)
 	out["wind"] = _wav(_make_wind(), true)
-	out["roll_gravel"] = _wav(_make_roll_gravel(), true)
-	out["roll_wet"] = _wav(_make_roll_wet(), true)
 	out["roll_snow"] = _wav(_make_roll_snow(), true)
 	out["roll_cobble"] = _wav(_make_roll_cobble(), true)
 	call_deferred("_synth_done", out)
@@ -147,7 +126,7 @@ func _synth_done(out: Dictionary) -> void:
 	_ready_synth = true
 	if _pending_amb != "":
 		set_ambience(_pending_amb)
-	if _engine_on and _roll_kind != "":
+	if _engine_voice != null and _roll_kind != "":
 		_roll.stream = _streams.get(_roll_kind)
 		_roll.play()
 
@@ -162,13 +141,6 @@ func _looping_player(src: AudioStream, bus: String) -> AudioStreamPlayer:
 	p.volume_db = -80.0
 	add_child(p)
 	return p
-
-
-## A looping engine stream for 3D positional players (AI cars).
-static func engine_loop() -> AudioStream:
-	var st: AudioStreamOggVorbis = ENGINE_OGG.duplicate()
-	st.loop = true
-	return st
 
 
 func play(name: String, volume_db := 0.0, pitch := 1.0) -> void:
@@ -238,38 +210,38 @@ func cheer() -> void:
 
 
 func engine_start(style: String) -> void:
-	_engine_voice = ENGINE_VOICES.get(style, DEFAULT_ENGINE_VOICE)
+	_engine.stop()
+	_engine_voice = RecordedEngine.new(_engine, style, true)
+	_antilag = style in ANTILAG_STYLES
 	_rpm = 900.0
 	_thr = 0.0
 	_prev_thr = 0.0
 	_load = 0.0
 	_shift_time = 0.0
 	_shift_gain = 1.0
-	_engine_on = true
-	_engine.volume_db = -12.0
-	if not _engine.playing:
-		_engine.play()
-	if not _growl.playing:
-		_growl.play()
-		_growl_pb = _growl.get_stream_playback()
+	_pop_cd = 0.0
+	_rolling_speed = 0.0
+	_gravel_contact = 0.0
+	_gravel_mix = 0.0
+	_pebble_t = 0.0
 	if not _skid.playing:
 		_skid.play()
-	if not _roll.playing and _roll.stream:
-		_roll.play()
+	_gravel_roll.volume_db = -80.0
+	_gravel_roll.play()
 
 
 func engine_stop() -> void:
-	_engine_on = false
+	_engine_voice = null
 	_in_cockpit = false
 	_co_driver_speaking = false
 	_interior_mix = 0.0
 	_voice_duck = 0.0
 	_cabin_filter.cutoff_hz = 19000.0
 	_engine.stop()
-	_growl.stop()
-	_growl_pb = null
 	_skid.stop()
+	_gravel_roll.stop()
 	_roll.stop()
+	_roll_kind = ""
 
 
 func set_engine(rpm: float, throttle: float, in_cockpit := false, co_driver_speaking := false) -> void:
@@ -280,7 +252,7 @@ func set_engine(rpm: float, throttle: float, in_cockpit := false, co_driver_spea
 
 
 func engine_shift() -> void:
-	if _engine_on:
+	if _engine_voice != null:
 		_shift_time = 0.085
 		play("gear", -14.0, _rng.randf_range(0.94, 1.08))
 
@@ -294,28 +266,35 @@ func set_skid(amount: float, kind := "dry") -> void:
 	_skid.pitch_scale = (0.7 if kind == "snow" else 0.85) + amount * 0.25
 
 
-## Rolling surface loop + stones pinging the underbody, by surface kind and speed.
-func set_surface(kind: String, speed: float) -> void:
+## Ground contact drives a separate recorded gravel layer underneath the base surface.
+func set_surface(kind: String, speed: float, gravel_contact: float, slip: float) -> void:
+	_rolling_kind = kind
+	_rolling_speed = speed
+	_gravel_contact = gravel_contact
+	_gravel_slip = slip
+
+
+func _mix_surface(delta: float) -> void:
 	var name := ""
-	match kind:
-		"gravel", "dry", "mud": name = "roll_gravel"
-		"rain", "wet": name = "roll_wet"
+	match _rolling_kind:
+		"rain", "wet", "mud": name = "roll_wet"
 		"snow", "ice", "deep snow": name = "roll_snow"
 		"cobble": name = "roll_cobble"
 	if name != _roll_kind and _ready_synth:
 		_roll_kind = name
 		_roll.stream = _streams.get(name)
-		if _engine_on and _roll.stream:
+		if _roll.stream:
 			_roll.play()
-	_roll_speed = speed
-	var k := clampf(speed / 28.0, 0.0, 1.0)
-	_roll.volume_db = -80.0 if k < 0.03 else linear_to_db(k * 0.7) - 4.0
+	var k := clampf(_rolling_speed / 28.0, 0.0, 1.0)
+	_gravel_mix = move_toward(_gravel_mix, _gravel_contact, delta * 6.0)
+	_gravel_roll.volume_db = linear_to_db(maxf(0.0001, k * _gravel_mix * (0.36 + minf(_gravel_slip, 0.5) * 0.44)))
+	_gravel_roll.pitch_scale = 0.76 + k * 0.48
+	_roll.volume_db = linear_to_db(maxf(0.0001, k * 0.54 * (1.0 - _gravel_mix)))
 	_roll.pitch_scale = 0.8 + k * 0.4
-	# Pebbles: the gravel crackle against the floor that rally games are known for.
-	_pebble_t -= get_process_delta_time()
-	if (kind == "gravel" or kind == "dry") and speed > 6.0 and _pebble_t <= 0.0:
-		play("pebble", -14.0 + k * 6.0, _rng.randf_range(0.7, 1.5))
-		_pebble_t = _rng.randf_range(0.03, 0.25) / maxf(k, 0.2)
+	_pebble_t -= delta
+	if _gravel_mix > 0.1 and _gravel_slip > 0.16 and _rolling_speed > 6.0 and _pebble_t <= 0.0:
+		play("pebble", -26.0 + k * 6.0, _rng.randf_range(0.7, 1.5))
+		_pebble_t = _rng.randf_range(0.13, 0.38) / maxf(k, 0.2)
 
 
 func set_ambience(kind: String) -> void:
@@ -340,59 +319,25 @@ func set_ambience(kind: String) -> void:
 
 
 func _process(delta: float) -> void:
-	if not _engine_on:
+	if _engine_voice == null:
 		return
-	# Blend load and overrun continuously while the physics supplies engine speed.
-	var r := clampf((_rpm - 900.0) / 6200.0, 0.0, 1.0)
 	_load = lerpf(_load, _thr, 1.0 - exp(-delta * 18.0))
 	_interior_mix = move_toward(_interior_mix, float(_in_cockpit), delta * 7.0)
 	_voice_duck = move_toward(_voice_duck, float(_co_driver_speaking), delta * (18.0 if _co_driver_speaking else 4.0))
 	_cabin_filter.cutoff_hz = lerpf(19000.0, 3400.0, _interior_mix)
 	_shift_time = maxf(0.0, _shift_time - delta)
 	_shift_gain = 1.0 - 0.43 * smoothstep(0.0, 0.085, _shift_time)
-	_engine.pitch_scale = lerpf(0.62, 1.87, r)
-	var duck_db := -3.0 * _voice_duck
-	_engine.volume_db = lerpf(-16.0, -5.0, r * 0.43 + _load * 0.57) + linear_to_db(_shift_gain) + duck_db
-	_growl.volume_db = -8.0 + duck_db
+	var idle_level := lerpf(0.72, 1.0, smoothstep(1000.0, 2500.0, _rpm))
+	var gain := idle_level * _shift_gain * db_to_linear(-3.0 * _voice_duck + _interior_mix)
+	_engine_voice.mix(_rpm, _load, gain)
+	_mix_surface(delta)
 	# Exhaust pops when the throttle snaps shut at high revs.
 	_pop_cd -= delta
-	if _prev_thr > 0.6 and _thr < 0.15 and _rpm > 4200.0 and _pop_cd <= 0.0 and _shift_time == 0.0:
+	if _antilag and _prev_thr > 0.62 and _thr < 0.14 and _rpm > 4500.0 and _pop_cd <= 0.0 and _shift_time == 0.0:
 		_pop_cd = 0.6
 		popped.emit()
-		var n := _rng.randi_range(2, 4)
-		for i in n:
-			get_tree().create_timer(0.05 + i * _rng.randf_range(0.06, 0.13), true).timeout.connect(
-				func(): play("pop", _rng.randf_range(-12.0, -6.0), _rng.randf_range(0.8, 1.25)))
+		play("pop_%d" % _rng.randi_range(0, 2), -13.0 - _interior_mix * 4.0, _rng.randf_range(0.93, 1.06))
 	_prev_thr = _thr
-	_fill_growl()
-
-
-func _fill_growl() -> void:
-	if _growl_pb == null:
-		return
-	var n := _growl_pb.get_frames_available()
-	if n <= 0:
-		return
-	var buf := PackedVector2Array()
-	buf.resize(n)
-	var f := 18.0 + _rpm / 60.0 * _engine_voice.x
-	var amp := (0.12 + 0.12 * _load) * _shift_gain
-	var lift := (1.0 - _load) * smoothstep(1800.0, 4700.0, _rpm)
-	var bright := _engine_voice.z * (0.36 + _load * 0.64)
-	var rasp := 0.024 + _load * 0.05 + lift * _engine_voice.w
-	var alpha := clampf((390.0 + _rpm * 0.12 + _load * 320.0) / RATE * TAU, 0.02, 0.9)
-	var inc := f / RATE
-	for i in n:
-		_phase = fmod(_phase + inc, 1.0)
-		_phase2 = fmod(_phase2 + inc * 0.5, 1.0)
-		var x := sin(_phase * TAU) * 0.5 + sin(_phase2 * TAU) * _engine_voice.y
-		x += sin(_phase * TAU * 3.0) * bright + (_phase * 2.0 - 1.0) * (0.08 + lift * 0.17)
-		x += (_rng.randf() * 2.0 - 1.0) * rasp
-		_lp += (x - _lp) * alpha
-		_lp2 += (_lp - _lp2) * alpha
-		var sm := _lp2 * amp
-		buf[i] = Vector2(sm, sm)
-	_growl_pb.push_buffer(buf)
 
 
 # --- synthesis helpers -------------------------------------------------------------------------------
@@ -520,15 +465,6 @@ func _make_gear() -> PackedFloat32Array:
 	return _norm(out, 0.7)
 
 
-func _make_pop() -> PackedFloat32Array:
-	var n := int(RATE * 0.12)
-	var out := _noise_band(n, 80.0, 3500.0, func(t): return exp(-t * 55.0))
-	for i in n:
-		var t := float(i) / RATE
-		out[i] += sin(TAU * 95.0 * t) * exp(-t * 35.0) * 0.8
-	return _norm(out, 0.95)
-
-
 func _make_pebble() -> PackedFloat32Array:
 	var n := int(RATE * 0.06)
 	var out := _buf(n)
@@ -580,25 +516,6 @@ func _make_wind() -> PackedFloat32Array:
 	for i in n:
 		out[i] += hi[i]
 	_seam(out, 1500)
-	return _norm(out, 0.6)
-
-
-func _make_roll_gravel() -> PackedFloat32Array:
-	var n := RATE * 2
-	var out := _noise_band(n, 60.0, 900.0, func(_t): return 0.5)
-	for k in 700:
-		_add_click(out, _srng.randi_range(0, n - 100), _srng.randi_range(15, 70), _srng.randf_range(0.1, 0.5), 0.45)
-	_seam(out, 800)
-	return _norm(out, 0.7)
-
-
-func _make_roll_wet() -> PackedFloat32Array:
-	var n := RATE * 2
-	var out := _noise_band(n, 900.0, 6000.0, func(t): return 0.5 + 0.1 * sin(TAU * t * 3.0))
-	var low := _noise_band(n, 50.0, 300.0, func(_t): return 0.3)
-	for i in n:
-		out[i] += low[i]
-	_seam(out, 800)
 	return _norm(out, 0.6)
 
 

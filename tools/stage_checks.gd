@@ -6,6 +6,7 @@ var _failures := 0
 func _ready() -> void:
 	_check_brake()
 	_check_lighting()
+	_check_engine_audio()
 	if ResourceLoader.exists(Race.CO_DRIVER_SCRIPT):
 		_check_voice()
 	if ResourceLoader.exists(Race.CROSSING_AUDIO_SCRIPT):
@@ -24,6 +25,33 @@ func _expect(ok: bool, message: String) -> void:
 	if not ok:
 		push_error(message)
 		_failures += 1
+
+
+func _check_engine_audio() -> void:
+	for style: String in ["mini", "impreza", "quattro", "truck"]:
+		var player := AudioStreamPlayer.new()
+		add_child(player)
+		var engine := RecordedEngine.new(player, style, true)
+		engine.mix(2500.0, 0.5, 0.8)
+		_expect(engine._voices.count(AudioStreamPlaybackPolyphonic.INVALID_ID) == 6,
+			style + " blends two powered and two overrun loops between RPM bands")
+		engine.mix(3700.0, 1.0, 0.8)
+		_expect(engine._voices.count(AudioStreamPlaybackPolyphonic.INVALID_ID) == 8,
+			style + " uses only powered loops under full throttle")
+		player.stop()
+		player.free()
+	var car := Car.new()
+	car.stats = Catalog.cars()[0]
+	car.frozen = false
+	var top := float(car.stats.top)
+	for i in 32:
+		car._update_gear(7.95 * top, 1.0)
+	var before := car.acoustic_rpm
+	for i in 32:
+		car._update_gear(8.05 * top, 1.0)
+	_expect(car.gear == 2 and car.acoustic_rpm > 3500.0 and car.acoustic_rpm < before - 1800.0,
+		"An upshift drops the exhaust pitch into the next gear's working RPM range")
+	car.free()
 
 
 func _axis(device: int, pressure: float, axis := JOY_AXIS_TRIGGER_LEFT) -> void:

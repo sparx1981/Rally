@@ -624,17 +624,21 @@ func _feedback(dt: float) -> void:
 	if p.handbrake > 0.0 and sp > 5.0:
 		strong = maxf(strong, 0.3)
 	Haptics.rumble(weak, strong)
-	Sfx.set_engine(p.rpm, p.throttle if not p.frozen or state == State.COUNTDOWN else 0.0,
+	Sfx.set_engine(p.acoustic_rpm, p.throttle if not p.frozen or state == State.COUNTDOWN else 0.0,
 		_last_view == ChaseCamera.COCKPIT, _voice != null and _voice.playing)
 	Sfx.set_skid((clampf((p.slip - 0.1) * 2.0, 0.0, 1.0) * sf if p.on_road else 0.0) * (0.0 if p.airborne else 1.0), kind)
-	var surf := kind
-	if p.patch_kind != "":
-		surf = p.patch_kind
-	elif not p.on_road:
-		surf = "snow" if kind == "snow" else "gravel"
-	elif stage.def["loc_id"] == "harbour":
-		surf = "cobble"
-	Sfx.set_surface(surf, 0.0 if p.airborne else sp)
+	var surf := "cobble" if stage.def.loc_id == "harbour" else kind
+	var loose := 0.0
+	var supported := 0.0
+	for i in p.wheel_surface.size():
+		var contact := float(p.wheel_load[i])
+		var surface := p.wheel_surface[i]
+		supported += contact
+		if surface == "gravel" or (surface == "verge" and kind != "snow") or (surface == "road" and surf == "dry"):
+			loose += contact
+		elif surface == "mud":
+			loose += contact * 0.42
+	Sfx.set_surface(surf, 0.0 if p.airborne or p.in_water else sp, loose / maxf(supported, 0.001), p.slip)
 	# The crowd cheers as you fly past them at jumps and splashes.
 	for f in stage.track.features:
 		if f["type"] in ["jump", "splash"] and absf(p.s - float(f["s"]) - 6.0) < 1.5 and sp > 8.0 and not _cheered.has(f["s"]):

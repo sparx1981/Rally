@@ -133,7 +133,7 @@ permission, runs in immersive landscape (either way up) and uses the Compatibili
 project.godot, export_presets.cfg, icon.svg
 scenes/main.tscn            entry scene (everything else is built in code)
 scripts/main.gd             menus, pause, results, championship flow, post-process lens
-scripts/autoload/           Settings (presets + input map), Game (state + saves), Haptics, Sfx (procedural audio)
+scripts/autoload/           Settings (presets + input map), Game (state + saves), Haptics, Sfx (audio mixing)
 scripts/data/catalog.gd     cars, light/weather sets, stages, championship series
 scripts/paper/paper_kit.gd  card builder: thickness, cut edge, lit lip, kraft backs, folded boxes
 scripts/paper/pieces.gd     scenery kit: pines, trees, birches, rocks, mesas, cacti, houses, barns, cabins, bales, ...
@@ -147,6 +147,7 @@ scripts/world/puffs.gd      volumetric paper puff emitters (dust, smoke, spray, 
 scripts/race/ghost.gd       Time Trial ghost recording and playback
 scripts/ui/photo_mode.gd    photo mode
 audio/kenney/               CC0 recorded sounds
+audio/recorded/             engine, tyre and exhaust recordings prepared for the game
 scripts/car/                paper car model, arcade rally physics, AI driver, player input
 scripts/race/               race controller (fixed 120 Hz physics, collisions, timing), chase camera
 scripts/ui/                 paper UI theme, HUD with pace notes, touch controls
@@ -155,12 +156,11 @@ shaders/                    paper.gdshader, ground, road, post (tilt-shift + gra
 
 No image files are shipped: card prints, ground washes and fibre are procedural.
 
-**Sound.** The engine loop, tyre skid, impacts, landing thud, nature ambience and UI clicks are CC0
-(public domain) recordings by [Kenney](https://kenney.nl), taken from Kenney's open-source Godot
-starter kits; see `audio/kenney/LICENSE.txt`. The engine is pitched by rpm, and rival cars have their
-own positional engines. Everything else is synthesised on a background thread at start-up: surface
-roll loops (gravel crackle, wet hiss, snow crunch, cobbles), stones pinging the underbody, exhaust pops
-on lift-off, water splashes, rain, wind, paper flaps, bird flutters and crowd cheers.
+**Sound.** Recorded engine loops crossfade by RPM and throttle. Rivals emit engine sound from
+their position. Wet and gravel tyre recordings blend with ground contact, and eligible turbo cars
+use recorded exhaust pops on lift-off. See the [recording credits](audio/recorded/ATTRIBUTION.md).
+Tyre skid, impacts, landings, nature ambience and UI draw on Kenney's CC0 recordings. Snow, cobbles,
+water splashes, wind, paper flaps, bird flutters and crowd cheers are among the generated effects.
 
 ## Notes on performance
 
