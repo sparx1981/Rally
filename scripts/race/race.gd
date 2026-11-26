@@ -442,7 +442,7 @@ func _update_circuit(car: Car) -> void:
 	progress.gate = (int(progress.gate) + 1) % 4
 
 
-## Joker lane: counts the distance driven inside the lane; 60 percent of it counts as taken.
+## Joker lane: counts the distance driven inside the lane; half of it counts as taken.
 func _update_joker(c: Car) -> void:
 	var tr := stage.track
 	if tr.joker.is_empty() or c.joker_taken:
@@ -455,7 +455,7 @@ func _update_joker(c: Car) -> void:
 		st.run += advance
 	elif c.s < tr.joker.s0 or c.s > tr.joker.s1:
 		st.run = 0.0
-	if float(st.run) >= 0.6 * (float(tr.joker.s1) - float(tr.joker.s0)):
+	if float(st.run) >= 0.5 * (float(tr.joker.s1) - float(tr.joker.s0)):
 		c.joker_taken = true
 		if c == player and not attract:
 			hud.show_hint_timed("JOKER LAP TAKEN", 2.2)

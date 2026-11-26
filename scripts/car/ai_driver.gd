@@ -61,9 +61,11 @@ func update(dt: float, others: Array, t: float) -> void:
 			var lane_mid := float(tr.joker.side) * (tr.road_half_width(car.s) + float(tr.joker.w) * 0.5 + 0.5)
 			if not is_nan(band.x):
 				lane_mid = (band.x + band.y) * 0.5
+			elif s_rel > 0.5 * (float(tr.joker.s1) - float(tr.joker.s0)):
+				lane_mid = float(tr.joker.side) * tr.road_half_width(car.s + look) * 0.6   # past the merge: rejoin the road
 			# Drift across gradually through the open funnel, not in one jump.
 			var edge := float(tr.joker.side) * tr.road_half_width(car.s) * 0.8
-			want = lerpf(lerpf(0.0, edge, smoothstep(-90.0, -40.0, s_rel)), lane_mid, smoothstep(-35.0, 20.0, s_rel))
+			want = lerpf(lerpf(0.0, edge, smoothstep(-90.0, -40.0, s_rel)), lane_mid, smoothstep(-12.0, maxf(20.0, 0.25 * (float(tr.joker.s1) - float(tr.joker.s0))), s_rel))
 			_jk_lat = want
 	if stop_at_s > 0.0 and car.s > stop_at_s - 45.0:
 		want = park_lat   # swing into the parking bay
