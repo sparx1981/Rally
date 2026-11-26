@@ -163,7 +163,7 @@ func skip_to_s(s0: float) -> void:
 		cars[i].frozen = false
 	_count = 0.0
 	state = State.RACING
-	_seek_stage_audio()
+	_seek_stage_audio(true)
 	camera.snap()
 
 
@@ -417,7 +417,7 @@ func _update_circuit(car: Car) -> void:
 			progress.completed += 1
 		progress.started = true
 		if car == player:
-			_seek_stage_audio()
+			_seek_stage_audio(true)
 	progress.gate = (int(progress.gate) + 1) % 4
 
 
@@ -800,15 +800,17 @@ func resume_input() -> void:
 		touch.release_all()
 
 
-func _seek_stage_audio() -> void:
+## Re-aim the stage audio after the car moves. A respawn never interrupts or repeats a call; only
+## crossing the line on a new lap makes every note speakable again.
+func _seek_stage_audio(new_lap := false) -> void:
 	if _voice:
-		_voice.seek_course(player.s)
+		_voice.seek_course(player.s, new_lap)
 	if _crossing_audio:
 		_crossing_audio.seek_course(player.s)
 
 
 func _stop_stage_audio() -> void:
 	if _voice:
-		_voice.stop()
+		_voice.stop_calls()
 	if _crossing_audio:
 		_crossing_audio.stop()

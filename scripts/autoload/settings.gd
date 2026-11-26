@@ -100,12 +100,28 @@ func _set_bus(name: String, lin: float) -> void:
 
 
 func _setup_buses() -> void:
-	for name in ["SFX", "Engine"]:
+	for name in ["SFX", "Engine", "Voice"]:
 		if AudioServer.get_bus_index(name) == -1:
 			AudioServer.add_bus()
 			var i := AudioServer.bus_count - 1
 			AudioServer.set_bus_name(i, name)
 			AudioServer.set_bus_send(i, "Master")
+	# Pace notes: +3 dB make-up gain into a limiter, so calls stay loud over the engine without ever
+	# clipping, whatever the volume slider or the clip's own level.
+	var voice_bus := AudioServer.get_bus_index("Voice")
+	if voice_bus >= 0 and AudioServer.get_bus_effect_count(voice_bus) == 0:
+		var voice_limiter := AudioEffectHardLimiter.new()
+		voice_limiter.pre_gain_db = 3.0
+		voice_limiter.ceiling_db = -1.0
+		voice_limiter.release = 0.12
+		AudioServer.add_bus_effect(voice_bus, voice_limiter)
+	# Safety net on the final mix: engine, tyres, weather and voice summing past full scale used to
+	# clip and sound garbled.
+	if AudioServer.get_bus_effect_count(0) == 0:
+		var master_limiter := AudioEffectHardLimiter.new()
+		master_limiter.ceiling_db = -0.5
+		master_limiter.release = 0.1
+		AudioServer.add_bus_effect(0, master_limiter)
 
 
 func save_settings() -> void:
