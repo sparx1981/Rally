@@ -1469,9 +1469,9 @@ func _run_bench() -> void:
 					if prev_s < b and ps >= b and ps - prev_s < 30.0 and sec.has(lp):
 						sec[lp][1] = race._race_time_for_bench()
 					prev_s = ps
-				if frames % 8 == 0 and OS.get_cmdline_user_args().has("--rxtrace") and Catalog.stages()[si].has("rx") and race.player.lap == 1 and race.player.s > 1250 and race.player.s < 1480:
+				if frames % 8 == 0 and OS.get_cmdline_user_args().has("--rxtrace") and Catalog.stages()[si].has("rx") and race.player.s > _arg_float("--rxlo=", 1250.0) and race.player.s < _arg_float("--rxhi=", 1480.0):
 					var pl: Car = race.player
-					print("RXPROGRESS t=%ds lap=%d s=%.0f lat=%.1f v=%.1f joker=%s on_road=%s steer=%.2f thr=%.2f brk=%.2f slip=%.2f patch=%s h=%.2f tang=%.2f walls=%s hw=%.1f" % [frames / 30, pl.lap, pl.s, pl.lat, pl.v_long, pl.joker_taken, pl.on_road, pl.steer, pl.throttle, pl.brake, pl.slip, pl.patch_kind, pl.h, race.stage.track.heading_at(pl.track_i), race.stage.track.barriers_at(pl.s, signf(pl.lat)).map(func(b): return "%s:%.1f" % [b.kind, race.stage.track.barrier_wall(b, pl.s)]), race.stage.track.road_half_width(pl.s)])
+					print("RXPROGRESS t=%ds lap=%d s=%.0f lat=%.1f v=%.1f joker=%s on_road=%s steer=%.2f thr=%.2f brk=%.2f gear=%d rpm=%.0f wl=%s wg=%s y=%.2f air=%s slip=%.2f acc=%.2f surf=%.2f grade=%.3f patch=%s h=%.2f tang=%.2f walls=%s hw=%.1f" % [frames / 30, pl.lap, pl.s, pl.lat, pl.v_long, pl.joker_taken, pl.on_road, pl.steer, pl.throttle, pl.brake, pl.gear, pl.rpm, pl.wheel_load, pl.wheel_grip, pl.y, pl.airborne, pl.slip, pl.longitudinal_accel, pl.surface, race.stage.track.grade_along(pl.pos, pl.s, pl.lat, pl.fwd()), pl.patch_kind, pl.h, race.stage.track.heading_at(pl.track_i), race.stage.track.barriers_at(pl.s, signf(pl.lat)).map(func(b): return "%s:%.1f" % [b.kind, race.stage.track.barrier_wall(b, pl.s)]), race.stage.track.road_half_width(pl.s)])
 			if res.is_empty():
 				print("BENCH stage=%d mode=%d DID NOT FINISH s=%.0f/%.0f" % [si, m, race.player.s, tr.finish_s])
 				continue
@@ -1636,3 +1636,10 @@ func _run_shot() -> void:
 	img.save_png(_shot["path"])
 	print("SHOT saved ", _shot["path"])
 	get_tree().quit()
+
+
+func _arg_float(prefix: String, fallback: float) -> float:
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with(prefix):
+			return float(a.substr(prefix.length()))
+	return fallback

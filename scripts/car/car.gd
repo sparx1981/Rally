@@ -279,7 +279,7 @@ func _patch_grip(patch: Dictionary, lateral: float) -> float:
 		return g
 	var hw := track.road_half_width(s)
 	var on_line := absf(lateral) < hw * 0.4
-	var wet := 0.45 * maxf(0.0, 1.0 - (0.18 if on_line else 0.08) * float(lap))   # lap 1 is damp, not mud-slick
+	var wet := 0.2 * maxf(0.0, 1.0 - (0.18 if on_line else 0.08) * float(lap))   # lap 1 is damp, not mud-slick
 	if patch["kind"] != "ford" and patch["kind"] != "mud":
 		g = lerpf(g, float(Rallycross.SURFACES["mud"].grip), wet)
 	if not on_line:
@@ -689,9 +689,11 @@ func _sample_wheels(dt: float) -> void:
 	_previous_pose = _suspension_pose
 	_step_suspension(Vector2(front_h, rear_h) - Vector2.ONE * y, wheelbase, dt)
 
+	# On a banked road the body leans with the cross-slope, so the low-side wheels stay loaded.
+	var cross_slope := track.bank_slope(track_i) * right.dot(normal)
 	for i in 4:
 		var point: Vector3 = _wheel_base[i]
-		var gap := y + _suspension_pose.x + point.z * (contact_pitch - _suspension_pose.y) - wheel_height[i]
+		var gap := y + _suspension_pose.x + point.z * (contact_pitch - _suspension_pose.y) + point.x * cross_slope - wheel_height[i]
 		var support := (1.0 - smoothstep(suspension_travel * 0.25, suspension_travel, gap)) * clampf(1.0 - gap * 1.2, 0.82, 1.20)
 		var axle_weight := front_weight if i < 2 else 1.0 - front_weight
 		wheel_load[i] = support * axle_weight * (0.5 + signf(point.x) * roll_load)
@@ -791,6 +793,8 @@ func step(dt: float) -> void:
 	lat = hit[2]
 	on_road = track.on_road_at(s, lat)
 	var wgrip := stage.grip()
+	if track.rx:
+		wgrip = lerpf(1.0, wgrip, 0.5)   # lap wetness already models the damp; don't count rain twice
 	var offroad: float = stats.get("offroad", 0.3)
 	surface = wgrip * (1.0 if on_road else lerpf(0.8, 0.97, offroad))
 	# Loose surface patches (gravel / mud / ice / deep snow).

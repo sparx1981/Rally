@@ -204,7 +204,7 @@ static func _turn_signs(track: Track) -> PackedFloat32Array:
 static func _add_patch(track: Track, s0: float, s1: float, lat0: float, lat1: float, kind: String) -> void:
 	var surface: Dictionary = Rallycross.SURFACES[kind]
 	track.patches.append({"s0": s0, "s1": s1, "lat0": lat0, "lat1": lat1, "kind": kind, "grip": float(surface.grip),
-		"drag": float(surface.drag), "rx": true})
+		"drag": float(surface.drag) * 0.5, "rx": true})   # graded and packed: half the free-gravel drag
 
 
 ## First place the line crosses itself: the second pass becomes the upper deck.
