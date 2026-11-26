@@ -178,7 +178,7 @@ static func build(track: Track, def: Dictionary) -> void:
 	_build_barriers(track, rx)
 	track.notes.sort_custom(func(a, b): return a.s0 < b.s0)
 	track.rx_info = {"racers": int(rx.racers), "laps": int(rx.get("laps", 5)), "joker": track.joker.duplicate(),
-		"delta": float(joker.get("delta", 0.0)), "kit": str(rx.kit)}
+		"delta": float(joker.get("delta", 0.0)), "pace": 0.0 if OS.get_cmdline_user_args().has("--nopace") else float(joker.get("pace", 0.0)), "kit": str(rx.kit)}
 
 
 ## Signed turning direction (+1 left, -1 right) smoothed over +-40 m, for banking into corners.
@@ -280,7 +280,7 @@ static func _build_joker(track: Track, jk: Dictionary) -> void:
 		lo[i] = inner_edge
 		# The outer wall funnels back towards the road over the last fifth, so a car still in the lane
 		# is guided onto the track instead of meeting a wall that jumps in at the merge.
-		hi[i] = inner_edge + lane_w * (1.0 - 0.8 * smoothstep(0.78, 1.0, u))
+		hi[i] = inner_edge + lane_w * (1.0 - 0.75 * smoothstep(0.6, 0.97, u))
 	track.joker = {"s0": s0, "s1": s1, "side": side, "w": lane_w, "i0": i0, "i1": i1, "lo": lo, "hi": hi, "gap": gap,
 		"surf": str(jk.surf), "max_hw": max_hw}
 	var lat0 := max_hw + 0.3 if side > 0.0 else -99.0

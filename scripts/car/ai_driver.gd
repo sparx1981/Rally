@@ -82,8 +82,9 @@ func update(dt: float, others: Array, t: float) -> void:
 	# Speed target.
 	var vt: float = profile[tr.index_at(car.s + 3.0)] * skill * (0.99 if taking_joker else 1.0)
 	if taking_joker and not is_nan(tr.joker_band(car.s).x) and absf(car.lat) > tr.road_half_width(car.s):
-		# The lane is longer and looser: pace on it follows the circuit's Joker time delta.
-		vt *= 1.0 - 0.45 * clampf(float(tr.rx_info.get("delta", 2.0)) / 2.0, 0.0, 1.5)
+		# The lane is longer and looser: spread the circuit's Joker time delta evenly over its length.
+		var lane_len := maxf(float(tr.joker.s1) - float(tr.joker.s0), 40.0)
+		vt = 1.0 / (1.0 / maxf(vt, 4.0) + float(tr.rx_info.get("pace", 0.0)) / lane_len)
 	if tr.rx and car.lap < 5:
 		var patch_now := tr.patch_at(car.s + 3.0, car.lat)
 		if patch_now.get('rx', false) and patch_now['kind'] != 'tarmac':
