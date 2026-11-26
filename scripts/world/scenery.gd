@@ -285,7 +285,20 @@ func _place_hazard_props(rng: RandomNumberGenerator) -> void:
 					_add("spectators", rng.randi() % lib["spectators"].size(), sp, track.heading_at(j) + side * PI * 0.5, track.dist[j], rng, true)
 
 
+## True inside a rallycross Joker lane, its island or the verge beside it.
+func _in_joker(p: Vector2, s: float) -> bool:
+	if not track.rx or track.joker.is_empty():
+		return false
+	var jp: Array = track.project(p, track.index_at(s))
+	if float(jp[1]) < float(track.joker.s0) - 30.0 or float(jp[1]) > float(track.joker.s1) + 30.0:
+		return false
+	var reach: float = track.road_half_width(float(jp[1])) + 4.0 + float(track.joker.w) + 8.0 + 12.0
+	return signf(float(jp[2])) == float(track.joker.side) and absf(float(jp[2])) < reach
+
+
 func _try_add(kind: String, p: Vector2, rng: RandomNumberGenerator, s: float, big: bool) -> void:
+	if _in_joker(p, s):
+		return
 	if p.distance_to(track.point_at(track.length - Stage.PARC_BACK)) < 34.0:
 		return   # keep the parc fermé lot clear
 	if track.terrain.is_sea(p) or track.terrain.height(p) < track.terrain.sea_y + 1.0:
@@ -318,6 +331,8 @@ func _overlaps(p: Vector2, r: float) -> bool:
 
 
 func _add(kind: String, vi: int, p: Vector2, yaw: float, s: float, rng: RandomNumberGenerator, solid: bool, text := "") -> void:
+	if _in_joker(p, s):
+		return
 	if not track.terrain.supports_prop(p,lib[kind][vi]["shore_radius"]):
 		return
 	var r: float = lib[kind][vi]["r"]

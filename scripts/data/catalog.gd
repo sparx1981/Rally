@@ -254,7 +254,7 @@ const ROUTE_SCENERY := {
 
 ## 44 stages: every location as a Sprint (4 km), Classic (8 km), Long (10 km) and Marathon (15 km).
 ## The 12 rallycross circuits are built but not yet released: flip to true to list them.
-const RX_ENABLED := false
+const RX_ENABLED := true
 
 
 static func stages() -> Array:

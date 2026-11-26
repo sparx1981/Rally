@@ -40,6 +40,10 @@ var _reset_cd := 0.0
 var _off_track_time := 0.0
 var _laps := 0
 var _circuit_progress := {}
+var _lap_log := {}       # car -> race time at each completed lap
+var _joker_state := {}   # car -> {run, prev}
+var _joker_hint_t := 0.0
+const JOKER_PENALTY := 10.0   # seconds added for finishing without taking the Joker
 var _hud_layer: CanvasLayer
 var _clock := 0.0
 var _entrants: Array = []
@@ -82,6 +86,9 @@ func setup(stage_i: int, mode_v: int, entrants: Array, attract_v := false, tod :
 		cars.append(car)
 		if _laps > 0:
 			_circuit_progress[car] = {"completed": 0, "gate": 0, "previous": car.s, "started": false}
+			_lap_log[car] = []
+			_joker_state[car] = {"run": 0.0, "prev": car.s}
+			car.laps_total = _laps
 		car.landed.connect(func(v): _on_landed(car, v))
 		if car.is_player and not attract:
 			car.compressed.connect(Sfx.suspension)
@@ -279,6 +286,7 @@ func _process(delta: float) -> void:
 				leaves.disturb(previous, c.pos, c.s, c.vel, c.half_wid)
 			if _laps > 0 and not c.frozen and not c.finished:
 				_update_circuit(c)
+				_update_joker(c)
 		_collide()
 		if state == State.RACING:
 			race_time += FIXED
@@ -303,6 +311,8 @@ func _process(delta: float) -> void:
 	if _laps == 0:
 		_check_finish()
 	if state == State.RACING:
+		if _laps > 0:
+			_joker_prompt(dt)
 		if _voice:
 			_voice.call_ahead(player.s, maxf(player.v_long, 0.0))
 		if _crossing_audio:
@@ -341,7 +351,11 @@ func _update_state(dt: float) -> void:
 				hud.show_center(str(c), 0.9, 96)
 				Sfx.play("tock", -4.0)
 				Haptics.impulse(0.3, 0.06)
+		if stage.rx_props:
+			stage.rx_props.set_start_lights(clampi(ceili((3.0 - _count) / 3.0 * 5.0), 0, 5))
 		if _count <= 0.0:
+			if stage.rx_props:
+				stage.rx_props.set_start_lights(0)
 			state = State.RACING
 			for car in cars:
 				car.frozen = false
@@ -369,6 +383,11 @@ func _check_finish() -> void:
 				continue
 			c.finished = true
 			c.finish_time = race_time
+			if _laps > 0 and not stage.track.joker.is_empty() and not c.joker_taken:
+				c.joker_penalty = JOKER_PENALTY
+				c.finish_time += JOKER_PENALTY
+				if c == player:
+					hud.show_hint_timed("+%d s: Joker lane not taken" % int(JOKER_PENALTY), 3.0)
 			if not drivers.has(c) or c == player:
 				drivers[c] = AIDriver.new(c, 0.7)
 			if _laps == 0:
@@ -415,10 +434,47 @@ func _update_circuit(car: Car) -> void:
 	if progress.gate == 0:
 		if progress.started:
 			progress.completed += 1
+			car.lap = int(progress.completed)
+			_lap_log[car].append(race_time)
 		progress.started = true
 		if car == player:
 			_seek_stage_audio(true)
 	progress.gate = (int(progress.gate) + 1) % 4
+
+
+## Joker lane: counts the distance driven inside the lane; 60 percent of it counts as taken.
+func _update_joker(c: Car) -> void:
+	var tr := stage.track
+	if tr.joker.is_empty() or c.joker_taken:
+		return
+	var st: Dictionary = _joker_state[c]
+	var advance := fposmod(c.s - float(st.prev), tr.length)
+	st.prev = c.s
+	var band := tr.joker_band(c.s)
+	if not is_nan(band.x) and c.lat >= band.x and c.lat <= band.y and advance < 8.0:
+		st.run += advance
+	elif c.s < tr.joker.s0 or c.s > tr.joker.s1:
+		st.run = 0.0
+	if float(st.run) >= 0.6 * (float(tr.joker.s1) - float(tr.joker.s0)):
+		c.joker_taken = true
+		if c == player and not attract:
+			hud.show_hint_timed("JOKER LAP TAKEN", 2.2)
+
+
+## Prompt the player to use the Joker lane while they still owe it.
+func _joker_prompt(dt: float) -> void:
+	var tr := stage.track
+	if attract or tr.joker.is_empty() or player.joker_taken or state != State.RACING:
+		return
+	_joker_hint_t -= dt
+	var ahead := fposmod(float(tr.joker.s0) - player.s, tr.length)
+	if _joker_hint_t <= 0.0 and ahead < 130.0 and ahead > 20.0:
+		_joker_hint_t = 6.0
+		hud.show_hint_timed("JOKER LANE REQUIRED - LAST CHANCE" if player.lap + 1 >= _laps else "JOKER LANE AHEAD", 2.6)
+
+
+func _race_time_for_bench() -> float:
+	return race_time
 
 
 func _race_distance(car: Car) -> float:
@@ -543,22 +599,20 @@ func _collide() -> void:
 		var side := signf(c.lat)
 		if side == 0.0:
 			continue
-		var bar := stage.track.barrier_at(c.s, side)
-		if bar.is_empty():
-			continue
-		var wn: Vector2 = stage.track.nrm[c.track_i] * side          # points out of the road
-		var ext := c.half_wid * absf(c.right_axis().dot(wn)) + c.half_len * absf(c.fwd().dot(wn))
-		var wall: float = bar.get("wall", stage.track.width * 0.5 + Stage.BARRIER_LAT)
-		var offset := absf(c.lat) - wall
-		var pen := ext - absf(offset)
-		if offset > 0.0:
-			wn = -wn
-		if pen > 0.0:
-			c.pos -= wn * pen
-			var cp := _corner_support(c, wn)
-			var hit := _apply_contact(c, -wn, cp, Vector2.ZERO, null)
-			c.vel *= 0.995
-			_on_impact(c, hit, cp)
+		for bar in stage.track.barriers_at(c.s, side):
+			var wn: Vector2 = stage.track.nrm[c.track_i] * side          # points out of the road
+			var ext := c.half_wid * absf(c.right_axis().dot(wn)) + c.half_len * absf(c.fwd().dot(wn))
+			var wall: float = stage.track.barrier_wall(bar, c.s)
+			var offset := absf(c.lat) - wall
+			var pen := ext - absf(offset)
+			if offset > 0.0:
+				wn = -wn
+			if pen > 0.0:
+				c.pos -= wn * pen
+				var cp := _corner_support(c, wn)
+				var hit := _apply_contact(c, -wn, cp, Vector2.ZERO, null)
+				c.vel *= 0.995
+				_on_impact(c, hit, cp)
 	for i in cars.size():
 		for j in range(i + 1, cars.size()):
 			var a := cars[i]
@@ -598,6 +652,11 @@ func _collide() -> void:
 func _on_impact(c: Car, strength: float, at: Vector2 = Vector2.INF, paper := false) -> void:
 	if strength < 1.5:
 		return
+	if OS.get_cmdline_user_args().has("--rxdebug") and c == player:
+		var near := ""
+		for o in stage.scenery.props_near(c.pos):
+			near += " %s@%.1f,%.1f r=%.1f" % [str(o[5]) if o.size() > 5 else "?", Vector2(o[0], o[1]).distance_to(c.pos), o[2], float(o[2])]
+		print("IMPACT s=%.0f lat=%.1f str=%.1f paper=%s props:%s" % [c.s, c.lat, strength, paper, near])
 	if at != Vector2.INF and strength > 2.5:
 		_debris(Vector3(at.x, c.y + 0.6, at.y), strength)
 	if at != Vector2.INF and strength > 4.0:

@@ -69,6 +69,7 @@ static func fibre_tex() -> NoiseTexture2D:
 
 
 var tod := 0
+var rx_props: RxProps
 var _lighting_mode := 0
 var _light_presets: Array[Dictionary] = []
 var _light_progress := 0.0
@@ -86,7 +87,8 @@ func build(stage_def: Dictionary, time_of_day := -1) -> void:
 	track.build_stage_route(def, wx.kind)
 	var ep: Dictionary = def.get("elev", {})
 	track.index_watercourses()
-	track.build_barriers(int(def["seed"]), def.get("barriers", []))
+	if not track.rx:
+		track.build_barriers(int(def["seed"]), def.get("barriers", []))
 	track.terrain = Terrain.new()
 	var bank_height: float = {"gorge": 8.5, "canyon": 6.4, "alpine": 7.2, "moor": 3.2, "autumn": 4.2, "pinewood": 2.6}.get(def["loc_id"], 0.0)
 	track.terrain.build(track, float(ep.get("hills", 10.0)), int(def["seed"]) + 5, 1.0, bank_height, def["loc_id"] in ["meadow", "moor", "pinewood", "autumn"])
@@ -147,6 +149,11 @@ func build(stage_def: Dictionary, time_of_day := -1) -> void:
 	_make_switchback_tunnel()
 	_make_hazards()
 	_make_barriers()
+	if track.rx:
+		rx_props = RxProps.new()
+		rx_props.name = "RallycrossProps"
+		add_child(rx_props)
+		rx_props.build(track, def, paper_mat, tod > 0)
 	_make_weather()
 	_make_mist()
 	_make_birds()

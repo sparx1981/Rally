@@ -146,7 +146,10 @@ func _start_race() -> void:
 		Game.Mode.TIME_TRIAL:
 			entrants = [{"name": "You", "car": Game.car_index, "skill": 1.0, "player": true}]
 		Game.Mode.RACE:
-			entrants = Game.make_entrants(int(Settings.g("opponents")))
+			var opponents := int(Settings.g("opponents"))
+			if sdef.has("rx"):
+				opponents = mini(opponents, int(sdef.rx.racers) - 1)   # the circuit's grid limit
+			entrants = Game.make_entrants(opponents)
 		_:
 			entrants = Game.champ_entrants
 			entrants[0]["car"] = Game.car_index
@@ -1359,6 +1362,8 @@ func _parse_args() -> void:
 			Game.time_of_day = int(a.substr(6))
 		elif a.begins_with("--weather="):
 			Game.weather_override = int(a.substr(10))
+		elif a == "--overview":
+			_shot["overview"] = true
 		elif a == "--nohud":
 			_shot["nohud"] = true
 		elif a.begins_with("--thumb="):
@@ -1428,25 +1433,61 @@ func _run_bench() -> void:
 	elif OS.get_cmdline_user_args().has("--quick"):
 		list = range(0, Catalog.stages().size(), 4)
 		list.append(35)
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--only="):
+			list = [int(a.substr(7))]
+		elif a == "--rx":
+			list = Catalog.rallycross_indices()
+	Game.circuit_laps = 3
 	for si in list:
-		for m in ([Game.Mode.TIME_TRIAL] if si == 35 else [Game.Mode.TIME_TRIAL, Game.Mode.RACE]):
+		for m in ([Game.Mode.TIME_TRIAL] if si == 35 else ([Game.Mode.TIME_TRIAL] if Catalog.stages()[si].has("rx") and not OS.get_cmdline_user_args().has("--grid") else ([Game.Mode.RACE] if Catalog.stages()[si].has("rx") else [Game.Mode.TIME_TRIAL, Game.Mode.RACE]))):
 			Game.mode = m
 			Game.stage_index = si
 			var t0 := Time.get_ticks_msec()
 			await _start_race()
 			var build_ms := Time.get_ticks_msec() - t0
+			if race.drivers.has(race.player):
+				race.drivers[race.player].joker_lap = 2
 			var tr := race.stage.track
 			var res := {}
 			race.finished.connect(func(r): res["r"] = r)
 			var frames := 0
+			var jokers := {}
+			var sec := {}       # lap -> [time at section start, time at section end]
+			var prev_s := race.player.s
 			while res.is_empty() and frames < 30 * 1500:
 				await get_tree().process_frame
 				frames += 1
+				var jt: Dictionary = race.stage.track.joker
+				if not jt.is_empty() and race.player.laps_total > 0:
+					var a: float = float(jt.s0) - 60.0
+					var b: float = minf(float(jt.s1) + 60.0, race.stage.track.length - 4.0)
+					var ps: float = race.player.s
+					var lp: int = race.player.lap
+					if prev_s < a and ps >= a and ps - prev_s < 30.0:
+						sec[lp] = [race._race_time_for_bench(), 0.0]
+					if prev_s < b and ps >= b and ps - prev_s < 30.0 and sec.has(lp):
+						sec[lp][1] = race._race_time_for_bench()
+					prev_s = ps
+				if frames % 8 == 0 and OS.get_cmdline_user_args().has("--rxtrace") and Catalog.stages()[si].has("rx") and race.player.lap == 1 and race.player.s > 1250 and race.player.s < 1480:
+					var pl: Car = race.player
+					print("RXPROGRESS t=%ds lap=%d s=%.0f lat=%.1f v=%.1f joker=%s on_road=%s steer=%.2f thr=%.2f brk=%.2f slip=%.2f patch=%s h=%.2f tang=%.2f walls=%s hw=%.1f" % [frames / 30, pl.lap, pl.s, pl.lat, pl.v_long, pl.joker_taken, pl.on_road, pl.steer, pl.throttle, pl.brake, pl.slip, pl.patch_kind, pl.h, race.stage.track.heading_at(pl.track_i), race.stage.track.barriers_at(pl.s, signf(pl.lat)).map(func(b): return "%s:%.1f" % [b.kind, race.stage.track.barrier_wall(b, pl.s)]), race.stage.track.road_half_width(pl.s)])
 			if res.is_empty():
 				print("BENCH stage=%d mode=%d DID NOT FINISH s=%.0f/%.0f" % [si, m, race.player.s, tr.finish_s])
 				continue
 			var r: Dictionary = res["r"]
 			var rows: Array = r["rows"]
+			if race.stage.track.rx:
+				var laps_log: Array = race._lap_log[race.player]
+				var splits := []
+				var last := 0.0
+				for t in laps_log:
+					splits.append(snappedf(t - last, 0.01))
+					last = t
+				var sect := []
+				for k in sec.keys():
+					sect.append(snappedf(float(sec[k][1]) - float(sec[k][0]), 0.01))
+				print("RXBENCH %s lap_splits=%s joker_taken=%s joker_target_delta=%.1f section_times=%s" % [Catalog.stages()[si].id, splits, race.player.joker_taken, race.stage.track.rx_info.get("delta", 0.0), sect])
 			print("BENCH stage=%d mode=%d len=%.0f corners=%d pieces=%d build=%dms player=%s medals=%s/%s/%s pos=%d/%d slowest=%s" % [si, m, tr.length, tr.corners.size(),
 				race.stage.scenery.placements.size(), build_ms, Game.fmt_time(r["player_time"]), Game.fmt_time(r["medals"][0]), Game.fmt_time(r["medals"][1]),
 				Game.fmt_time(r["medals"][2]), rows.map(func(x): return x["player"]).find(true) + 1, rows.size(), Game.fmt_time(rows[-1]["time"])])
@@ -1575,6 +1616,11 @@ func _run_shot() -> void:
 		race.add_child(oc)
 		var pp: Vector3 = race.player.global_position
 		var hgt: float = _shot["overhead"]
+		if _shot.has("overview"):
+			var box := race.stage.track.bounds()
+			var cen := box.get_center()
+			pp = Vector3(cen.x, race.stage.track.elev[0], cen.y)
+			hgt = maxf(box.size.x, box.size.y) * 0.62
 		oc.position = pp + Vector3(hgt * float(_shot.get("ox", 0.35)), hgt, hgt * float(_shot.get("oz", 0.35)))
 		oc.look_at(pp)
 		oc.current = true

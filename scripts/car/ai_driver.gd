@@ -11,6 +11,9 @@ var _stuck := 0.0
 var _wobble_seed := 0.0
 var stop_at_s := -1.0     # parc fermé: brake to a stop here
 var park_lat := 0.0
+var joker_lap := 0         # rallycross: the lap (1-based) this driver plans to use the Joker; 0 = decided at start
+var _jk_lat := 0.0
+var _jk_abort_lap := -1   # a Joker attempt that got stuck is abandoned for that lap
 
 
 func _init(c: Car, skill_v: float) -> void:
@@ -46,18 +49,45 @@ func update(dt: float, others: Array, t: float) -> void:
 	var lane := tr.forced_lane(car.s + 6.0)
 	if not is_nan(lane):
 		want = lane
+	var taking_joker := false
+	if not tr.joker.is_empty() and not car.joker_taken and car.laps_total > 0:
+		if joker_lap == 0:
+			joker_lap = 1 + (car.driver_name.hash() & 0xffff) % maxi(car.laps_total, 1)
+		var is_lap := (car.lap + 1 == joker_lap or car.lap + 1 >= car.laps_total) and _jk_abort_lap != car.lap
+		var s_rel := wrapf(car.s - float(tr.joker.s0), -tr.length * 0.5, tr.length * 0.5)
+		if is_lap and s_rel > -90.0 and s_rel < float(tr.joker.s1) - float(tr.joker.s0):
+			taking_joker = true
+			var band := tr.joker_band(car.s + look)
+			var lane_mid := float(tr.joker.side) * (tr.road_half_width(car.s) + float(tr.joker.w) * 0.5 + 0.5)
+			if not is_nan(band.x):
+				lane_mid = (band.x + band.y) * 0.5
+			# Drift across gradually through the open funnel, not in one jump.
+			var edge := float(tr.joker.side) * tr.road_half_width(car.s) * 0.8
+			want = lerpf(lerpf(0.0, edge, smoothstep(-90.0, -40.0, s_rel)), lane_mid, smoothstep(-35.0, 20.0, s_rel))
+			_jk_lat = want
 	if stop_at_s > 0.0 and car.s > stop_at_s - 45.0:
 		want = park_lat   # swing into the parking bay
 		_offset = lerpf(_offset, want, clampf(dt * 1.6, 0.0, 1.0))
 	else:
-		_offset = lerpf(_offset, clampf(want, -tr.width * 0.38, tr.width * 0.38), clampf(dt * (5.0 if not is_nan(lane) else 1.5), 0.0, 1.0))
+		if taking_joker:
+			_offset = lerpf(_offset, want, clampf(dt * 3.0, 0.0, 1.0))
+		else:
+			var lim := tr.road_half_width(car.s) * 0.76
+			_offset = lerpf(_offset, clampf(want, -lim, lim), clampf(dt * (5.0 if not is_nan(lane) else 1.5), 0.0, 1.0))
 	var target := tr.pts[j] + tr.nrm[j] * _offset
 	var d := (target - car.pos).normalized()
 	var f := car.fwd()
 	var ang := atan2(f.x * d.y - f.y * d.x, f.dot(d))
 	car.steer = clampf(ang * 2.4, -1.0, 1.0)
 	# Speed target.
-	var vt: float = profile[tr.index_at(car.s + 3.0)] * skill
+	var vt: float = profile[tr.index_at(car.s + 3.0)] * skill * (0.99 if taking_joker else 1.0)
+	if taking_joker and not is_nan(tr.joker_band(car.s).x) and absf(car.lat) > tr.road_half_width(car.s):
+		# The lane is longer and looser: pace on it follows the circuit's Joker time delta.
+		vt *= 1.0 - 0.45 * clampf(float(tr.rx_info.get("delta", 2.0)) / 2.0, 0.0, 1.5)
+	if tr.rx and car.lap < 5:
+		var patch_now := tr.patch_at(car.s + 3.0, car.lat)
+		if patch_now.get('rx', false) and patch_now['kind'] != 'tarmac':
+			vt *= lerpf(1.0, 0.92, maxf(0.0, 1.0 - 0.18 * float(car.lap)))   # still watered
 	if stop_at_s > 0.0:
 		vt = minf(vt, sqrt(maxf(0.0, 2.0 * 5.0 * (stop_at_s - car.s))))
 	var dv := vt - vl
@@ -71,10 +101,12 @@ func update(dt: float, others: Array, t: float) -> void:
 	# Recover if stuck.
 	if not car.frozen and absf(vl) < 1.0 and not car.airborne and stop_at_s < 0.0:
 		_stuck += dt
+		if _stuck > 1.2 and taking_joker:
+			_jk_abort_lap = car.lap
 		if _stuck > 2.5:
 			car.reset_to_track()
 			_stuck = 0.0
 	else:
 		_stuck = 0.0
-	if absf(car.lat) > maxf(tr.width * 2.0, absf(park_lat) + 4.0):
+	if absf(car.lat) > maxf(tr.width * 2.0 + 20.0, absf(park_lat) + 4.0):
 		car.reset_to_track()

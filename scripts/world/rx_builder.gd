@@ -273,17 +273,22 @@ static func _build_joker(track: Track, jk: Dictionary) -> void:
 		var u := clampf((track.dist[i] - s0) / (s1 - s0), 0.0, 1.0)
 		var hw: float = track.widths[i] * 0.5
 		max_hw = maxf(max_hw, hw)
-		var ramp := smoothstep(0.0, 0.16, u) * (1.0 - smoothstep(0.84, 1.0, u))
+		var ramp := smoothstep(0.10, 0.46, u) * (1.0 - smoothstep(0.54, 0.90, u))
 		gap[i] = ISLAND_GAP * ramp
-		var excursion := float(jk.out) * pow(sin(PI * u), 1.3)
+		var excursion := float(jk.out) * 0.5 * pow(sin(PI * u), 1.3)
 		var inner_edge := hw + gap[i] + excursion
 		lo[i] = inner_edge
-		hi[i] = inner_edge + lane_w
+		# The outer wall funnels back towards the road over the last fifth, so a car still in the lane
+		# is guided onto the track instead of meeting a wall that jumps in at the merge.
+		hi[i] = inner_edge + lane_w * (1.0 - 0.8 * smoothstep(0.78, 1.0, u))
 	track.joker = {"s0": s0, "s1": s1, "side": side, "w": lane_w, "i0": i0, "i1": i1, "lo": lo, "hi": hi, "gap": gap,
 		"surf": str(jk.surf), "max_hw": max_hw}
 	var lat0 := max_hw + 0.3 if side > 0.0 else -99.0
 	var lat1 := 99.0 if side > 0.0 else -(max_hw + 0.3)
 	_add_patch(track, s0, s1, lat0, lat1, str(jk.surf))
+	# The lane is graded and packed, so it costs the Joker's time delta without being a mud bath:
+	# half way between its loose surface and tarmac.
+	track.patches[-1]["grip"] = lerpf(float(track.patches[-1]["grip"]), 1.15, 0.35)
 
 
 static func _add_jump(track: Track, jump: Dictionary) -> void:
@@ -346,8 +351,8 @@ static func _build_barriers(track: Track, rx: Dictionary) -> void:
 		# Island: a foam and tyre divider along the road edge and along the lane's inner edge, from the
 		# nose to the merge, leaving the entry and exit open.
 		var span: float = float(jk.s1) - float(jk.s0)
-		track.barriers.append(_bar(float(jk.s0) + span * 0.15, float(jk.s1) - span * 0.15, side, "island", "road"))
-		track.barriers.append(_bar(float(jk.s0) + span * 0.15, float(jk.s1) - span * 0.15, side, "island", "lane_in"))
+		track.barriers.append(_bar(float(jk.s0) + span * 0.45, float(jk.s1) - span * 0.45, side, "island", "road"))
+		track.barriers.append(_bar(float(jk.s0) + span * 0.45, float(jk.s1) - span * 0.45, side, "island", "lane_in"))
 	track.index_barriers()
 
 

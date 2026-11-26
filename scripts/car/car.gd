@@ -49,6 +49,10 @@ var _transmission_ratio := 1.0
 var rpm := 900.0
 var acoustic_rpm := 900.0
 var finished := false
+var joker_taken := false   # rallycross: has used the Joker lane this race
+var lap := 0               # completed laps
+var laps_total := 0
+var joker_penalty := 0.0
 var finish_time := -1.0
 var surface := 1.0
 var in_puddle := false
@@ -261,6 +265,26 @@ func set_low_view(on: bool) -> void:
 		_dust.scale_amount_max = _dust.get_meta("full_max") * (0.45 if on else 1.0)
 		_dust.amount = int(_dust.get_meta("full_count")) * (0.6 if on else 1.0)
 
+
+
+## Grip of a surface patch under this car. Rallycross loose surfaces start the race watered (like
+## watered mud) and dry out lap by lap, faster on the racing line than off it; stepping off the line
+## costs 15 percent; and a change of surface is eased in over about 0.15 s.
+var _rx_grip := 1.0
+
+
+func _patch_grip(patch: Dictionary, lateral: float) -> float:
+	var g := float(patch.get("grip", 1.0))
+	if not patch.get("rx", false) or patch["kind"] == "tarmac":
+		return g
+	var hw := track.road_half_width(s)
+	var on_line := absf(lateral) < hw * 0.4
+	var wet := 0.45 * maxf(0.0, 1.0 - (0.18 if on_line else 0.08) * float(lap))   # lap 1 is damp, not mud-slick
+	if patch["kind"] != "ford" and patch["kind"] != "mud":
+		g = lerpf(g, float(Rallycross.SURFACES["mud"].grip), wet)
+	if not on_line:
+		g *= 0.85
+	return g
 
 
 ## Small dirt, gravel and snow flicked back by the driven wheels (subtle, and only on loose ground).
@@ -655,7 +679,7 @@ func _sample_wheels(dt: float) -> void:
 		var label: String = patch.get("kind", "verge" if loose else "road")
 		wheel_surface[i] = label
 		wheel_loose[i] = int(loose or label in ["mud", "gravel", "deep snow", "ice"])
-		wheel_grip[i] = stage.grip() * (lerpf(0.72, 0.95, stats.offroad) if loose else 1.0) * float(patch.get("grip", 1.0))
+		wheel_grip[i] = stage.grip() * (lerpf(0.72, 0.95, stats.offroad) if loose else 1.0) * _patch_grip(patch, lateral)
 		wheel_height[i] = track.surface_height(pos + offset, station, lateral)
 
 	var front_h := (wheel_height[0] + wheel_height[1]) * 0.5
@@ -775,7 +799,8 @@ func step(dt: float) -> void:
 	patch_kind = ""
 	if not patch.is_empty():
 		patch_kind = patch["kind"]
-		surface *= float(patch["grip"])
+		_rx_grip = move_toward(_rx_grip, _patch_grip(patch, lat), dt / 0.15 * 0.4) if patch.get("rx", false) else 1.0
+		surface *= _rx_grip if patch.get("rx", false) else _patch_grip(patch, lat)
 		patch_drag = float(patch["drag"])
 		patch_drag *= lerpf(1.0, 0.4, offroad)
 		if patch.get("rx", false):
