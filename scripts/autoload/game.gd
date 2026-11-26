@@ -13,6 +13,7 @@ var circuit_laps := 5
 var series_index := 0
 var show_ghost := true
 var ai_contact := true
+var weather_override := -1   # -1 = the stage's own weather, otherwise an index into Catalog.WEATHER_PICK
 var time_of_day := -1        # -1 = stage default, otherwise an index into Catalog.TOD_NAMES
 
 # Championship in progress.
@@ -65,6 +66,7 @@ func difficulty_factor() -> float:
 
 func start_championship(series_i: int) -> void:
 	series_index = series_i
+	weather_override = -1
 	champ_round = 0
 	champ_entrants = make_entrants(int(Settings.g("opponents")))
 	champ_points = {}

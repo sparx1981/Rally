@@ -14,6 +14,7 @@ const BASE_TOP := 33.0
 const BASE_ACC := 14.5
 const BASE_MU := 17.0
 const BRAKE := 28.0
+const HANDBRAKE_DRAG := 3.6   # was 14: stopped the car faster than the pedal and killed powerslides
 const RADIUS := 1.55
 const GEAR_TORQUE := [1.0, 1.0, 0.88, 0.77, 0.69, 0.62]
 const GEARS := [0.0, 8.0, 14.0, 20.0, 26.0, 31.0]
@@ -110,6 +111,7 @@ func setup(car_stats: Dictionary, num: int, stg: Stage, mat: Material) -> void:
 	_mat = mat
 	_make_contact()
 	_make_dust()
+	_make_wheel_debris()
 	_make_rear_lamps()
 	if not is_player:
 		# AI engines are positional: you hear rivals close behind and alongside.
@@ -261,6 +263,77 @@ func set_low_view(on: bool) -> void:
 
 
 
+## Small dirt, gravel and snow flicked back by the driven wheels (subtle, and only on loose ground).
+var _debris: Array[CPUParticles3D] = []
+var _debris_color := Color(0, 0, 0, 0)
+
+
+func _make_wheel_debris() -> void:
+	var split := drive_split()
+	var mesh := BoxMesh.new()
+	mesh.size = Vector3(0.075, 0.05, 0.075)
+	var mat := StandardMaterial3D.new()
+	mat.vertex_color_use_as_albedo = true
+	mat.roughness = 1.0
+	mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+	mesh.material = mat
+	for i in 4:
+		var driven := (split > 0.2) if i < 2 else (split < 0.8)
+		if not driven:
+			continue
+		var p := CPUParticles3D.new()
+		p.local_coords = false
+		p.mesh = mesh
+		p.amount = maxi(3, int(9.0 * float(Settings.g("particles"))))
+		p.lifetime = 0.55
+		p.explosiveness = 0.0
+		p.randomness = 0.6
+		p.direction = Vector3(0.0, 0.75, -1.0)
+		p.spread = 26.0
+		p.initial_velocity_min = 1.8
+		p.initial_velocity_max = 4.2
+		p.gravity = Vector3(0, -9.0, 0)
+		p.scale_amount_min = 0.5
+		p.scale_amount_max = 1.5
+		p.angular_velocity_min = -300.0
+		p.angular_velocity_max = 300.0
+		p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		p.emitting = false
+		var wp: Vector3 = _wheel_base[i]
+		p.position = Vector3(wp.x, wheel_r * 0.55, wp.z - wheel_r * 0.9)
+		_body.add_child(p)
+		_debris.append(p)
+
+
+## Colour of what the tyres are throwing, or alpha 0 on tarmac.
+func _loose_color() -> Color:
+	if patch_kind != "" and Rallycross.SURFACES.has(patch_kind):
+		return Color(0, 0, 0, 0) if patch_kind == "tarmac" else Color(Rallycross.SURFACES[patch_kind].color).darkened(0.1)
+	match patch_kind:
+		"mud": return Color("#5a4632")
+		"ice", "deep snow": return Color("#eef2f7")
+	if not on_road:
+		return Color(stage.def.pal.ground).darkened(0.35)
+	match stage.kind():
+		"snow": return Color("#eef2f7")
+		"rain": return Color("#5a4632")
+	return Color(stage.def.pal.road).darkened(0.12)
+
+
+func _update_wheel_debris() -> void:
+	if _debris.is_empty():
+		return
+	var col := _loose_color()
+	var on := col.a > 0.0 and throttle > 0.25 and absf(v_long) > 3.0 and not airborne and not in_water and not frozen
+	if col != _debris_color and col.a > 0.0:
+		_debris_color = col
+		for p in _debris:
+			p.color = col
+	for p in _debris:
+		p.emitting = on
+		p.speed_scale = clampf(0.7 + absf(v_long) / 30.0 + slip, 0.7, 1.8)
+
+
 func _make_dust() -> void:
 	var kind := stage.kind()
 	var pal: Dictionary = stage.def["pal"]
@@ -284,8 +357,9 @@ func _make_dust() -> void:
 	add_child(_dust)
 	_smoke = Puffs.make("exhaust", Color(0.55, 0.53, 0.52), leak)
 	_smoke.emitting = false
-	_smoke.position = Vector3(0.45, 0.3, -half_len - 0.1)
-	add_child(_smoke)
+	# Smoke comes out of the exhaust tip the model actually has.
+	_smoke.position = _model.get("exhaust", Vector3(-0.45, 0.3, -half_len - 0.1))
+	_body.add_child(_smoke)
 
 
 var _smoke: CPUParticles3D
@@ -666,7 +740,8 @@ func _axle_forces(vl: float, thr: float, brk: float, hb: float, dt: float) -> fl
 		var engine := engine_demand[axle]
 		var axle_limit := limits[axle]
 		var service := service_brake * BRAKE * (0.64 if axle == 0 else 0.36) * signf(vl) if absf(vl) > 0.03 else 0.0
-		var parking := rear_lock * 14.0 * signf(vl) if axle == 1 and absf(vl) > 0.2 else 0.0
+		# The handbrake locks the rears for rotation, not for stopping: a modest drag lets slides carry speed.
+		var parking := rear_lock * HANDBRAKE_DRAG * signf(vl) if axle == 1 and absf(vl) > 0.2 else 0.0
 		axle_demand[axle] = engine-service-parking
 		var transmitted := clampf(engine,-axle_limit,axle_limit)
 		# Start with equal wheel torque. An LSD can transfer unmet torque to
@@ -905,6 +980,7 @@ func _sync_visual(delta: float) -> void:
 		if i < 2:
 			wnode.rotation.y = -steer * 0.45
 		wnode.get_child(0).rotation.x = _spin
+	_update_wheel_debris()
 	# Dust / spray / snow from the wheels.
 	if _dust:
 		var spd := absf(v_long)

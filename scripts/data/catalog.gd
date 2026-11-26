@@ -316,6 +316,18 @@ static func rallycross_indices() -> Array[int]:
 	return out
 
 
+const WEATHER_PICK := ["dry_day", "rain_overcast", "snow_bright"]
+const WEATHER_NAMES := ["Dry", "Rain", "Snow"]
+
+
+## Run a stage in its own weather (override -1) or in dry, rain or snow.
+static func apply_weather(stage_index: int, override: int) -> void:
+	var st: Dictionary = stages()[stage_index]
+	if not st.has("weather_default"):
+		st["weather_default"] = st["weather"]
+	st["weather"] = st["weather_default"] if override < 0 else WEATHER_PICK[clampi(override, 0, 2)]
+
+
 static func stage_preview(stage: Dictionary) -> Texture2D:
 	var variant_path := "res://ui/previews/routes/%s.jpg" % stage.id
 	if stage.get("circuit", false) and not ResourceLoader.exists(variant_path):

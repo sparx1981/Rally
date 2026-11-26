@@ -170,3 +170,12 @@ water splashes, wind, paper flaps, bird flutters and crowd cheers are among the 
   calls. When it is **on**, pieces are hidden while they lie folded flat, and only pieces near the car
   are animated.
 - The FPS counter (*Settings → Graphics*) helps when comparing settings on a device.
+
+
+## Menus, weather and handling (latest)
+
+- **Card menus:** after choosing a car, pick an event type (Stages or Circuits), then slide through the location or circuit cards (previews, surface line, best time, page dots). The championship screen uses the same cards. Cards fold up like paper when a page opens (respects the pop-up setting).
+- **Tear-off hints:** the "A SELECT" tag shows on the focused card when a controller is attached, "ENTER / CLICK" on keyboard and mouse machines, and nothing on a touch-only device.
+- **Weather is chosen on the confirmation screen** (Default, Dry, Rain, Snow) alongside distance and time of day. Cards no longer show weather; each stage keeps its own default.
+- **Exhaust smoke** now comes from the exhaust tip on each car model, and the driven wheels throw small flecks of gravel, mud or snow on loose ground.
+- **Handbrake:** its rear braking drag is much lower (3.6, was 14), so it rotates the car without scrubbing off forward speed; powerslides carry speed like the pedal-free slide they should be.

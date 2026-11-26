@@ -60,6 +60,7 @@ func _clear_race() -> void:
 
 
 func _start_attract(stage_i: int, startup := false) -> void:
+	Catalog.apply_weather(stage_i, -1)
 	_clear_race()
 	if startup:
 		await _loading_stage(Catalog.stages()[stage_i], true)
@@ -137,6 +138,7 @@ func _start_race() -> void:
 	get_tree().paused = false
 	_paused = false
 	_clear_race()
+	Catalog.apply_weather(Game.stage_index, -1 if Game.mode == Game.Mode.CHAMPIONSHIP else Game.weather_override)
 	var sdef: Dictionary = Catalog.stages()[Game.stage_index]
 	await _loading_stage(sdef)
 	var entrants: Array
@@ -428,7 +430,7 @@ func _car_select() -> void:
 		if Game.mode == Game.Mode.CHAMPIONSHIP:
 			_series_select()
 		else:
-			_stage_select(), 200)
+			_event_type(), 200)
 	nav.add_child(go)
 	refresh.call()
 	_focus_rows([[prev, nxt, go], [liv], _focus_controls(pg.bar)], go)
@@ -517,6 +519,148 @@ func _weather_style(kind: String) -> StyleBoxFlat:
 	return PaperTheme.box(col)
 
 
+## Short surface line shown on a location's card.
+const STAGE_BADGES := {
+	"meadow": "GRAVEL • ROLLING LANES", "canyon": "GRAVEL • ROCKY CLIMBS", "gorge": "GRAVEL • STONE GORGE",
+	"autumn": "GRAVEL • FOREST RIDGE", "moor": "GRAVEL • OPEN MOORLAND", "pinewood": "GRAVEL • DENSE PINES",
+	"harbour": "COBBLES • COASTAL VILLAGE", "alpine": "SNOW • HAIRPIN CLIMB", "lakes": "ICE • FROZEN LAKES",
+	"taiga": "SNOW • TWILIGHT FOREST", "cliffs": "GRAVEL • CLIFFTOP ROAD", "arena": "SAND • CLOSED CIRCUIT",
+}
+
+
+func _navigation_tip(noun: String) -> String:
+	if MenuCards.controller_present():
+		return "Tip: Use your controller or arrow keys to navigate."
+	if DisplayServer.is_touchscreen_available():
+		return "Tip: Swipe left/right to browse more %s." % noun
+	return "Tip: Use the arrow keys or click to browse %s." % noun
+
+
+func _tip_tag(text: String, bar: HBoxContainer) -> void:
+	var tag := PaperTheme.tag(text, 18)
+	tag.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	bar.add_child(tag)
+
+
+func _subtitle(content: VBoxContainer, text: String) -> void:
+	var sub := PaperTheme.tag(text, 22)
+	sub.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	content.add_child(sub)
+
+
+## Choose between point-to-point stages and closed circuits.
+func _event_type() -> void:
+	var pg := _page(Game.mode_name(), _car_select)
+	var content: VBoxContainer = pg.content
+	_subtitle(content, "Select Event Type")
+	var center := CenterContainer.new()
+	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	content.add_child(center)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 30)
+	center.add_child(row)
+	var arena_index := Catalog.locations().size() * Catalog.VARIANTS.size()
+	var defs := [
+		{"title": "STAGES", "sub": "Point-to-point rally routes with unique terrain challenges.",
+			"image": Catalog.stage_preview(Catalog.stages()[1]), "circuits": false},
+		{"title": "CIRCUITS", "sub": "Closed-loop rallycross with mixed-surface challenges.",
+			"image": Catalog.stage_preview(Catalog.stages()[arena_index]), "circuits": true},
+	]
+	var cards: Array = []
+	for d in defs:
+		var card := MenuCards.Card.new().setup({"title": d.title, "sub": d.sub, "image": d.image, "size": Vector2(500, 400), "title_size": 56, "sub_size": 22})
+		var circuits: bool = d.circuits
+		card.pressed.connect(func():
+			Sfx.click()
+			_stage_carousel(circuits))
+		row.add_child(card)
+		cards.append(card)
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	pg.bar.add_child(spacer)
+	_tip_tag(_navigation_tip("options"), pg.bar)
+	_focus_rows([cards, _focus_controls(pg.bar)], cards[1 if Game.stage_index >= arena_index else 0])
+	await get_tree().process_frame
+	for i in cards.size():
+		MenuCards.pop_in(cards[i], 0.05 + i * 0.1)
+
+
+## A sliding carousel of locations (or circuits) with previews, best times and page dots.
+func _stage_carousel(circuits: bool, focus := -1) -> void:
+	var pg := _page(Game.mode_name(), _event_type)
+	var content: VBoxContainer = pg.content
+	_subtitle(content, "Select Circuit" if circuits else "Select Stage")
+	var routes := Catalog.VARIANTS.size()
+	var location_count := Catalog.locations().size()
+	var entries: Array = []
+	if circuits:
+		entries = Catalog.stages().slice(location_count * routes)
+	else:
+		entries = Catalog.locations().duplicate()
+	var variant := int(Catalog.stages()[Game.stage_index].variant)
+	var items: Array = []
+	for i in entries.size():
+		var sd: Dictionary = entries[i]
+		var item := {"title": sd.name, "title_size": 25, "size": Vector2(260, 280), "badge": STAGE_BADGES.get(sd.get("loc_id", sd.id), ""),
+			"image": Catalog.stage_preview(sd if circuits else Catalog.stages()[i * routes + variant])}
+		if not circuits:
+			var best := Game.best_time(i * routes + variant)
+			if best > 0.0:
+				item["best"] = "BEST: " + Game.fmt_time(best)
+		items.append(item)
+	var holder := HBoxContainer.new()
+	holder.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	holder.add_theme_constant_override("separation", 8)
+	content.add_child(holder)
+	var prev := _arrow_button("<", "L")
+	holder.add_child(prev)
+	var carousel := MenuCards.Carousel.new()
+	carousel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	carousel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	carousel.custom_minimum_size.y = 350
+	holder.add_child(carousel)
+	var nxt := _arrow_button(">", "R")
+	holder.add_child(nxt)
+	var start := clampi(focus if focus >= 0 else (Game.stage_index - location_count * routes if (circuits and Game.stage_index >= location_count * routes) else (int(Catalog.stages()[Game.stage_index].loc) if not circuits else 0)), 0, items.size() - 1)
+	carousel.setup(items, start)
+	var dots := MenuCards.Dots.new()
+	dots.setup(ceili(items.size() / 4.0))
+	content.add_child(dots)
+	dots.show_page(start / 4)
+	carousel.moved.connect(func(i: int): dots.show_page(i / 4))
+	prev.get_child(0).pressed.connect(func(): carousel.select(carousel.selected - 1))
+	nxt.get_child(0).pressed.connect(func(): carousel.select(carousel.selected + 1))
+	carousel.chosen.connect(func(i: int):
+		Sfx.click()
+		_stage_details(i + (location_count if circuits else 0)))
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	pg.bar.add_child(spacer)
+	_tip_tag(_navigation_tip("circuits" if circuits else "stages"), pg.bar)
+	_focus_rows([carousel.cards, _focus_controls(pg.bar)], carousel.cards[start])
+	await get_tree().process_frame
+	for i in carousel.cards.size():
+		if absi(i - start) <= 2:
+			MenuCards.pop_in(carousel.cards[i], 0.04 + absi(i - start) * 0.08)
+
+
+## A "<" / ">" touch button with the shoulder-button tab under it when a controller is attached.
+func _arrow_button(glyph: String, shoulder: String) -> VBoxContainer:
+	var box := VBoxContainer.new()
+	box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var b := Button.new()
+	b.text = glyph
+	b.focus_mode = Control.FOCUS_NONE
+	b.custom_minimum_size = Vector2(56, 56)
+	b.add_theme_font_size_override("font_size", 28)
+	box.add_child(b)
+	if MenuCards.controller_present():
+		var tab := PaperTheme.tag(shoulder, 15)
+		tab.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		box.add_child(tab)
+	return box
+
+
 func _stage_select(focus_location := -1) -> void:
 	var pg := _page("Choose a location", _car_select)
 	var grid := GridContainer.new()
@@ -564,9 +708,9 @@ func _stage_details(location: int) -> void:
 	var circuit := location >= location_count
 	var circuit_index := location_count * routes + location - location_count
 	var sd: Dictionary = Catalog.stages()[circuit_index] if circuit else Catalog.locations()[location]
-	var pg := _page(sd.name, _stage_select.bind(location))
+	var pg := _page(sd.name, func(): _stage_carousel(circuit, location - (location_count if circuit else 0)))
 	var content: VBoxContainer = pg.content
-	var selection := {"variant": int(Catalog.stages()[Game.stage_index].variant), "time": Game.time_of_day, "laps": Game.circuit_laps}
+	var selection := {"variant": int(Catalog.stages()[Game.stage_index].variant), "time": Game.time_of_day, "laps": Game.circuit_laps, "weather": Game.weather_override}
 	var overview := HBoxContainer.new()
 	overview.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	overview.add_theme_constant_override("separation", 16)
@@ -614,8 +758,7 @@ func _stage_details(location: int) -> void:
 		var index := circuit_index if circuit else location * routes + int(selection.variant)
 		map.show_route(Catalog.stages()[index])
 		preview.texture = Catalog.stage_preview(Catalog.stages()[index])
-		caption.text = "%s    ·    %s" % [Catalog.weather(sd.weather).label,
-			"%.2f km per lap" % (map.route_length / 1000.0) if circuit else "Best %s" % Game.fmt_time(Game.best_time(index))]
+		caption.text = "%.2f km per lap" % (map.route_length / 1000.0) if circuit else "Best %s" % Game.fmt_time(Game.best_time(index))
 	var distance: Array
 	if circuit:
 		var lap_names: Array = range(3, 13).map(func(lap): return str(lap))
@@ -628,6 +771,9 @@ func _stage_details(location: int) -> void:
 			refresh.call())
 	var times := _stage_options(content, "Time of day", time_names, selection.time + 1, func(index: int):
 		selection.time = index - 1)
+	var weather_names := ["Default · %s" % Catalog.weather(sd.weather).label] + Catalog.WEATHER_NAMES
+	var weather := _stage_options(content, "Weather", weather_names, selection.weather + 1, func(index: int):
+		selection.weather = index - 1)
 	var race_option := _button("", func(): pass, 200)
 	race_option.toggle_mode = true
 	var ai_race := Game.mode == Game.Mode.RACE
@@ -642,6 +788,7 @@ func _stage_details(location: int) -> void:
 		if circuit:
 			Game.circuit_laps = int(selection.laps)
 		Game.time_of_day = int(selection.time)
+		Game.weather_override = int(selection.weather)
 		if ai_race:
 			Game.ai_contact = race_option.button_pressed
 		else:
@@ -649,7 +796,7 @@ func _stage_details(location: int) -> void:
 		_start_race(), 200)
 	pg.bar.add_child(start)
 	refresh.call()
-	_focus_rows([distance, times, _focus_controls(pg.bar)], distance[0 if circuit else selection.variant])
+	_focus_rows([distance, times, weather, _focus_controls(pg.bar)], distance[0 if circuit else selection.variant])
 
 
 func _stage_options(parent: VBoxContainer, title: String, options: Array, active: int, on_change: Callable) -> Array:
@@ -713,28 +860,53 @@ func _focus_controls(node: Node) -> Array:
 
 
 func _series_select() -> void:
-	var pg := _page("Choose a championship", _car_select)
+	var pg := _page("Championship", _car_select)
 	var content: VBoxContainer = pg["content"]
-	var first: Button
+	_subtitle(content, "Select Championship")
+	var items: Array = []
 	for i in Catalog.series().size():
 		var se: Dictionary = Catalog.series()[i]
-		var best := ""
+		var sub := "%s\n%d stages" % [se["desc"], se["stages"].size()]
 		if Game.cups.has(se["id"]):
-			best = "   (best finish: P%d)" % int(Game.cups[se["id"]])
-		var idx := i
-		var b := _button("%s  -  %s%s" % [se["name"], se["desc"], best], func():
-			Game.start_championship(idx)
-			_champ_intro(), 0)
-		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		content.add_child(b)
-		if first == null:
-			first = b
-	content.add_child(PaperTheme.tag("Points per stage: 10 - 8 - 6 - 4 - 2 - 1", 20))
-	var rows: Array = []
-	for button in _focus_controls(content):
-		rows.append([button])
-	rows.append(_focus_controls(pg.bar))
-	_focus_rows(rows, first)
+			sub += "  ·  best finish P%d" % int(Game.cups[se["id"]])
+		items.append({"title": se["name"], "title_size": 25, "sub": sub, "sub_size": 15, "size": Vector2(260, 300),
+			"image": Catalog.stage_preview(Catalog.stages()[int(se["stages"][0])]), "badge": "NIGHT" if se.get("night", false) else ""})
+	var holder := HBoxContainer.new()
+	holder.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	holder.add_theme_constant_override("separation", 8)
+	content.add_child(holder)
+	var prev := _arrow_button("<", "L")
+	holder.add_child(prev)
+	var carousel := MenuCards.Carousel.new()
+	carousel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	carousel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	carousel.custom_minimum_size.y = 370
+	carousel.big = Vector2(350, 350)
+	carousel.small = Vector2(230, 270)
+	holder.add_child(carousel)
+	var nxt := _arrow_button(">", "R")
+	holder.add_child(nxt)
+	carousel.setup(items, clampi(Game.series_index, 0, items.size() - 1))
+	var dots := MenuCards.Dots.new()
+	dots.setup(ceili(items.size() / 4.0))
+	content.add_child(dots)
+	dots.show_page(carousel.selected / 4)
+	carousel.moved.connect(func(i: int): dots.show_page(i / 4))
+	prev.get_child(0).pressed.connect(func(): carousel.select(carousel.selected - 1))
+	nxt.get_child(0).pressed.connect(func(): carousel.select(carousel.selected + 1))
+	carousel.chosen.connect(func(i: int):
+		Sfx.click()
+		Game.start_championship(i)
+		_champ_intro())
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	pg.bar.add_child(spacer)
+	_tip_tag("Points per stage: 10 - 8 - 6 - 4 - 2 - 1", pg.bar)
+	_focus_rows([carousel.cards, _focus_controls(pg.bar)], carousel.cards[carousel.selected])
+	await get_tree().process_frame
+	for i in carousel.cards.size():
+		if absi(i - carousel.selected) <= 2:
+			MenuCards.pop_in(carousel.cards[i], 0.04 + absi(i - carousel.selected) * 0.08)
 
 
 func _champ_intro() -> void:
@@ -1185,6 +1357,8 @@ func _parse_args() -> void:
 			Settings.data["camera"] = int(a.substr(9))
 		elif a.begins_with("--tod="):
 			Game.time_of_day = int(a.substr(6))
+		elif a.begins_with("--weather="):
+			Game.weather_override = int(a.substr(10))
 		elif a == "--nohud":
 			_shot["nohud"] = true
 		elif a.begins_with("--thumb="):
@@ -1366,6 +1540,11 @@ func _run_shot() -> void:
 			"title": _title()
 			"cars": _car_select()
 			"stages": _stage_select()
+			"events": _event_type()
+			"carousel": _stage_carousel(false, int(_shot.get("stage", 0)))
+			"circuits": _stage_carousel(true)
+			"series": _series_select()
+			"details": _stage_details(int(_shot.get("stage", 0)))
 			"settings": _settings()
 	var t: float = _shot.get("time", 6.0)
 	var frames := 0

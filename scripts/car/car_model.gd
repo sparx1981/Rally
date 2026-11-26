@@ -504,7 +504,7 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 	if style == "buggy":
 		head = Vector3(0.0, y0 + 1.0, 0.0)
 	return {"root": root, "body": body, "wheels": wheels, "length": L, "width": W, "wheel_r": wr, "head": head,
-		"lamp": Vector3(0, y0 + float(P["nose"]) * 0.7, L * 0.5 + 0.1), "style": style, "beam_mounts": beams, "rear_lenses": rear_lenses}
+		"lamp": Vector3(0, y0 + float(P["nose"]) * 0.7, L * 0.5 + 0.1), "exhaust": Vector3(-W * 0.29, y0 + 0.03, -L * 0.5 - 0.12), "style": style, "beam_mounts": beams, "rear_lenses": rear_lenses}
 
 
 static func _cabin_outline(profile: Dictionary, sill: float) -> PackedVector2Array:
