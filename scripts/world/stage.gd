@@ -135,6 +135,8 @@ func build(stage_def: Dictionary, time_of_day := -1) -> void:
 	_make_gorge_outcrops()
 	_make_road()
 	_make_gantries()
+	if track.rx:
+		_make_rx_surfaces()
 	scenery.setup(track, def, paper_mat, float(Settings.g("density")), float(Settings.g("draw_distance")), bool(Settings.g("popups")))
 	_make_puddles()
 	if track.circuit:
@@ -399,15 +401,17 @@ func _make_road() -> void:
 			var base := v.size()
 			var hy = ROAD_Y + track.road_h_i(i)
 			var slope = (track.road_h_i(mini(i + 1, n - 1)) - track.road_h_i(maxi(i - 1, 0))) / (2.0 * Track.STEP)
-			var low = track.elev[i] - 0.6
-			var tn := Vector3(-slope * track.tang[i].x, 1.0, -slope * track.tang[i].y).normalized()
+			var bank := track.bank_slope(i)
+			var tilt := bank * hw   # banked roads rise on one edge and fall on the other
+			var low = minf(track.elev[i] - 0.6, hy - absf(tilt) - 0.6)
+			var tn := Vector3(-slope * track.tang[i].x - bank * track.nrm[i].x, 1.0, -slope * track.tang[i].y - bank * track.nrm[i].y).normalized()
 			# top-left, top-right, then the side skirts (a built paper ramp where the road rises)
-			v.append(Vector3(l.x, hy, l.y)); nn.append(tn); uv.append(Vector2(0, vv)); col.append(Color.WHITE)
-			v.append(Vector3(r.x, hy, r.y)); nn.append(tn); uv.append(Vector2(1, vv)); col.append(Color.WHITE)
+			v.append(Vector3(l.x, hy + tilt, l.y)); nn.append(tn); uv.append(Vector2(0, vv)); col.append(Color.WHITE)
+			v.append(Vector3(r.x, hy - tilt, r.y)); nn.append(tn); uv.append(Vector2(1, vv)); col.append(Color.WHITE)
 			var on := Vector3(track.nrm[i].x, 0, track.nrm[i].y)
-			v.append(Vector3(l.x, hy, l.y)); nn.append(on); uv.append(Vector2(0, vv)); col.append(Color.BLACK)
+			v.append(Vector3(l.x, hy + tilt, l.y)); nn.append(on); uv.append(Vector2(0, vv)); col.append(Color.BLACK)
 			v.append(Vector3(l.x, low, l.y)); nn.append(on); uv.append(Vector2(0, vv)); col.append(Color.BLACK)
-			v.append(Vector3(r.x, hy, r.y)); nn.append(-on); uv.append(Vector2(1, vv)); col.append(Color.BLACK)
+			v.append(Vector3(r.x, hy - tilt, r.y)); nn.append(-on); uv.append(Vector2(1, vv)); col.append(Color.BLACK)
 			v.append(Vector3(r.x, low, r.y)); nn.append(-on); uv.append(Vector2(1, vv)); col.append(Color.BLACK)
 			if i > i0:
 				var pb := base - 6
@@ -441,6 +445,132 @@ func _quad_idx(idx: PackedInt32Array, v: PackedVector3Array, a: int, b: int, c: 
 		idx.append_array([a, b, c, a, c, d])
 
 
+## Rallycross surface sectors (chalk, clay, granite ...) laid over the tarmac, the Joker lane and kerbs.
+func _make_rx_surfaces() -> void:
+	for pt in track.patches:
+		if not pt.get("rx", false) or pt.kind == "tarmac":
+			continue
+		if pt.lat0 > 0.0 or pt.lat1 < 0.0:
+			continue   # the Joker lane surface is drawn with the lane
+		_surface_strip(float(pt.s0), float(pt.s1), Color(Rallycross.SURFACES[pt.kind].color), str(pt.kind))
+	if not track.joker.is_empty():
+		_make_joker_lane()
+	_make_kerbs()
+
+
+## A coloured strip over the whole road width for one sector. The ends fade over a few metres, and
+## two darker racing grooves run down it.
+func _surface_strip(s0: float, s1: float, col: Color, kind: String) -> void:
+	var tarmac := Color(Rallycross.SURFACES["tarmac"].color)
+	var i0 := track.index_at(s0)
+	var i1 := track.index_at(s1)
+	var chunk := 40
+	var i := i0
+	while i < i1:
+		var j := mini(i + chunk, i1)
+		var b := PaperKit.Builder.new(i)
+		for k in range(i, j):
+			var d0 := minf(track.dist[k] - s0, s1 - track.dist[k])
+			var d1 := minf(track.dist[k + 1] - s0, s1 - track.dist[k + 1])
+			var c0 := tarmac.lerp(col, clampf(d0 / 4.0, 0.0, 1.0))
+			var c1 := tarmac.lerp(col, clampf(d1 / 4.0, 0.0, 1.0))
+			var cm := PaperKit.lin(c0.lerp(c1, 0.5), 1.0)
+			var gm := PaperKit.lin(c0.lerp(c1, 0.5).darkened(0.09), 1.0)
+			var hw0 := track.road_half_width(track.dist[k]) - 0.15
+			var hw1 := track.road_half_width(track.dist[k + 1]) - 0.15
+			# edge, groove, centre, groove, edge
+			var stops := [-1.0, -0.42, -0.30, 0.30, 0.42, 1.0]
+			var cols := [cm, gm, cm, gm, cm]
+			for q in 5:
+				var a0 := _road_point(k, stops[q] * hw0, 0.014)
+				var a1 := _road_point(k + 1, stops[q] * hw1, 0.014)
+				var b0 := _road_point(k, stops[q + 1] * hw0, 0.014)
+				var b1 := _road_point(k + 1, stops[q + 1] * hw1, 0.014)
+				b.quad(a0, a1, b1, b0, Vector3.UP, cols[q])
+		var mi := MeshInstance3D.new()
+		mi.mesh = b.mesh()
+		mi.material_override = paper_mat
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(mi)
+		i = j
+
+
+## World point at a lateral offset from the centre line, following altitude and banking.
+func _road_point(i: int, lat: float, lift: float) -> Vector3:
+	var p := track.pts[i] + track.nrm[i] * lat
+	return Vector3(p.x, ROAD_Y + track.road_h_i(i) + lat * track.bank_slope(i) + lift, p.y)
+
+
+## The Joker lane: its own paper road beside the main one, with skirts down to the ground.
+func _make_joker_lane() -> void:
+	var jk := track.joker
+	var col := Color(Rallycross.SURFACES[jk.surf].color)
+	var side_col := PaperKit.lin(col.darkened(0.45), 1.0)
+	var top := PaperKit.lin(col, 1.0)
+	var groove := PaperKit.lin(col.darkened(0.09), 1.0)
+	var b := PaperKit.Builder.new(91)
+	for k in range(int(jk.i0), int(jk.i1)):
+		var band0 := track.joker_band(track.dist[k])
+		var band1 := track.joker_band(track.dist[k + 1])
+		if is_nan(band0.x) or is_nan(band1.x):
+			continue
+		var stops := [0.0, 0.33, 0.45, 0.55, 0.67, 1.0]
+		for q in 5:
+			var cq := top if q % 2 == 0 else groove
+			var a0 := _road_point(k, lerpf(band0.x, band0.y, stops[q]), 0.0)
+			var a1 := _road_point(k + 1, lerpf(band1.x, band1.y, stops[q]), 0.0)
+			var b0 := _road_point(k, lerpf(band0.x, band0.y, stops[q + 1]), 0.0)
+			var b1 := _road_point(k + 1, lerpf(band1.x, band1.y, stops[q + 1]), 0.0)
+			b.quad(a0, a1, b1, b0, Vector3.UP, cq)
+		# Skirts on both lane edges.
+		for edge in [0, 1]:
+			var e0 := band0.x if edge == 0 else band0.y
+			var e1 := band1.x if edge == 0 else band1.y
+			var t0 := _road_point(k, e0, 0.0)
+			var t1 := _road_point(k + 1, e1, 0.0)
+			var low0 := Vector3(t0.x, t0.y - 0.7, t0.z)
+			var low1 := Vector3(t1.x, t1.y - 0.7, t1.z)
+			var outward := track.nrm[k] * (1.0 if edge == 1 else -1.0)
+			b.quad(t0, t1, low1, low0, Vector3(outward.x, 0, outward.y), side_col)
+	var mi := MeshInstance3D.new()
+	mi.mesh = b.mesh()
+	mi.material_override = paper_mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi)
+
+
+## Sawtooth kerbs on the inside of the marked corners.
+func _make_kerbs() -> void:
+	var b := PaperKit.Builder.new(33)
+	var made := false
+	for range_f: Array in def.rx.get("kerbs", []):
+		var s0 := float(range_f[0]) * track.length
+		var s1 := float(range_f[1]) * track.length
+		var k := s0
+		var n := 0
+		while k < s1:
+			var i := track.index_at(k)
+			var i2 := track.index_at(k + 2.0)
+			var col := Color("#c8553d") if n % 2 == 0 else PaperKit.CREAM
+			for side in [-1.0, 1.0]:
+				var hw := track.road_half_width(k)
+				var hw2 := track.road_half_width(k + 2.0)
+				var a0 := _road_point(i, side * (hw - 1.1), 0.05)
+				var a1 := _road_point(i2, side * (hw2 - 1.1), 0.05)
+				var e0 := _road_point(i, side * (hw - 0.1), 0.05)
+				var e1 := _road_point(i2, side * (hw2 - 0.1), 0.05)
+				b.quad(a0, a1, e1, e0, Vector3.UP, PaperKit.lin(col, 1.0))
+				made = true
+			k += 2.0
+			n += 1
+	if made:
+		var mi := MeshInstance3D.new()
+		mi.mesh = b.mesh()
+		mi.material_override = paper_mat
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(mi)
+
+
 func _make_gantries() -> void:
 	var timing_lines := [[track.start_s, false]] if track.circuit else [[track.start_s, false], [track.finish_s, true]]
 	for pair in timing_lines:
@@ -448,7 +578,7 @@ func _make_gantries() -> void:
 		var i := track.index_at(s)
 		var p := track.pts[i]
 		var mi := MeshInstance3D.new()
-		mi.mesh = Pieces.arch(track.width + 1.4, pair[1])
+		mi.mesh = Pieces.arch(track.road_half_width(s) * 2.0 + 1.4, pair[1])
 		mi.material_override = paper_mat
 		mi.position = Vector3(p.x, track.elev[i], p.y)
 		mi.rotation.y = track.heading_at(i)
@@ -457,7 +587,7 @@ func _make_gantries() -> void:
 		# Painted line across the road.
 		var line := MeshInstance3D.new()
 		var bm := BoxMesh.new()
-		bm.size = Vector3(track.width, 0.01, 0.5)
+		bm.size = Vector3(track.road_half_width(s) * 2.0, 0.01, 0.5)
 		line.mesh = bm
 		var lm := StandardMaterial3D.new()
 		lm.albedo_color = Color("#efe3c8")
@@ -574,7 +704,7 @@ func _make_hazards() -> void:
 					if h < 0.25:
 						continue
 					for side in [1.0, -1.0]:
-						var q = track.pts[j] + track.nrm[j] * side * (track.width * 0.5 - 0.15)
+						var q = track.pts[j] + track.nrm[j] * side * (track.road_half_width(s_off) - 0.15)
 						var post := MeshInstance3D.new()
 						var bm := BoxMesh.new()
 						bm.size = Vector3(0.18, h, 0.18)
@@ -584,6 +714,8 @@ func _make_hazards() -> void:
 						post.position = Vector3(q.x, track.elev[j] - 0.6 + (h + 0.6) * 0.5, q.y)
 						add_child(post)
 	for pt in track.patches:
+		if pt.get("rx", false):
+			continue   # rallycross sectors are drawn by _make_rx_surfaces
 		var b := PaperKit.Builder.new(rng.randi())
 		var len_s: float = float(pt["s1"]) - float(pt["s0"])
 		var col: Color = {"gravel": Color(def["pal"]["road"]).lightened(0.18), "mud": Color("#86694c"), "ice": Color("#c9dcea"), "deep snow": Color("#f4f5f8")}[pt["kind"]]
@@ -624,31 +756,34 @@ const BARRIER_LAT := 0.75   # metres outside the road edge
 
 ## Armco (galvanised paper strip with a pressed groove on stubby posts) and post-and-rail fences.
 func _make_barriers() -> void:
-	var hw := track.width * 0.5 + BARRIER_LAT
 	for bar in track.barriers:
 		var s0: float = bar["s0"]
 		var s1: float = bar["s1"]
 		var side: float = bar["side"]
 		if bar["kind"] in ["parapet", "tunnel"]:
 			continue   # drawn with its bridge
-		var armco: bool = bar["kind"] == "armco"
+		var kind: String = bar["kind"]
+		var armco: bool = kind == "armco"
 		var s := s0
 		while s < s1:
 			var s_end := minf(s + 60.0, s1)
 			var b := PaperKit.Builder.new(int(s))
-			var step := 2.0
+			var step := 2.0 if not (kind in ["tyre", "jersey", "island"]) else 3.0
 			var k := s
 			var post_every := 4.0 if armco else 3.0
 			var next_post := k
 			while k < s_end:
+				var k2 := minf(k + step, s_end)
 				var i0 := track.index_at(k)
-				var i1 := track.index_at(minf(k + step, s_end))
-				var p0 := track.pts[i0] + track.nrm[i0] * side * hw
-				var p1 := track.pts[i1] + track.nrm[i1] * side * hw
-				var y0 := track.elev[i0] - 0.1
-				var y1 := track.elev[i1] - 0.1
-				if bar["kind"] == "wall":
+				var i1 := track.index_at(k2)
+				var p0 := track.pts[i0] + track.nrm[i0] * side * track.barrier_wall(bar, k)
+				var p1 := track.pts[i1] + track.nrm[i1] * side * track.barrier_wall(bar, k2)
+				var y0 := track.elev[i0] - 0.1 + track.bank_slope(i0) * side * track.barrier_wall(bar, k)
+				var y1 := track.elev[i1] - 0.1 + track.bank_slope(i1) * side * track.barrier_wall(bar, k2)
+				if kind == "wall":
 					_stone_wall(b, p0, p1, y0, y1, track.nrm[i0] * side, k)
+				elif kind in ["tyre", "jersey", "island", "hay"]:
+					_rx_wall(b, kind, p0, p1, y0, y1, track.nrm[i0] * side, int(k / step))
 				elif armco:
 					var lo := 0.42
 					var hi := 0.78
@@ -658,19 +793,52 @@ func _make_barriers() -> void:
 				else:
 					for rh in [0.45, 0.95]:
 						b.slab(Vector3(p0.x, y0 + rh + 0.09, p0.y), Vector3(p1.x, y1 + rh + 0.09, p1.y), Vector3(p1.x, y1 + rh - 0.04, p1.y), Vector3(p0.x, y0 + rh - 0.04, p0.y), 0.06, Color("#9a7552"))
-				if k >= next_post and bar["kind"] != "wall":
+				if k >= next_post and (kind == "armco" or kind == "fence"):
 					var ph := 0.85 if armco else 1.15
 					var pc := Color("#6d7174") if armco else Color("#6e5038")
 					var pp := p0 + track.nrm[i0] * side * 0.08
 					b.box(Vector3(pp.x, y0 + ph * 0.5 - 0.2, pp.y), Vector3(0.14, ph + 0.4, 0.14), Transform3D(), pc)
 					next_post += post_every
-				k += step
+				k = k2
 			var mi := MeshInstance3D.new()
 			mi.mesh = b.mesh()
 			mi.material_override = paper_mat
 			mi.position = Vector3.ZERO
 			add_child(mi)
 			s = s_end
+
+
+## Rallycross edge walls: belted tyre stacks, FIA concrete with a catch fence, foam blocks, hay.
+func _rx_wall(b: PaperKit.Builder, kind: String, p0: Vector2, p1: Vector2, y0: float, y1: float, out: Vector2, n: int) -> void:
+	var dir := p1 - p0
+	var seg := dir.length()
+	if seg < 0.01:
+		return
+	var yaw := atan2(dir.x, dir.y)
+	var frame := Transform3D(Basis(Vector3.UP, yaw), Vector3((p0.x + p1.x) * 0.5, (y0 + y1) * 0.5, (p0.y + p1.y) * 0.5))
+	match kind:
+		"tyre":
+			# Three tyres high, with a conveyor-belt face in a lighter tone and a painted band.
+			b.box(Vector3(0, 0.50, 0), Vector3(0.95, 1.0, seg + 0.02), frame, Color("#2d2c30"), Color("#4a4a52"))
+			var face := Vector3(out.x, 0, out.y).dot(Vector3(frame.basis.x)) 
+			var face_sign := -1.0 if face > 0.0 else 1.0   # the belted face looks at the road
+			b.box(Vector3(face_sign * 0.49, 0.5, 0), Vector3(0.05, 0.62, seg), frame, Color("#8f8b84"))
+			if n % 3 == 0:
+				b.box(Vector3(face_sign * 0.50, 0.85, 0), Vector3(0.05, 0.14, seg), frame, Color("#c8553d") if n % 6 == 0 else PaperKit.CREAM)
+		"jersey":
+			b.box(Vector3(0, 0.50, 0), Vector3(0.55, 1.0, seg + 0.02), frame, Color("#bfbab0"), Color("#d0cbc0"))
+			b.box(Vector3(0, 0.12, 0), Vector3(0.75, 0.24, seg + 0.02), frame, Color("#aaa59b"))
+			# Catch fence on posts above the block.
+			if n % 2 == 0:
+				b.box(Vector3(0, 1.75, 0), Vector3(0.07, 1.5, 0.07), frame, Color("#5a5d62"))
+			b.box(Vector3(0, 2.2, 0), Vector3(0.04, 0.5, seg), frame, Color("#8d9298"))
+			b.box(Vector3(0, 1.45, 0), Vector3(0.04, 0.5, seg), frame, Color("#8d9298"))
+		"island":
+			# Interlocking foam blocks, alternating red and white.
+			b.box(Vector3(0, 0.55, 0), Vector3(1.0, 1.1, seg + 0.02), frame, Color("#c8553d") if n % 2 == 0 else PaperKit.CREAM)
+		"hay":
+			b.box(Vector3(0, 0.45, 0), Vector3(1.1, 0.9, seg + 0.02), frame, Color("#d6b45a"), Color("#e6c870"))
+			b.box(Vector3(0, 0.45, 0), Vector3(1.12, 0.07, seg + 0.04), frame, Color("#b8963e"))
 
 
 ## Dry-stone wall: a rough grey core, irregular face stones in mixed tones on both faces, and a

@@ -21,6 +21,13 @@ var grid := {}
 var start_s := 14.0
 var finish_s := 0.0
 var circuit := false
+var rx := false                      # a rallycross circuit (see RxBuilder)
+var widths := PackedFloat32Array()   # road width per sample (rallycross); `width` is then the maximum
+var banks := PackedFloat32Array()    # cross-slope per sample, metres of height per metre of lateral offset
+var joker := {}                      # alternative lane: s0, s1, side, lo/hi per sample, gap per sample
+var rx_info := {}
+var patches_unsorted := false        # rallycross patches overlap; the last match wins
+var _barrier_cells := {}
 var _sample_step := STEP
 
 # Hazards (rally-game staples: crests, jumps, water splashes, hay-bale chicanes, loose surfaces).
@@ -47,6 +54,9 @@ static func cache_key(seed_v: int, target_len: float, twist: float) -> String:
 
 ## Build the same road data for racing, the route map and elevation preview.
 func build_stage_route(stage_def: Dictionary, surface_kind: String) -> void:
+	if stage_def.get("rx", false):
+		RxBuilder.build(self, stage_def)
+		return
 	if stage_def.get("circuit", false):
 		_build_sand_circuit(float(stage_def.width))
 		return
@@ -563,7 +573,7 @@ func speed_profile(a_lat: float, a_brake: float, a_acc: float, v_top: float) -> 
 		match f["type"]:
 			"chicane": cap = 13.0
 			"splash": cap = 17.0
-			"jump": cap = 26.0
+			"jump": cap = float(f.get("cap", 26.0))
 		for i in range(index_at(float(f["s0"]) - 6.0), index_at(float(f["s1"]) + 4.0) + 1):
 			v[i] = minf(v[i], cap)
 	for p in patches:
@@ -660,7 +670,10 @@ func road_h(s: float) -> float:
 
 ## Height of whatever the car stands on: the road inside its edges, the landscape outside.
 func surface_height(p: Vector2, s: float, lat: float) -> float:
-	if absf(lat) <= road_half_width(s) + 0.1:
+	if rx:
+		if on_road_at(s, lat, 0.1):
+			return road_h(s) + clampf(lat, -road_extent(s), road_extent(s)) * banks[index_at(s)]
+	elif absf(lat) <= road_half_width(s) + 0.1:
 		return road_h(s)
 	if terrain:
 		return terrain.height(p)
@@ -819,6 +832,13 @@ func road_h_i(i: int) -> float:
 
 
 func patch_at(s: float, lat: float) -> Dictionary:
+	if patches_unsorted:
+		s = route_station(s)
+		var found := {}
+		for p in patches:
+			if s >= p["s0"] and s <= p["s1"] and lat >= p["lat0"] and lat <= p["lat1"]:
+				found = p
+		return found
 	for p in patches:
 		if s < p["s0"]:
 			return {}
@@ -991,6 +1011,8 @@ func build_bridges(seed_v: int, kinds: Array) -> void:
 
 
 func road_half_width(s: float) -> float:
+	if not widths.is_empty():
+		return widths[index_at(s)] * 0.5
 	var br := bridge_at(s, 12.0)
 	if br.get("kind") == "stone":
 		var approach := absf(s - float(br.s)) - float(br.half)
@@ -1124,6 +1146,76 @@ func _add_cliff_run(s0: float, s1: float, side: float) -> void:
 
 
 ## Barrier at s on the given side of the road, or {}.
+## Joker lane band (signed lateral lo, hi) at s, or Vector2(NAN, NAN).
+func joker_band(s: float) -> Vector2:
+	if joker.is_empty():
+		return Vector2(NAN, NAN)
+	var i := index_at(s)
+	if i < joker.i0 or i > joker.i1:
+		return Vector2(NAN, NAN)
+	var lo: float = joker.lo[i]
+	var hi: float = joker.hi[i]
+	if is_nan(lo):
+		return Vector2(NAN, NAN)
+	return Vector2(lo, hi) * float(joker.side) if float(joker.side) > 0.0 else Vector2(-hi, -lo)
+
+
+## True on the road proper or on the Joker lane (not on the island between them).
+func on_road_at(s: float, lat: float, margin := 0.2) -> bool:
+	if absf(lat) <= road_half_width(s) + margin:
+		return true
+	var band := joker_band(s)
+	return not is_nan(band.x) and lat >= band.x - margin and lat <= band.y + margin
+
+
+## Outermost drivable lateral offset at s (used to bound the banked surface).
+func road_extent(s: float) -> float:
+	var band := joker_band(s)
+	var hw := road_half_width(s)
+	if is_nan(band.x):
+		return hw
+	return maxf(hw, maxf(absf(band.x), absf(band.y)))
+
+
+## Cross-slope at sample i (metres of height per metre sideways).
+func bank_slope(i: int) -> float:
+	return banks[i] if not banks.is_empty() else 0.0
+
+
+## Lateral distance of a barrier's wall from the centre line at s.
+func barrier_wall(bar: Dictionary, s: float) -> float:
+	match str(bar.get("ref", "")):
+		"road":
+			return road_half_width(s) + float(bar.get("offset", 0.75))
+		"lane_out":
+			var band := joker_band(s)
+			return (maxf(absf(band.x), absf(band.y)) if not is_nan(band.x) else road_half_width(s)) + float(bar.get("offset", 0.75))
+		"lane_in":
+			var b := joker_band(s)
+			return (minf(absf(b.x), absf(b.y)) - float(bar.get("offset", 0.75)) if not is_nan(b.x) else road_half_width(s) + 0.75)
+	return float(bar.get("wall", width * 0.5 + Stage.BARRIER_LAT))
+
+
+func index_barriers() -> void:
+	_barrier_cells = {}
+	for b in barriers:
+		for cell in range(int(float(b["s0"]) / 12.0), int(float(b["s1"]) / 12.0) + 1):
+			if not _barrier_cells.has(cell):
+				_barrier_cells[cell] = []
+			_barrier_cells[cell].append(b)
+
+
+## Every barrier on this side of the road at s (a Joker section has the island and the lane wall).
+func barriers_at(s: float, side: float) -> Array:
+	var out: Array = []
+	s = route_station(s)
+	var source: Array = _barrier_cells.get(int(s / 12.0), []) if rx else barriers
+	for b in source:
+		if s >= float(b["s0"]) and s <= float(b["s1"]) and float(b["side"]) == side:
+			out.append(b)
+	return out
+
+
 func barrier_at(s: float, side: float) -> Dictionary:
 	for b in barriers:
 		if s >= float(b["s0"]) and s <= float(b["s1"]) and float(b["side"]) == side:

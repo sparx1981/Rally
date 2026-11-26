@@ -253,6 +253,10 @@ const ROUTE_SCENERY := {
 }
 
 ## 44 stages: every location as a Sprint (4 km), Classic (8 km), Long (10 km) and Marathon (15 km).
+## The 12 rallycross circuits are built but not yet released: flip to true to list them.
+const RX_ENABLED := false
+
+
 static func stages() -> Array:
 	if _stages.is_empty():
 		for li in locations().size():
@@ -281,7 +285,35 @@ static func stages() -> Array:
 			"barriers": [], "kinds": {"tree": 6, "rock": 5, "bush": 2, "tuft": 3},
 			"desc": "A sandy figure-eight with grandstands, a bridge crossing and a shallow ford."}, true)
 		_stages.append(arena)
+		var rx_index := 0
+		for c: Dictionary in (Rallycross.circuits() if RX_ENABLED else []):
+			var kit: Dictionary = Rallycross.KITS[c.kit]
+			var base: Dictionary = {}
+			for loc: Dictionary in locations():
+				if loc.id == kit.base:
+					base = loc.duplicate(true)
+			base.merge({"id": c.id, "loc_id": "rx_" + str(c.id), "name": c.name, "variant_name": "Rallycross", "loc": -1,
+				"variant": 0, "circuit": true, "rx": c, "length": float(c.length), "width": 16.0, "seed": 7000 + rx_index * 31,
+				"elev": {"hills": 3.0}, "barriers": [], "bridges": [], "kinds": kit.kinds.duplicate(), "desc": c.desc,
+				"weather": c.weather, "tod": 0, "stacked": false}, true)
+			base.erase("coast")
+			base.erase("forest")
+			base.erase("leaves")
+			base.pal = base.pal.duplicate()
+			base.pal["road"] = Color("#7b7872")
+			base.pal["rut"] = Color("#5d5a55")
+			_stages.append(base)
+			rx_index += 1
 	return _stages
+
+
+## Stage indices of the 12 rallycross circuits (Sandstone Eight stays in the stage list).
+static func rallycross_indices() -> Array[int]:
+	var out: Array[int] = []
+	for i in stages().size():
+		if stages()[i].has("rx"):
+			out.append(i)
+	return out
 
 
 static func stage_preview(stage: Dictionary) -> Texture2D:

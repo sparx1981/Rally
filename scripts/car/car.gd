@@ -525,6 +525,7 @@ func top_speed() -> float:
 
 ## Wheel forces are expressed as acceleration per unit vehicle mass.
 var wheel_grip := PackedFloat32Array([1,1,1,1])
+var _tyre_dirt := 0.0   # 0..1: how much loose surface the tyres carry onto tarmac
 var wheel_load := PackedFloat32Array([0.25,0.25,0.25,0.25])
 var wheel_height := PackedFloat32Array([0,0,0,0])
 var wheel_loose := PackedByteArray([0,0,0,0])
@@ -575,7 +576,7 @@ func _sample_wheels(dt: float) -> void:
 		var offset := forward * point.z + right * point.x
 		var station := clampf(track.route_station(s + offset.dot(course)), 0.0, track.length)
 		var lateral := lat + offset.dot(normal)
-		var loose := absf(lateral) > track.road_half_width(station)
+		var loose := not track.on_road_at(station, lateral, 0.0)
 		var patch := track.patch_at(station, lateral)
 		var label: String = patch.get("kind", "verge" if loose else "road")
 		wheel_surface[i] = label
@@ -689,7 +690,7 @@ func step(dt: float) -> void:
 	track_i = hit[0]
 	s = hit[1]
 	lat = hit[2]
-	on_road = absf(lat) <= track.road_half_width(s) + 0.2
+	on_road = track.on_road_at(s, lat)
 	var wgrip := stage.grip()
 	var offroad: float = stats.get("offroad", 0.3)
 	surface = wgrip * (1.0 if on_road else lerpf(0.8, 0.97, offroad))
@@ -702,6 +703,12 @@ func step(dt: float) -> void:
 		surface *= float(patch["grip"])
 		patch_drag = float(patch["drag"])
 		patch_drag *= lerpf(1.0, 0.4, offroad)
+		if patch.get("rx", false):
+			# Dirty tyres: leaving loose ground onto tarmac starts at 0.88 grip and recovers over seconds.
+			var loose_rx: bool = patch["kind"] != "tarmac"
+			_tyre_dirt = move_toward(_tyre_dirt, 1.0 if loose_rx else 0.0, dt / (0.4 if loose_rx else 3.2))
+			if not loose_rx:
+				surface *= 1.0 - 0.12 * _tyre_dirt
 	# Water splash: heavy drag, a burst of spray.
 	var water := track.inside_ford(pos, s)
 	if water and not in_water and speed() > 1.0:
@@ -785,6 +792,11 @@ func step(dt: float) -> void:
 	r = right_axis()
 	vl = vel.dot(f)
 	vt = vel.dot(r)
+	if track.rx and grounded > 0.0:
+		# Banking: gravity pulls the car down the cross-slope, so a banked corner asks less of the tyres.
+		var downhill := -track.nrm[track_i] * 9.0 * clampf(track.bank_slope(track_i), -0.25, 0.25)
+		vt += downhill.dot(r) * dt
+		vl += downhill.dot(f) * dt
 	var lateral_wish := vt / dt
 	var applied_front := clampf(lateral_wish * front_weight, -lateral_capacity.x, lateral_capacity.x)
 	var applied_rear := clampf(lateral_wish - applied_front, -lateral_capacity.y, lateral_capacity.y)
