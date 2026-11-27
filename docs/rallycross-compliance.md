@@ -261,3 +261,10 @@ All 12 circuits complete 3 laps. A human player is not affected by the AI's lane
 - Cockpit: gloved hands at 10 and 2 o'clock turning with the wheel (render-checked).
 - Sunrise stages get six stacked low mist banks instead of three. Not visually compared.
 - Fence, armco and wall chunks drop out beyond 240-480 m depending on quality tier.
+
+## Twenty-third pass: disc glow tuning, results-screen idle, QA
+
+- Disc heat builds ~2x faster and decays at 0.085/s (was 0.18/s): a hard stop glows for roughly 8-12 s instead of ~5 s. Daylight strength 0.35 -> 0.85, glow colour x2, plus a soft bloom sprite per wheel.
+- Results screen: 18 s after the finish the 3D world behind the results page is frozen, frame rate capped at 20, 3D scale at most 0.75 and dynamic resolution paused; restored when leaving the page.
+- Dev: `--bench --soak [--teleport --manualcam --grid --soakfor=N --soakevery=N --soakshots]` leaves a finished race running and logs node/object/memory growth; `--heat`, `--sidecam` for brake-disc close-ups.
+- The reported crash could NOT be reproduced in the soak (node count, objects and memory flat for 10 minutes of results time); the freeze above is a mitigation, not a confirmed root-cause fix.

@@ -59,9 +59,31 @@ func _ready() -> void:
 # --- world ------------------------------------------------------------------------------------------
 
 func _clear_race() -> void:
+	if _results_frozen:
+		_results_frozen = false
+		if governor:
+			governor.set_process(true)
+		Settings.apply()   # restore the chosen frame rate and render scale
 	if race:
 		race.queue_free()
 		race = null
+
+
+## Results screen left open: after the finish camera has had its moment, stop simulating the world behind it
+## and idle the renderer (low frame rate, lower 3D scale, no dynamic-resolution changes) so a forgotten
+## results page can sit there for hours without heat, memory churn or flicker.
+var _results_frozen := false
+
+
+func _freeze_results_world(r: Race) -> void:
+	if r == null or not is_instance_valid(r) or r != race or _results_frozen:
+		return
+	_results_frozen = true
+	r.process_mode = Node.PROCESS_MODE_DISABLED
+	if governor:
+		governor.set_process(false)
+	Engine.max_fps = 20
+	get_viewport().scaling_3d_scale = minf(get_viewport().scaling_3d_scale, 0.75)
 
 
 func _start_attract(stage_i: int, startup := false) -> void:
@@ -1448,6 +1470,8 @@ func _on_race_finished(result: Dictionary) -> void:
 		race.set_overlay_visible(false)
 	_last_result = result
 	Haptics.stop()
+	var finished_race := race
+	get_tree().create_timer(18.0).timeout.connect(func(): _freeze_results_world(finished_race))
 	match Game.mode:
 		Game.Mode.TIME_TRIAL:
 			_tt_results(result)
@@ -1708,6 +1732,40 @@ func _lineup() -> void:
 	post.visible = false
 
 
+## Leave the results screen running: finish a race, then keep the world simulating and log growth.
+func _run_soak(list: Array) -> void:
+	var secs := _arg_float("--soakfor=", 300.0)
+	for si in list:
+		Game.mode = Game.Mode.RACE if (Catalog.stages()[si].has("rx") or OS.get_cmdline_user_args().has("--grid")) else Game.Mode.TIME_TRIAL
+		Game.stage_index = si
+		await _start_race()
+		var res := {}
+		race.finished.connect(func(r): res["r"] = r)
+		var frames := 0
+		if OS.get_cmdline_user_args().has("--teleport"):
+			race.player.place_at(race.stage.track.finish_s - 70.0, 0.0)
+		while res.is_empty() and frames < 30 * 1500:
+			await get_tree().process_frame
+			frames += 1
+		print("SOAK stage=%d finished=%s after %d frames" % [si, str(not res.is_empty()), frames])
+		if not res.is_empty():
+			_on_race_finished(res["r"])
+		if OS.get_cmdline_user_args().has("--manualcam"):
+			race.autopilot = false   # like a real player: the orbit camera runs behind the results page
+		var t0 := Time.get_ticks_msec()
+		var n := 0
+		var last_log := 0.0
+		while float(n) / 30.0 < secs:
+			await get_tree().process_frame
+			n += 1
+			if float(n) / 30.0 - last_log >= _arg_float("--soakevery=", 30.0):
+				last_log = float(n) / 30.0
+				if OS.get_cmdline_user_args().has("--soakshots"):
+					get_viewport().get_texture().get_image().save_png("/tmp/soak_%d_%03d.png" % [si, int(last_log)])
+				var pl: Car = race.player
+				print("SOAK stage=%d t=%ds nodes=%d objs=%d mem=%.0fMB orbit=%.0f race_t=%.0f player s=%.0f v=%.1f pos=%s cam=%s fps=%d draw=%d prims=%d" % [si, int(last_log), int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)), int(Performance.get_monitor(Performance.OBJECT_COUNT)), Performance.get_monitor(Performance.MEMORY_STATIC) / 1048576.0, race._orbit_t, race.race_time, pl.s, pl.v_long, str(pl.global_position.snapped(Vector3.ONE * 0.1)), str(race.camera.global_position.snapped(Vector3.ONE * 0.1)), int(Performance.get_monitor(Performance.TIME_FPS)), int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)), int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME))])
+
+
 func _run_bench() -> void:
 	# Headless logic check: every stage, autopilot to the finish, in each mode.
 	_shot["autopilot"] = true
@@ -1724,6 +1782,10 @@ func _run_bench() -> void:
 		elif a == "--rx":
 			list = Catalog.rallycross_indices()
 	Game.circuit_laps = 3
+	if OS.get_cmdline_user_args().has("--soak"):
+		await _run_soak(list)
+		get_tree().quit()
+		return
 	if OS.get_cmdline_user_args().has("--rxbump"):
 		await _run_rxbump(list)
 		return

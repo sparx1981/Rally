@@ -449,6 +449,7 @@ var _spark_t := 0.0
 var dirt := 0.0
 var dust_film := 0.0
 var _disc_heat := 0.0
+var _disc_bloom: Array = []
 var _disc_glow: Array = []
 var _dirt_nodes: Array = []
 
@@ -514,6 +515,31 @@ func _make_brake_glow() -> void:
 		disc.visible = false
 		wnode.add_child(disc)
 		_disc_glow.append(disc)
+		# A soft additive bloom around the disc so the glow reads from the chase cameras, not only up close.
+		var bloom := Sprite3D.new()
+		var gt := GradientTexture2D.new()
+		gt.fill = GradientTexture2D.FILL_RADIAL
+		gt.fill_from = Vector2(0.5, 0.5)
+		gt.fill_to = Vector2(1.0, 0.5)
+		gt.width = 64
+		gt.height = 64
+		var gr := Gradient.new()
+		gr.colors = PackedColorArray([Color(1, 0.55, 0.18, 1), Color(1, 0.3, 0.05, 0.35), Color(1, 0.2, 0.0, 0)])
+		gr.offsets = PackedFloat32Array([0.0, 0.45, 1.0])
+		gt.gradient = gr
+		bloom.texture = gt
+		bloom.pixel_size = wheel_r * 2.6 / 64.0
+		bloom.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		bloom.shaded = false
+		bloom.double_sided = true
+		bloom.transparent = true
+		bloom.no_depth_test = false
+		bloom.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		bloom.material_override = null
+		bloom.position = disc.position + Vector3(signf(wnode.position.x) * 0.12, 0.0, 0.0)
+		bloom.visible = false
+		wnode.add_child(bloom)
+		_disc_bloom.append(bloom)
 
 
 func disc_heat() -> float:
@@ -523,15 +549,21 @@ func disc_heat() -> float:
 func _update_brake_glow(delta: float) -> void:
 	if _disc_glow.is_empty():
 		return
-	_disc_heat = clampf(_disc_heat + service_brake * clampf(speed() / 25.0, 0.0, 1.5) * delta * 0.9 - delta * 0.18, 0.0, 1.0)
+	_disc_heat = clampf(_disc_heat + service_brake * clampf(speed() / 22.0, 0.0, 1.6) * delta * 1.7 - delta * 0.085, 0.0, 1.0)
 	if OS.get_cmdline_user_args().has("--heat"):
 		_disc_heat = 1.0
 	var night := stage.tod > 0 or stage.changing_light()
-	var level := _disc_heat * (1.0 if night else 0.35)
+	var level := _disc_heat * (1.0 if night else 0.85)
 	for d: MeshInstance3D in _disc_glow:
-		d.visible = level > 0.06
+		d.visible = level > 0.05
 		if d.visible:
-			(d.material_override as StandardMaterial3D).albedo_color = Color(1.0, 0.42, 0.1) * (level * 1.4)
+			(d.material_override as StandardMaterial3D).albedo_color = Color(1.0, 0.45, 0.12) * (level * 2.0)
+	for bsp: Sprite3D in _disc_bloom:
+		bsp.visible = level > 0.12
+		if bsp.visible:
+			var a := clampf((level - 0.12) * 1.3, 0.0, 1.0) * (0.95 if night else 0.7)
+			bsp.modulate = Color(1, 1, 1, a)
+			bsp.modulate.a = a
 
 
 func _make_dirt() -> void:
