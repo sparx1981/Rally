@@ -502,14 +502,14 @@ func _make_brake_glow() -> void:
 		var wnode: Node3D = _wheels[i]
 		var disc := MeshInstance3D.new()
 		var cm := CylinderMesh.new()
-		cm.top_radius = wheel_r * 0.55
-		cm.bottom_radius = wheel_r * 0.55
+		cm.top_radius = wheel_r * 0.5
+		cm.bottom_radius = wheel_r * 0.5
 		cm.height = 0.02
 		cm.radial_segments = 14
 		disc.mesh = cm
 		disc.material_override = m.duplicate()
 		disc.rotation.z = PI * 0.5
-		disc.position = Vector3(0.0, 0.0, 0.0)
+		disc.position = Vector3(signf(wnode.position.x) * 0.0925, 0.0, 0.0)
 		disc.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		disc.visible = false
 		wnode.add_child(disc)
@@ -524,6 +524,8 @@ func _update_brake_glow(delta: float) -> void:
 	if _disc_glow.is_empty():
 		return
 	_disc_heat = clampf(_disc_heat + service_brake * clampf(speed() / 25.0, 0.0, 1.5) * delta * 0.9 - delta * 0.18, 0.0, 1.0)
+	if OS.get_cmdline_user_args().has("--heat"):
+		_disc_heat = 1.0
 	var night := stage.tod > 0 or stage.changing_light()
 	var level := _disc_heat * (1.0 if night else 0.35)
 	for d: MeshInstance3D in _disc_glow:

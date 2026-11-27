@@ -155,6 +155,10 @@ func follow(dt: float) -> void:
 	_look = _look.lerp(look, clampf(dt * 8.0, 0.0, 1.0))
 	global_position = _pos + sh * 0.25
 	look_at(_look + sh * 0.12, Vector3.UP)
+	if OS.get_cmdline_user_args().has("--sidecam"):
+		var tb := target.global_basis
+		global_position = target.global_position + tb.x * 3.4 + tb.z * 1.6 + Vector3(0, 0.55, 0)
+		look_at(target.global_position + tb.z * 1.1 + Vector3(0, 0.3, 0), Vector3.UP)
 	_apply_roll(dt)
 
 
@@ -196,6 +200,10 @@ func _follow_low(dt: float, v: Dictionary, sh: Vector3) -> void:
 	fov = float(v["fov"]) + _speed_fov * 7.0
 	global_position = _pos + sh * 0.08
 	look_at(_look + sh * 0.05, Vector3.UP)
+	if OS.get_cmdline_user_args().has("--sidecam"):
+		var tb := target.global_basis
+		global_position = target.global_position + tb.x * 4.2 + tb.z * 1.6 + Vector3(0, 0.6, 0)
+		look_at(target.global_position + tb.z * 1.3 + Vector3(0, 0.3, 0), Vector3.UP)
 	_apply_roll(dt)
 
 
