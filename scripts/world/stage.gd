@@ -77,6 +77,7 @@ var headlight_level := 0.0
 var _sky_mat: ShaderMaterial
 var helicopter: Helicopter
 var _reflect_t := 0.0
+var _lamp_level := 0.0
 var _head_cache := PackedVector3Array()
 
 
@@ -165,7 +166,8 @@ func build(stage_def: Dictionary, time_of_day := -1) -> void:
 		rx_props = RxProps.new()
 		rx_props.name = "RallycrossProps"
 		add_child(rx_props)
-		rx_props.build(track, def, paper_mat, tod > 0)
+		rx_props.build(track, def, paper_mat, tod > 0 or changing_light())
+		rx_props.set_lamp_level(_lamp_level)
 		for sd: Array in rx_props.solids:
 			var sp: Vector2 = sd[0]
 			var cell := Vector2i(floori(sp.x / 8.0), floori(sp.y / 8.0))
@@ -312,7 +314,7 @@ func street_light_at(p: Vector2) -> float:
 
 ## Rain at dusk or night: feed the nearest lamp heads to the road so they mirror in the wet surface.
 func _update_wet_reflections(focus: Vector3) -> void:
-	if kind() != "rain" or tod == 0 or not LightHalo.enabled():
+	if kind() != "rain" or _lamp_level < 0.3 or not LightHalo.enabled():
 		road_mat.set_shader_parameter("refl", 0.0)
 		return
 	if _head_cache.is_empty():
@@ -336,10 +338,7 @@ func _update_wet_reflections(focus: Vector3) -> void:
 		pts.append(Vector3.ZERO)
 	road_mat.set_shader_parameter("lamp_pts", pts)
 	road_mat.set_shader_parameter("lamp_n", n)
-	var level := 1.0
-	if scenery and not rx_props:
-		level = scenery.lamp_level
-	road_mat.set_shader_parameter("refl", level if n > 0 else 0.0)
+	road_mat.set_shader_parameter("refl", _lamp_level if n > 0 else 0.0)
 
 
 func changing_light() -> bool:
@@ -425,8 +424,11 @@ func _apply_lighting(phase: float) -> void:
 		material.set_shader_parameter("wrap", wx.wrap)
 	paper_mat.set_shader_parameter("glow", wx.glow)
 	headlight_level = 0.34 * smoothstep(0.42, 1.0, phase) + 0.66 * darkness
+	_lamp_level = smoothstep(0.45, 1.26, phase)
 	if scenery:
-		scenery.lamp_level = smoothstep(0.45, 1.26, phase)
+		scenery.lamp_level = _lamp_level
+	if rx_props:
+		rx_props.set_lamp_level(_lamp_level)
 
 
 func _sky_direction(elevation: float, azimuth: float) -> Vector3:

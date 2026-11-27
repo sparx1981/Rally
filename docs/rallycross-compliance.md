@@ -191,3 +191,8 @@ All 12 circuits complete 3 laps. A human player is not affected by the AI's lane
 - Soft contact shadows in front of tyre walls, concrete and hay, and a stronger softer shadow under cars.
 - Sponsor boards hang on long straight runs of tyre wall, concrete, Armco and fence (fictional sponsors, at most 70 per stage).
 - Procedural ground detail (`shaders/surface.gdshaderinc`): tarmac aggregate, cracks and patches; fine and coarse gravel pebbles; sand ripples; packed dirt and clay; churned mud with puddles; cracked ice; snow drifts with glitter. Used for rallycross sectors, the Joker lane, rally gravel/mud/ice/snow patches and the base road. Off with "Paper fibre & grain detail" off.
+
+## Thirteenth pass
+
+- Night lights in the sunset/sunrise journey: track lamps, floodlight glow and window glow now follow the fading light (they only existed for fixed dusk/night before), headlights are brighter at night, and wet-road reflections follow the same level.
+- Tyre walls: a hard hit (over about 4 m/s into the wall) knocks one to three tyres off. They tumble onto the road, settle, and are kicked on by passing cars (at most 18 loose tyres).

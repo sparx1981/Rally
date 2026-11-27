@@ -15,6 +15,9 @@ var _lamp_mat: StandardMaterial3D
 
 var lamps := PackedVector2Array()   # ground points lit by the track lamps
 var lamp_heads := PackedVector3Array()   # the lamp heads themselves (for wet-road reflections)
+var _lit_nodes: Array = []   # lamp glow nodes that switch on at dusk
+var tyres: Array = []         # tyres knocked off a wall: {node, pos, y, vel, axis, spin, rest}
+var _tyre_meshes := {}
 var cones: Array = []         # knockable apex cones: {node, pos, y, hit, vel, axis, spin, rest}
 var _cone_mesh: ArrayMesh
 var _celebrate_t := 0.0
@@ -85,6 +88,8 @@ func _add_cone(p: Vector2, y: float) -> void:
 func knock_cones(car) -> int:
 	if car.airborne:
 		return 0
+	if not tyres.is_empty():
+		_kick_tyres(car)
 	var f: Vector2 = car.fwd()
 	var r: Vector2 = car.right_axis()
 	var hits := 0
@@ -101,6 +106,14 @@ func knock_cones(car) -> int:
 			c.spin = randf_range(6.0, 12.0)
 			hits += 1
 	return hits
+
+
+## Street, track and floodlight glow switches on as the light fades (dusk, night, or the sunset journey).
+func set_lamp_level(level: float) -> void:
+	var on := level > 0.3
+	for n: Node3D in _lit_nodes:
+		if is_instance_valid(n):
+			n.visible = on
 
 
 ## Finish-line party: confetti cannons beside the gantry and fireworks overhead for about 14 s.
@@ -207,7 +220,113 @@ func _spawn_firework(at: Vector3) -> void:
 	Sfx.play("thud", -12.0, 2.4)
 
 
+## One painted tyre ring (outer wall, top ring, bottom, hole), cached per colour.
+func _tyre_mesh_for(paint: Color) -> ArrayMesh:
+	var key := paint.to_html()
+	if _tyre_meshes.has(key):
+		return _tyre_meshes[key]
+	var tb := PaperKit.Builder.new(11)
+	var outer := 0.46
+	var inner := 0.22
+	var sides := 8
+	var up := Vector3.UP
+	var col := PaperKit.lin(paint, 1.0)
+	var shade := PaperKit.lin(Color("#1c1c1f"), 1.0)
+	var h := Vector3(0, 0.32, 0)
+	for q in sides:
+		var a0 := TAU * float(q) / sides
+		var a1 := TAU * float(q + 1) / sides
+		var am := (a0 + a1) * 0.5
+		var o0 := Vector3(cos(a0) * outer, 0, sin(a0) * outer)
+		var o1 := Vector3(cos(a1) * outer, 0, sin(a1) * outer)
+		var i0 := Vector3(cos(a0) * inner, 0, sin(a0) * inner)
+		var i1 := Vector3(cos(a1) * inner, 0, sin(a1) * inner)
+		tb.quad(o1, o0, o0 + h, o1 + h, Vector3(cos(am), 0, sin(am)), col)
+		tb.quad(o1 + h, i1 + h, i0 + h, o0 + h, up, col)
+		tb.quad(o0, i0, i1, o1, -up, shade)
+		tb.quad(i0, i1, i1 + h, i0 + h, Vector3(-cos(am), 0, -sin(am)), shade)
+	var m := tb.mesh()
+	_tyre_meshes[key] = m
+	return m
+
+
+## A car hit a tyre wall: one to three tyres come off and tumble into the track.
+func knock_tyres(at: Vector2, toward_road: Vector2, strength: float, ground_y: float) -> void:
+	var count := 1 + (1 if strength > 7.0 else 0) + (1 if strength > 12.0 else 0)
+	for k in count:
+		var n := Node3D.new()
+		var mi := MeshInstance3D.new()
+		mi.mesh = _tyre_mesh_for(Color("#c93a30") if randf() < 0.5 else Color("#eee8dc"))
+		mi.material_override = material
+		mi.position = Vector3(0, -0.16, 0)
+		n.add_child(mi)
+		add_child(n)
+		var side := Vector2(-toward_road.y, toward_road.x)
+		var p := at + side * randf_range(-0.7, 0.7) + toward_road * 0.35
+		n.position = Vector3(p.x, ground_y + 0.35 + k * 0.45, p.y)
+		var spd := 1.5 + strength * 0.22 + randf_range(0.0, 1.2)
+		var dir := (toward_road + side * randf_range(-0.45, 0.45)).normalized()
+		tyres.append({"node": n, "pos": p, "y": ground_y, "vel": Vector3(dir.x * spd, randf_range(2.0, 4.0), dir.y * spd),
+			"axis": Vector3(randf_range(-1, 1), randf_range(-0.2, 0.2), randf_range(-1, 1)).normalized(), "spin": randf_range(4.0, 9.0), "rest": false})
+	while tyres.size() > 18:
+		var old: Dictionary = tyres.pop_front()
+		(old.node as Node3D).queue_free()
+	Sfx.play("thud", -6.0, 0.8)
+
+
+func _tyres_step(delta: float) -> void:
+	for t: Dictionary in tyres:
+		if t.rest:
+			continue
+		var n: Node3D = t.node
+		var v: Vector3 = t.vel
+		v.y -= 22.0 * delta
+		n.position += v * delta
+		n.rotate(t.axis, t.spin * delta)
+		t.vel = v
+		if n.position.y <= float(t.y) + 0.22:
+			# Rolling and sliding on the road: friction brings it to a stop.
+			var drag := clampf(1.0 - 2.6 * delta, 0.0, 1.0)
+			v.x *= drag
+			v.z *= drag
+			t.vel = v
+			t.spin *= drag
+		if n.position.y <= float(t.y) + 0.17 and v.y < 0.0:
+			n.position.y = float(t.y) + 0.17
+			if Vector2(v.x, v.z).length() < 1.2 and absf(v.y) < 2.0:
+				t.rest = true
+				# Settle flat (or on its side) rather than at a random tilt.
+				var e := n.rotation
+				n.rotation = Vector3(snappedf(e.x, PI * 0.5), e.y, snappedf(e.z, PI * 0.5))
+			else:
+				v.y = -v.y * 0.35
+				v.x *= 0.78
+				v.z *= 0.78
+				t.vel = v
+				t.spin *= 0.7
+		t.pos = Vector2(n.position.x, n.position.z)
+
+
+## Fallen tyres are kicked on by cars.
+func _kick_tyres(car) -> void:
+	var f: Vector2 = car.fwd()
+	var r: Vector2 = car.right_axis()
+	for t: Dictionary in tyres:
+		var d: Vector2 = t.pos - car.pos
+		if absf(d.dot(r)) < car.half_wid + 0.45 and absf(d.dot(f)) < car.half_len + 0.45 and absf(car.y - float(t.y)) < 1.0:
+			var dir: Vector2 = d.normalized() if d.length() > 0.1 else f
+			var spd := clampf(car.vel.length() * 0.6, 2.0, 12.0)
+			t.vel = Vector3(dir.x * spd, randf_range(1.5, 3.5), dir.y * spd)
+			t.rest = false
+			t.axis = Vector3(randf_range(-1, 1), 0.0, randf_range(-1, 1)).normalized()
+			t.spin = randf_range(4.0, 8.0)
+			car.vel *= 0.985
+
+
+
 func _process(delta: float) -> void:
+	if not tyres.is_empty():
+		_tyres_step(delta)
 	if _celebrate_t > 0.0:
 		_celebration_step(delta)
 	for c: Dictionary in cones:
@@ -408,6 +527,7 @@ func _control_tower(b: PaperKit.Builder) -> void:
 		if night and LightHalo.enabled():
 			var th := LightHalo.make(Color("#ffe2a0"), 5.0, 0.3)
 			add_child(th)
+			_lit_nodes.append(th)
 			th.global_position = xf * Vector3(0, 1.8 + floor_i * 2.5, -3.6)
 	b.box(Vector3(0, 8.3, 0), Vector3(7.8, 0.5, 6.8), xf, Color("#8a4a3a"))
 	b.box(Vector3(2.8, 10.4, 2.0), Vector3(0.12, 4.0, 0.12), xf, Color("#6a6e74"))
@@ -476,6 +596,7 @@ func _braking_boards_and_booths(b: PaperKit.Builder) -> void:
 			if night and LightHalo.enabled():
 				var bh := LightHalo.make(Color("#f2c630") if booths % 2 == 0 else Color("#6fa0e0"), 3.2, 0.5)
 				add_child(bh)
+				_lit_nodes.append(bh)
 				bh.global_position = xf * Vector3(1.6, 3.3, 0)
 			booths += 1
 
@@ -553,6 +674,7 @@ func _floodlights(b: PaperKit.Builder) -> void:
 		if night and LightHalo.enabled():
 			var fh := LightHalo.make(Color("#fff0c8"), 14.0, 0.8)
 			add_child(fh)
+			_lit_nodes.append(fh)
 			fh.global_position = xf * Vector3(0, 16.5, -0.6)
 
 
@@ -596,6 +718,7 @@ func _track_lights(b: PaperKit.Builder) -> void:
 		if LightHalo.enabled():
 			var hh := LightHalo.street(Color("#ffd9a0"), 9.0 + 0.1, 7.0, 0.85)
 			add_child(hh)
+			_lit_nodes.append(hh)
 			hh.global_position = xf * head + Vector3(0, -0.2, 0)
 		# Pool of light on the road under the head.
 		var c: Vector2 = track.pts[i]
@@ -614,6 +737,7 @@ func _track_lights(b: PaperKit.Builder) -> void:
 		pool.material_override = pm
 		pool.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(pool)
+		_lit_nodes.append(pool)
 		var under: Vector2 = pt.p + inward * 3.4
 		lamps.append(under)
 		lamp_heads.append(xf * head)

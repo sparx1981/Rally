@@ -560,6 +560,8 @@ const BREAK_KEEP := {"bale": 0.58, "snowbank": 0.72, "crates": 0.82, "tent": 0.8
 
 
 func _collide() -> void:
+	for tc in _tyre_cool.keys():
+		_tyre_cool[tc] = float(_tyre_cool[tc]) - FIXED
 	if stage.rx_props:
 		for c in cars:
 			var knocked: int = stage.rx_props.knock_cones(c)
@@ -649,6 +651,9 @@ func _collide() -> void:
 					print("  WALLHIT v %.1f -> %.1f vn=%.2f pen=%.2f ext=%.2f wall=%.2f lat=%.2f" % [v_before, c.vel.length(), hit, pen, ext, wall, c.lat])
 				c.vel *= 1.0 - 0.012 * clampf(hit / 6.0, 0.0, 1.0)   # only real impacts cost speed; scraping along does not
 				_on_impact(c, hit, cp)
+				if str(bar.kind) == "tyre" and stage.rx_props and hit > 4.0 and float(_tyre_cool.get(c, 0.0)) <= 0.0:
+					_tyre_cool[c] = 0.5
+					stage.rx_props.knock_tyres(cp, push, hit, c.y)
 				# A car pinned against the wall at low speed is eased away from it, so it can always drive off.
 				if c.vel.length() < 3.0:
 					_wall_time[c] = float(_wall_time.get(c, 0.0)) + FIXED
@@ -717,6 +722,7 @@ func _on_impact(c: Car, strength: float, at: Vector2 = Vector2.INF, paper := fal
 
 var _cheered := {}
 var _celebrated := false
+var _tyre_cool := {}   # car -> seconds before it can knock more tyres off a wall
 var _wall_time := {}   # car -> seconds pinned against a wall at low speed
 var ghost: Ghost
 var skids: SkidMarks

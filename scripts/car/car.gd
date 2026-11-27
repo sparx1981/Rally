@@ -438,8 +438,8 @@ func enable_lights(shadows: bool, night := false) -> void:
 		var main_lens := mount.z >= half_len - 0.10
 		var sl := SpotLight3D.new()
 		sl.light_color = Color("#ffe6c0")
-		sl.light_energy = (14.0 if night else 4.8) / mounts.size()
-		sl.spot_range = 60.0 if night else 38.0
+		sl.light_energy = (24.0 if night else 4.8) / mounts.size()
+		sl.spot_range = 72.0 if night else 38.0
 		sl.spot_angle = 36.0 if main_lens else 22.0
 		sl.spot_angle_attenuation = 2.6
 		sl.spot_attenuation = 0.85 if night else 1.4

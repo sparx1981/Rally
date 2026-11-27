@@ -1484,6 +1484,8 @@ func _parse_args() -> void:
 			_shot["oz"] = float(a.substr(5))
 		elif a.begins_with("--overhead="):
 			_shot["overhead"] = float(a.substr(11))
+		elif a.begins_with("--lightat="):
+			_shot["lightat"] = float(a.substr(10))
 		elif a.begins_with("--skyyaw="):
 			_shot["skyyaw"] = float(a.substr(9))
 		elif a.begins_with("--skypitch="):
@@ -1836,6 +1838,14 @@ func _run_shot() -> void:
 		var n0 := rp.knock_cones(race.player)
 		await get_tree().create_timer(0.8).timeout
 		print("CONETEST hit=", n0, " moved=", (cone.node as Node3D).position.distance_to(Vector3(cone.pos.x, cone.y, cone.pos.y)), " rest=", cone.rest)
+	if _shot.has("lightat") and race:
+		var tr2 := race.stage.track
+		race.stage.advance_lighting(lerpf(tr2.start_s, tr2.finish_s, float(_shot["lightat"])))
+		race.player.set_headlight_level(race.stage.headlight_level)
+		await get_tree().process_frame
+		print("LIGHTS level=", race.stage.headlight_level, " n=", race.player._lights.size())
+		for lt in race.player._lights:
+			print("  ", lt.get_class(), " vis=", lt.visible, " energy=", (lt as Light3D).light_energy, " in_tree=", lt.is_inside_tree(), " broken=", lt.get_meta("broken", false))
 	if OS.get_cmdline_user_args().has("--hero") and race:
 		await _hero_setup()
 	if _shot.has("skyyaw") and race:
@@ -1851,6 +1861,12 @@ func _run_shot() -> void:
 		if _shot.has("skyt") and race.stage:
 			race.stage.update(float(_shot["skyt"]), race.player.global_position, 100.0, race.player.s, null)
 		await get_tree().process_frame
+	if OS.get_cmdline_user_args().has("--tyres") and race and race.stage.rx_props:
+		var rr: Vector2 = race.player.right_axis()
+		race.stage.rx_props.knock_tyres(race.player.pos + rr * 3.0, -rr, 14.0, race.player.y)
+		await get_tree().create_timer(1.2).timeout
+		for tt in race.stage.rx_props.tyres:
+			print("TYRE pos=", (tt.node as Node3D).global_position, " rest=", tt.rest, " player=", race.player.global_position)
 	if OS.get_cmdline_user_args().has("--fw") and race and race.stage.rx_props:
 		var pp3: Vector3 = race.player.global_position
 		for q in 3:
