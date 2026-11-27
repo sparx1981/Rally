@@ -81,8 +81,12 @@ func setup(stage_i: int, mode_v: int, entrants: Array, attract_v := false, tod :
 			cdef = Catalog.livery(cdef, Game.livery)
 		car.setup(cdef, i + 1, stage, stage.paper_mat)
 		var row := i / 2
-		var lat := 0.0 if n == 1 else (-2.2 if i % 2 == 0 else 2.2)
-		car.place_at(tr.start_s - 5.0 - row * 8.0, lat)
+		var gap := 12.5 if tr.circuit else 8.0
+		var lane := 2.7 if tr.circuit else 2.2
+		var lat := 0.0 if n == 1 else (-lane if i % 2 == 0 else lane)
+		# Circuit grids are staggered: the left column sits half a row behind the right one.
+		var stagger := (gap * 0.5 if (tr.circuit and i % 2 == 0) else 0.0)
+		car.place_at(tr.start_s - 5.0 - row * gap - stagger, lat)
 		cars.append(car)
 		if _laps > 0:
 			_circuit_progress[car] = {"completed": 0, "gate": 0, "previous": car.s, "started": false}
@@ -383,6 +387,9 @@ func _check_finish() -> void:
 				continue
 			c.finished = true
 			c.finish_time = race_time
+			if _laps > 0 and stage.rx_props and (c == player or not _celebrated):
+				_celebrated = true
+				stage.rx_props.celebrate()
 			if _laps > 0 and not stage.track.joker.is_empty() and not c.joker_taken:
 				c.joker_penalty = JOKER_PENALTY
 				c.finish_time += JOKER_PENALTY
@@ -709,6 +716,7 @@ func _on_impact(c: Car, strength: float, at: Vector2 = Vector2.INF, paper := fal
 
 
 var _cheered := {}
+var _celebrated := false
 var _wall_time := {}   # car -> seconds pinned against a wall at low speed
 var ghost: Ghost
 var skids: SkidMarks

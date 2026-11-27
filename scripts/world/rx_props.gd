@@ -15,6 +15,9 @@ var _lamp_mat: StandardMaterial3D
 
 var cones: Array = []         # knockable apex cones: {node, pos, y, hit, vel, axis, spin, rest}
 var _cone_mesh: ArrayMesh
+var _celebrate_t := 0.0
+var _burst_t := 0.0
+var _confetti_t := 0.0
 var solids: Array = []        # [Vector2 position, radius] the car cannot drive through
 
 
@@ -98,7 +101,113 @@ func knock_cones(car) -> int:
 	return hits
 
 
+## Finish-line party: confetti cannons beside the gantry and fireworks overhead for about 14 s.
+func celebrate() -> void:
+	_celebrate_t = 14.0
+	_burst_t = 0.0
+	_confetti_t = 0.0
+
+
+func _celebration_step(delta: float) -> void:
+	var i := track.index_at(0.0)
+	var base := Vector3(track.pts[i].x, track.elev[i], track.pts[i].y)
+	var tang := Vector3(track.tang[i].x, 0.0, track.tang[i].y)
+	var side := Vector3(track.nrm[i].x, 0.0, track.nrm[i].y)
+	var hw := track.road_half_width(0.0)
+	_celebrate_t -= delta
+	_confetti_t -= delta
+	if _confetti_t <= 0.0:
+		_confetti_t = 3.2
+		for sd: float in [-1.0, 1.0]:
+			_spawn_confetti(base + side * sd * (hw + 2.5) + tang * 3.0, -side * sd)
+	_burst_t -= delta
+	if _burst_t <= 0.0:
+		_burst_t = randf_range(0.45, 0.9)
+		var off := side * randf_range(-hw - 8.0, hw + 8.0) + tang * randf_range(8.0, 70.0)
+		_spawn_firework(base + off + Vector3(0, randf_range(22.0, 42.0), 0))
+
+
+func _spawn_confetti(at: Vector3, inward: Vector3) -> void:
+	var p := CPUParticles3D.new()
+	p.amount = 90
+	p.lifetime = 5.0
+	p.one_shot = true
+	p.explosiveness = 0.35
+	p.mesh = QuadMesh.new()
+	(p.mesh as QuadMesh).size = Vector2(0.22, 0.14)
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.vertex_color_use_as_albedo = true
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	p.material_override = m
+	var g := Gradient.new()
+	g.interpolation_mode = Gradient.GRADIENT_INTERPOLATE_CONSTANT
+	g.offsets = PackedFloat32Array([0.0, 0.17, 0.34, 0.5, 0.67, 0.84])
+	g.colors = PackedColorArray([Color("#e8453c"), Color("#f2c630"), Color("#3f8fd8"), Color("#4fc46a"), Color("#f5f0e6"), Color("#e86fb0")])
+	p.color_initial_ramp = g
+	p.direction = (Vector3.UP * 1.6 + inward).normalized()
+	p.spread = 35.0
+	p.initial_velocity_min = 9.0
+	p.initial_velocity_max = 18.0
+	p.gravity = Vector3(0, -3.2, 0)
+	p.damping_min = 0.6
+	p.damping_max = 1.4
+	p.angular_velocity_min = -540.0
+	p.angular_velocity_max = 540.0
+	p.angle_max = 360.0
+	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+	p.emission_sphere_radius = 0.8
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(p)
+	p.global_position = at + Vector3(0, 0.8, 0)
+	p.emitting = true
+	get_tree().create_timer(7.0).timeout.connect(p.queue_free)
+	Sfx.play("thud", -8.0, 1.9)
+
+
+func _spawn_firework(at: Vector3) -> void:
+	var cols := [Color("#ff5a3c"), Color("#ffd24a"), Color("#6ad0ff"), Color("#9bff7a"), Color("#ff7ad9"), Color("#ffffff")]
+	var col: Color = cols[randi() % cols.size()]
+	var p := CPUParticles3D.new()
+	p.amount = 170
+	p.lifetime = 2.3
+	p.one_shot = true
+	p.explosiveness = 0.9
+	p.mesh = QuadMesh.new()
+	(p.mesh as QuadMesh).size = Vector2(1.8, 1.8)
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	m.billboard_keep_scale = true
+	m.vertex_color_use_as_albedo = true
+	m.disable_fog = true
+	m.albedo_texture = _pool_texture()
+	p.material_override = m
+	var g := Gradient.new()
+	g.offsets = PackedFloat32Array([0.0, 0.55, 1.0])
+	g.colors = PackedColorArray([Color(col.r, col.g, col.b, 1.0).lightened(0.5), col, Color(col.r * 0.3, col.g * 0.3, col.b * 0.3, 0.0)])
+	p.color_ramp = g
+	p.direction = Vector3.UP
+	p.spread = 180.0
+	p.initial_velocity_min = 16.0
+	p.initial_velocity_max = 25.0
+	p.gravity = Vector3(0, -5.0, 0)
+	p.damping_min = 1.6
+	p.damping_max = 2.4
+	p.scale_amount_min = 0.5
+	p.scale_amount_max = 1.2
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(p)
+	p.global_position = at
+	p.emitting = true
+	get_tree().create_timer(3.5).timeout.connect(p.queue_free)
+	Sfx.play("thud", -12.0, 2.4)
+
+
 func _process(delta: float) -> void:
+	if _celebrate_t > 0.0:
+		_celebration_step(delta)
 	for c: Dictionary in cones:
 		if c.hit and not c.rest:
 			var n: Node3D = c.node
@@ -239,19 +348,32 @@ func _start_gantry(b: PaperKit.Builder) -> void:
 	# Timer board hung in the lattice, chequered.
 	for k in 8:
 		b.box(Vector3(-2.0 + k * 0.5, 6.9, -0.82), Vector3(0.5, 0.7, 0.06), xf, Color("#e9e9e4") if k % 2 == 0 else Color("#2b2b2e"))
-	# Five lights, dark until the countdown lights them (see set_start_lights).
+	# Five lights, dark until the countdown lights them (see set_start_lights). The cars wait on the
+	# -z side of the gantry, so each housing carries its lens on that face, under a small visor.
 	for k in 5:
+		var lx := -1.6 + k * 0.8
+		var hb := PaperKit.Builder.new(31 + k)
+		hb.box(Vector3.ZERO, Vector3(0.74, 0.74, 0.3), Transform3D(), Color("#26262a"))
+		hb.box(Vector3(0, 0.44, -0.17), Vector3(0.74, 0.1, 0.34), Transform3D(), Color("#1a1a1d"))
+		var hm := MeshInstance3D.new()
+		hm.mesh = hb.mesh()
+		hm.material_override = material
+		hm.transform = xf * Transform3D(Basis(), Vector3(lx, 5.95, -0.2))
+		add_child(hm)
 		var mi := MeshInstance3D.new()
-		var bm := BoxMesh.new()
-		bm.size = Vector3(0.7, 0.7, 0.25)
-		mi.mesh = bm
+		var cm := CylinderMesh.new()
+		cm.top_radius = 0.27
+		cm.bottom_radius = 0.27
+		cm.height = 0.06
+		mi.mesh = cm
 		var m := StandardMaterial3D.new()
 		m.albedo_color = Color("#3a1210")
 		m.emission_enabled = true
 		m.emission = Color("#ff2a1a")
 		m.emission_energy_multiplier = 0.0
 		mi.material_override = m
-		mi.transform = xf * Transform3D(Basis(), Vector3(-1.6 + k * 0.8, 5.95, -0.2))
+		# Cylinder axis is Y; turn it to face -z.
+		mi.transform = xf * Transform3D(Basis(Vector3.RIGHT, -PI * 0.5), Vector3(lx, 5.95, -0.2 - 0.16))
 		add_child(mi)
 		start_lights.append(mi)
 

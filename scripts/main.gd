@@ -1786,6 +1786,12 @@ func _run_shot() -> void:
 		oc.look_at(pp)
 		oc.current = true
 		await get_tree().process_frame
+	if OS.get_cmdline_user_args().has("--party") and race and race.stage.rx_props:
+		race.stage.rx_props.celebrate()
+		await get_tree().create_timer(2.6).timeout
+	if OS.get_cmdline_user_args().has("--lights") and race and race.stage.rx_props:
+		race.stage.rx_props.set_start_lights(4)
+		await get_tree().process_frame
 	if OS.get_cmdline_user_args().has("--heli") and race:
 		var hc: Helicopter = race.stage.helicopter
 		hc._begin(race.player.s + 60.0)
@@ -1821,6 +1827,11 @@ func _run_shot() -> void:
 		if _shot.has("skyt") and race.stage:
 			race.stage.update(float(_shot["skyt"]), race.player.global_position, 100.0, race.player.s, null)
 		await get_tree().process_frame
+	if OS.get_cmdline_user_args().has("--fw") and race and race.stage.rx_props:
+		var pp3: Vector3 = race.player.global_position
+		for q in 3:
+			race.stage.rx_props._spawn_firework(pp3 + Vector3(40.0 + q * 6.0, 22.0 + q * 3.0, -14.0 + q * 14.0))
+		await get_tree().create_timer(0.5).timeout
 	if _shot.has("nohud") and race:
 		race.set_overlay_visible(false)
 		await get_tree().process_frame

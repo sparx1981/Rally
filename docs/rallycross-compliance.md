@@ -159,3 +159,9 @@ All 12 circuits complete 3 laps. A human player is not affected by the AI's lane
 - Night circuits get lamp masts and light pools along the main straight.
 - A broadcast helicopter flies the course on a schedule (first pass about 22 s in, then every ~110 s), with rotor sound and a night searchlight.
 - New loading screen: cut-paper sunrise or sunset, large stage name, preview card and tips.
+
+## Eighth pass
+
+- Start lights are housings with the lens on the face toward the grid (they used to glow on every side).
+- Finish-line confetti cannons and fireworks fire when the first car (and again when the player) finishes a circuit race.
+- Circuit grids are spaced 12.5 m between rows (was 8 m), wider lanes, and staggered by half a row.
