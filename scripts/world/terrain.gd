@@ -353,9 +353,15 @@ func conform_to_road(track: Track) -> void:
 		# The grid is coarse: sink the ground by the road's tilt across a quarter cell so it never pokes through.
 		sink_i[i] = 0.12 + cell * 0.25 * (absf(track.bank_slope(i)) + gr)
 	var inner := cell * 0.95   # a cell of shoulder, so the road edge never overhangs a drop
+	# Two tiers: a cell inside some road's corridor takes the lowest such road; only cells inside no corridor
+	# fall back on a road's shoulder. A lower road's shoulder must never overrule a higher road's own edge,
+	# or the higher road ends in a cliff beside the lower one.
 	var corr_h := PackedFloat32Array()
 	corr_h.resize(total)
 	corr_h.fill(1e9)
+	var shoulder_h := PackedFloat32Array()
+	shoulder_h.resize(total)
+	shoulder_h.fill(1e9)
 	var best_m := PackedFloat32Array()
 	best_m.resize(total)
 	best_m.fill(1e9)
@@ -390,8 +396,11 @@ func conform_to_road(track: Track) -> void:
 					best_m[k] = m
 					best_i[k] = i
 				if absf(l) - side_ext <= inner and absf(dv.dot(track.tang[i])) <= tol:
-					# Inside this road's corridor: the ground is never higher than the lowest road claiming it.
-					corr_h[k] = minf(corr_h[k], base_i[i] + clampf(l, -side_ext, side_ext) * track.bank_slope(i) - sink_i[i])
+					var claim: float = base_i[i] + clampf(l, -side_ext, side_ext) * track.bank_slope(i) - sink_i[i]
+					if absf(l) <= side_ext:
+						corr_h[k] = minf(corr_h[k], claim)
+					else:
+						shoulder_h[k] = minf(shoulder_h[k], claim)
 	for k in total:
 		var i := best_i[k]
 		if i < 0:
@@ -410,6 +419,10 @@ func conform_to_road(track: Track) -> void:
 			h[k] = corr_h[k]
 			far[k] = 0
 			continue
+		if shoulder_h[k] < 1e8:
+			h[k] = shoulder_h[k]
+			far[k] = 0
+			continue
 		# Outside every corridor: ease from the nearest road edge to whatever the land was doing.
 		var slope_len := clampf(absf(h[k] - road_here) * 1.4, 7.0, 34.0)
 		var out_d := Vector2(maxf(edge - inner, 0.0), maxf(absf(along) - (4.0 * (1.0 + absf(lat) * absf(track.curv[i])) + 0.5), 0.0)).length()
@@ -422,6 +435,11 @@ func conform_to_road(track: Track) -> void:
 	for k in total:
 		min_h = minf(min_h, h[k])
 		max_h = maxf(max_h, h[k])
+	if OS.get_cmdline_user_args().has("--rxlat=540"):
+		var i5 := track.index_at(540.0)
+		for latv in [0.0, 4.0, 6.0]:
+			var q5: Vector2 = track.pts[i5] + track.nrm[i5] * latv
+			print("CONFORM540 lat=%.0f terrain=%.2f road=%.2f bank=%.3f hw=%.1f" % [latv, height(q5), track.road_h(540.0) + latv * track.bank_slope(i5), track.bank_slope(i5), track.road_half_width(540.0)])
 
 
 func flatten_disc(c: Vector2, r: float, height: float, blend := 15.0) -> void:

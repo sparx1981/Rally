@@ -31,6 +31,19 @@ const STYLES := {
 	"estate": {"L": 4.4, "W": 1.85, "low": 0.62, "nose": 0.48, "bon": 1.05, "tail": 0.58, "deck": 0.12, "cab": 0.6, "cab_f": 0.5, "cab_r": -2.0, "rake": 0.45, "back": 0.06, "ride": 0.32, "wr": 0.38, "wing": "none", "arches": false, "lamps": "rect", "pod": true},
 	"suv": {"L": 4.1, "W": 2.0, "low": 0.78, "nose": 0.7, "bon": 0.95, "tail": 0.76, "deck": 0.1, "cab": 0.64, "cab_f": 0.6, "cab_r": -1.85, "rake": 0.3, "back": 0.04, "ride": 0.46, "wr": 0.46, "wing": "none", "arches": true, "lamps": "round", "pod": true, "bumpers": true},
 	"truck": {"L": 4.6, "W": 2.15, "low": 0.72, "nose": 0.62, "bon": 1.05, "tail": 0.7, "deck": 1.9, "cab": 0.64, "cab_f": 1.15, "cab_r": -0.35, "rake": 0.4, "back": 0.04, "ride": 0.6, "wr": 0.55, "wing": "none", "arches": true, "lamps": "rect", "pod": true, "bumpers": true},
+	# Added from the reference audit (see docs/car-audit.md): silhouettes the first nineteen did not cover.
+	"beetle": {"L": 3.75, "W": 1.66, "low": 0.6, "nose": 0.46, "bon": 0.72, "tail": 0.5, "deck": 0.62, "cab": 0.62, "cab_f": 0.2, "cab_r": -0.85, "rake": 0.55, "back": 0.78, "ride": 0.3, "wr": 0.34, "wing": "ducktail", "arches": true, "lamps": "round", "bumpers": true},
+	"e36": {"L": 4.2, "W": 1.8, "low": 0.6, "nose": 0.5, "bon": 1.15, "tail": 0.6, "deck": 0.75, "cab": 0.52, "cab_f": 0.5, "cab_r": -1.0, "rake": 0.5, "back": 0.45, "ride": 0.32, "wr": 0.37, "wing": "boot", "arches": false, "lamps": "quad", "bumpers": false},
+	"capri": {"L": 4.3, "W": 1.82, "low": 0.55, "nose": 0.4, "bon": 1.55, "tail": 0.5, "deck": 0.55, "cab": 0.46, "cab_f": 0.3, "cab_r": -1.0, "rake": 0.58, "back": 0.7, "ride": 0.3, "wr": 0.38, "wing": "ducktail", "arches": true, "lamps": "rect"},
+	"cossie": {"L": 4.4, "W": 1.8, "low": 0.6, "nose": 0.42, "bon": 1.1, "tail": 0.6, "deck": 0.55, "cab": 0.55, "cab_f": 0.55, "cab_r": -1.35, "rake": 0.48, "back": 0.5, "ride": 0.33, "wr": 0.38, "wing": "big", "arches": true, "lamps": "rect", "pod": true},
+	"pikes": {"L": 4.5, "W": 2.1, "low": 0.5, "nose": 0.28, "bon": 1.45, "tail": 0.55, "deck": 0.6, "cab": 0.44, "cab_f": 0.45, "cab_r": -1.2, "rake": 0.6, "back": 0.5, "ride": 0.26, "wr": 0.4, "wing": "huge", "arches": true, "lamps": "quad", "scoop": true, "louvres": true},
+	"berlinette": {"L": 3.8, "W": 1.7, "low": 0.55, "nose": 0.38, "bon": 0.85, "tail": 0.45, "deck": 0.9, "cab": 0.45, "cab_f": 0.35, "cab_r": -1.0, "rake": 0.6, "back": 0.82, "ride": 0.3, "wr": 0.36, "wing": "none", "arches": true, "lamps": "round", "pod": true},
+	"gtv6": {"L": 4.2, "W": 1.76, "low": 0.55, "nose": 0.42, "bon": 1.1, "tail": 0.56, "deck": 0.3, "cab": 0.5, "cab_f": 0.45, "cab_r": -1.3, "rake": 0.5, "back": 0.62, "ride": 0.31, "wr": 0.37, "wing": "small", "arches": true, "lamps": "rect", "pod": true},
+	"m1": {"L": 4.35, "W": 1.95, "low": 0.45, "nose": 0.2, "bon": 1.5, "tail": 0.5, "deck": 0.7, "cab": 0.42, "cab_f": 0.4, "cab_r": -1.1, "rake": 0.75, "back": 0.4, "ride": 0.27, "wr": 0.4, "wing": "ducktail", "arches": true, "lamps": "popup", "louvres": true},
+	"r5": {"L": 3.6, "W": 1.9, "low": 0.62, "nose": 0.5, "bon": 0.75, "tail": 0.6, "deck": 0.12, "cab": 0.62, "cab_f": 0.45, "cab_r": -1.2, "rake": 0.4, "back": 0.1, "ride": 0.33, "wr": 0.4, "wing": "roof", "arches": true, "lamps": "rect", "pod": true, "louvres": true},
+	"sixr4": {"L": 3.4, "W": 1.9, "low": 0.64, "nose": 0.5, "bon": 0.65, "tail": 0.62, "deck": 0.1, "cab": 0.64, "cab_f": 0.4, "cab_r": -1.1, "rake": 0.3, "back": 0.08, "ride": 0.33, "wr": 0.4, "wing": "big", "arches": true, "lamps": "round", "pod": true, "louvres": true},
+	"celica": {"L": 4.3, "W": 1.85, "low": 0.55, "nose": 0.4, "bon": 1.2, "tail": 0.55, "deck": 0.35, "cab": 0.5, "cab_f": 0.5, "cab_r": -1.3, "rake": 0.6, "back": 0.6, "ride": 0.32, "wr": 0.39, "wing": "big", "arches": true, "lamps": "rect", "scoop": true},
+	"patrol": {"L": 4.5, "W": 1.95, "low": 0.8, "nose": 0.72, "bon": 0.9, "tail": 0.78, "deck": 0.1, "cab": 0.7, "cab_f": 0.55, "cab_r": -2.1, "rake": 0.25, "back": 0.03, "ride": 0.48, "wr": 0.47, "wing": "none", "arches": true, "lamps": "round", "pod": true, "bumpers": true},
 	"buggy": {"L": 3.4, "W": 1.8, "low": 0.25, "nose": 0.2, "bon": 0.5, "tail": 0.25, "deck": 0.3, "cab": 0.9, "cab_f": 0.6, "cab_r": -0.9, "rake": 0.3, "back": 0.1, "ride": 0.45, "wr": 0.48, "wing": "none", "arches": false, "lamps": "round", "pod": true},
 }
 
@@ -45,7 +58,14 @@ const DASHBOARDS := {
 	"wrc": [-0.10, 1, "#c4dfcb", "#414a50"], "rally2": [-0.04, 1, "#d1deae", "#383c42"],
 	"rally1": [0.0, 0, "#b9dddf", "#323d43"], "estate": [-0.14, 2, "#e2d6ac", "#695442"],
 	"suv": [-0.08, 3, "#d6d8c2", "#536055"], "truck": [-0.15, 3, "#eee0c2", "#505661"],
-	"buggy": [0.0, 0, "#f2d088", "#594b3e"]
+	"buggy": [0.0, 0, "#f2d088", "#594b3e"],
+	"beetle": [-0.2, 1, "#e8dfc6", "#3f5a52"], "e36": [-0.05, 2, "#d9dde0", "#2f3438"],
+	"capri": [-0.06, 2, "#e4d8b8", "#4a4036"], "cossie": [-0.04, 2, "#d9dee4", "#34393f"],
+	"pikes": [-0.02, 2, "#e8c9c0", "#3a2f30"], "berlinette": [-0.1, 2, "#e0dcc4", "#2c4568"],
+	"gtv6": [-0.05, 2, "#d9dcd2", "#3b4048"], "m1": [-0.05, 2, "#e8cf80", "#38342c"],
+	"r5": [-0.04, 3, "#e6d9c0", "#3a2d2d"], "sixr4": [-0.05, 3, "#e6dcc4", "#3a3030"],
+	"celica": [-0.03, 2, "#d8e2dc", "#3c4a40"], "patrol": [-0.12, 3, "#d8d6c0", "#4a4a44"]
+
 }
 
 

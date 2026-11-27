@@ -703,6 +703,19 @@ func surface_height(p: Vector2, s: float, lat: float) -> float:
 	if rx:
 		if on_road_at(s, lat, 0.1):
 			return road_h(s) + clampf(lat, -road_extent(s), road_extent(s)) * banks[index_at(s)]
+		# Just past the edge (a kerb, the gap beside a Joker lane) the ground eases from the road's height to the
+		# landscape, so a car that clips the edge does not drop through the surface.
+		var ext := road_half_width(s)
+		var jb := joker_band(s)
+		if not is_nan(jb.x):
+			if lat > 0.0 and jb.y > 0.0:
+				ext = maxf(ext, jb.y)
+			elif lat < 0.0 and jb.x < 0.0:
+				ext = maxf(ext, -jb.x)
+		var over := absf(lat) - ext
+		if over < 3.0 and terrain:
+			var edge_h := road_h(s) + clampf(lat, -ext, ext) * banks[index_at(s)]
+			return lerpf(edge_h, terrain.height(p), smoothstep(0.0, 3.0, maxf(over, 0.0)))
 	elif absf(lat) <= road_half_width(s) + 0.1:
 		return road_h(s)
 	if terrain:

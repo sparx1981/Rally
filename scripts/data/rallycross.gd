@@ -102,7 +102,7 @@ static func circuits() -> Array:
 			"widths": [[0, 16], [0.10, 16], [0.17, 11], [0.5, 12], [0.7, 12], [0.95, 16], [1, 16]],
 			"elev": [[0, 12], [0.15, 10], [0.4, 4], [0.48, 2], [0.55, 6], [0.63, 14], [0.8, 18], [1, 12]],
 			"surf": [[0.20, 0.62, "sand"]],
-			"bank": [[0.52, 0.57, 0.10]],
+			"bank": [[0.50, 0.58, 0.06]],
 			"joker": {"f0": 0.750, "f1": 0.950, "side": "inner", "surf": "sand", "w": 10.0, "out": 3.0, "delta": 2.3},
 			"jumps": [], "barrier": [[0, 0.69, "tyre"], [0.69, 0.80, "armco"], [0.80, 1, "tyre"]], "kerbs": [[0.93, 1.0]]},
 		{"id": "ardennes", "name": "Ardennes Gorge", "kit": "A", "racers": 5, "length": 1110.0, "weather": "dry_golden",

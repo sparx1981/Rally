@@ -40,6 +40,19 @@ static func cars() -> Array:
 			C.call("badger", "Badger 4x4", "Off-road 4x4", "suv", "awd", "#5f7f4a", "#e08a3a", "#2f3a2a", 0.9, 0.86, 1.1, 0.9, 0.9, "Heavy cross-country 4x4. Ignores rough ground."),
 			C.call("mule", "Mule Trophy", "Off-road Truck", "truck", "awd", "#e8b04a", "#2b2b2b", "#c8553d", 0.96, 0.9, 1.0, 0.88, 1.0, "Long-travel desert trophy truck. Flies over anything."),
 			C.call("sandhopper", "Sandhopper", "Dune Buggy", "buggy", "rwd", "#e2763a", "#2b2b2b", "#e8c05a", 0.9, 1.1, 1.0, 1.15, 0.95, "Open tube-frame dune buggy. Tiny, twitchy and unstoppable off-road."),
+			# Added from the reference audit: look-alikes with made-up names and liveries.
+			C.call("scarab", "Scarab 1300", "1960s Rear-engine", "beetle", "rwd", "#3a9a86", "#efe3c8", "#c8553d", 0.8, 0.8, 0.94, 1.1, 0.3, "A round little rear-engined bug with a ducktail lid. Light at the front, so steer with the throttle."),
+			C.call("alder", "Alder 328", "1990s Touring", "e36", "rwd", "#e8a33a", "#efe3c8", "#2b2b2b", 0.98, 1.0, 1.0, 1.04, 0.25, "A crisp touring coupe with quad lamps. Neutral until you ask too much of the rear."),
+			C.call("gazelle", "Gazelle GT", "1970s Touring", "capri", "rwd", "#d6e03a", "#2b2b2b", "#efe3c8", 0.94, 0.96, 0.95, 1.02, 0.25, "A long-nosed fastback with flared arches and a ducktail. Loud, quick and a handful."),
+			C.call("cormorant", "Cormorant RS", "1980s Group A", "cossie", "rwd", "#efe3c8", "#3f6fa8", "#c8553d", 1.0, 1.02, 0.98, 1.0, 0.3, "A big-winged hatch-saloon with a wide stance. Rear-drive, boosted and enthusiastic."),
+			C.call("summit", "Summit Special", "Hill-climb Special", "pikes", "awd", "#c8302d", "#efe3c8", "#e8b04a", 1.12, 1.16, 1.06, 0.98, 0.15, "A low, wide silhouette racer with a splitter and a wing the size of a door. Built for one fast run."),
+			C.call("verbena", "Verbena A100", "1970s Group 4", "berlinette", "rwd", "#2d5fc8", "#efe3c8", "#e8b04a", 0.92, 0.96, 0.98, 1.14, 0.3, "A rear-engined berlinette with a swooping fastback. Tiny, light and made for twisty gravel."),
+			C.call("gallo", "Gallo V6", "1980s Group A", "gtv6", "rwd", "#efe3c8", "#2b4a8a", "#e8b04a", 0.98, 1.0, 0.98, 1.02, 0.25, "A hatchback coupe with a gruff V6 and a notchy gearbox."),
+			C.call("mirage", "Mirage M", "1970s Group 5", "m1", "rwd", "#e8c040", "#c8302d", "#2b2b2b", 1.04, 1.04, 0.96, 1.0, 0.2, "A low wedge with pop-up lamps and a ducktail. Mid-engined and utterly committed."),
+			C.call("rook", "Rook Turbo", "1980s Group B", "r5", "rwd", "#c8302d", "#efe3c8", "#2b2b2b", 1.06, 1.08, 0.95, 1.1, 0.25, "A boxy little hatch with the engine behind the seats and arches like a bodybuilder."),
+			C.call("marmot", "Marmot 6R", "1980s Group B", "sixr4", "awd", "#e83a2d", "#efe3c8", "#2b3a8a", 1.04, 1.1, 1.0, 1.1, 0.3, "A stubby four-wheel-drive brick with a big rear wing and a thumping V6."),
+			C.call("celeste", "Celeste GT-4", "1990s Group A", "celica", "awd", "#efe3c8", "#2f8a3a", "#c8302d", 1.02, 1.04, 1.02, 1.0, 0.35, "A sleek four-wheel-drive coupe-hatch with a bonnet scoop and a tall wing."),
+			C.call("drover", "Drover 60", "Off-road 4x4", "patrol", "awd", "#3a3a3d", "#d9a441", "#c8553d", 0.88, 0.84, 1.1, 0.88, 0.9, "A tall expedition wagon on big tyres. Slow to turn, impossible to stop."),
 		]
 		for c in _cars:
 			c["gold_wheels"] = c["id"] == "nimbus"

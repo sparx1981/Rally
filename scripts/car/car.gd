@@ -23,6 +23,7 @@ const GEAR_TORQUE := [1.0, 1.0, 0.88, 0.77, 0.69, 0.62]
 const GEARS := [0.0, 8.0, 14.0, 20.0, 26.0, 31.0]
 const GRAVITY := 22.0
 const MAX_LAUNCH_VY := 4.2
+const RX_LAUNCH_VY := 7.5   # rallycross jumps are built to fly
 
 var stats: Dictionary
 var driver_name := ""
@@ -848,7 +849,7 @@ func step(dt: float) -> void:
 			airborne = true
 			air_time = 0.0
 			# Cap the launch so ramps and crests give a short, controlled hop, never a fling.
-			vy = minf(vy, MAX_LAUNCH_VY)
+			vy = minf(vy, RX_LAUNCH_VY if track.rx else MAX_LAUNCH_VY)
 			vy -= GRAVITY * dt
 			y += vy * dt
 		else:

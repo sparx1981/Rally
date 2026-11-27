@@ -1,7 +1,7 @@
 class_name Puffs
 extends RefCounted
-## Volumetric paper puff emitters: faceted 3D balls that swell and shrink (no transparency, no
-## sprites), lit like the paper world. Used for dust, tyre smoke, exhaust smoke, water spray,
+## Volumetric paper puff emitters: faceted 3D balls that swell and shrink and fade (semi-transparent,
+## no sprites), lit like the paper world. Used for dust, tyre smoke, exhaust smoke, water spray,
 ## splash bursts and chimney smoke.
 
 static var _mesh: SphereMesh
@@ -109,4 +109,10 @@ static func make(kind: String, color: Color, leak: Color) -> CPUParticles3D:
 			p.scale_amount_min = 0.5
 			p.scale_amount_max = 0.9
 			p.scale_amount_curve = _curve([Vector2(0, 0.3), Vector2(0.5, 1.0), Vector2(1, 0.35)])
+	# Semi-transparent: each puff fades in quickly, stays see-through, and thins out as it dies.
+	var peak: float = float({"dust": 0.5, "snow": 0.7, "smoke": 0.55, "exhaust": 0.55, "spray": 0.55, "splash": 0.6, "chimney": 0.55}.get(kind, 0.55))
+	var ramp := Gradient.new()
+	ramp.offsets = PackedFloat32Array([0.0, 0.12, 0.55, 1.0])
+	ramp.colors = PackedColorArray([Color(1, 1, 1, 0.0), Color(1, 1, 1, peak), Color(1, 1, 1, peak * 0.7), Color(1, 1, 1, 0.0)])
+	p.color_ramp = ramp
 	return p

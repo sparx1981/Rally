@@ -1,7 +1,7 @@
 // Volumetric paper puffs (dust, smoke, spray, chimney smoke): faceted 3D crumpled-paper balls,
 // lit with the same wrap / leak model as the cards so they have real volume and shading.
 shader_type spatial;
-render_mode diffuse_lambert, specular_disabled, cull_back;
+render_mode blend_mix, depth_draw_never, diffuse_lambert, specular_disabled, cull_back;
 
 uniform vec3 leak : source_color = vec3(0.627, 0.376, 0.172);
 uniform float wrap = 0.85;
@@ -19,6 +19,7 @@ void vertex() {
 void fragment() {
 	if (length(VERTEX)<2.2) { discard; }
 	ALBEDO = tint;
+	ALPHA = clamp(COLOR.a, 0.0, 1.0);   // the emitter's colour ramp fades each puff in and out
 	ROUGHNESS = 1.0;
 	SPECULAR = 0.0;
 }

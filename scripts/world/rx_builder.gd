@@ -152,7 +152,7 @@ static func build(track: Track, def: Dictionary) -> void:
 		track.elev[i] = _periodic_key(rx.elev, f)
 		var b := 0.0
 		for band: Array in rx.get("bank", []):
-			var edge := minf(0.03, (float(band[1]) - float(band[0])) / 3.0)
+			var edge := minf(0.06, (float(band[1]) - float(band[0])) * 0.45)   # bank rolls in and out gradually
 			b += float(band[2]) * smoothstep(float(band[0]), float(band[0]) + edge, f) * (1.0 - smoothstep(float(band[1]) - edge, float(band[1]), f))
 		# Positive banks into the turn: the inside edge is lower.
 		track.banks[i] = -b * turn_sign[i]
@@ -319,10 +319,13 @@ static func _add_splash(track: Track, station: float) -> void:
 
 static func _add_jump(track: Track, jump: Dictionary) -> void:
 	var sc := float(jump.f) * track.length
-	var run := float(jump.len)
-	var drop := 6.0 if str(jump.kind) != "table" else 10.0
+	# Higher and more ramp-like than the brief's first cut: a shorter, steeper take-off ramp and a taller lip,
+	# so a car at speed leaves the ground for a real, if short, flight.
+	var run := clampf(float(jump.len) * 0.65, 14.0, 20.0)
+	var height := float(jump.h) * 1.9
+	var drop := 8.0 if str(jump.kind) != "table" else 14.0
 	var cap := 38.0 if str(jump.kind) == "gap" else 30.0
-	track.features.append({"type": "jump", "s": sc, "s0": sc - run, "s1": sc + drop, "h": float(jump.h), "cap": cap, "rx": true})
+	track.features.append({"type": "jump", "s": sc, "s0": sc - run, "s1": sc + drop, "h": height, "cap": cap, "rx": true})
 	track.notes.append({"s0": sc - run, "s1": sc + drop, "kind": "jump", "dir": 0.0, "sev": 0, "hairpin": false})
 	for i in range(track.index_at(sc - run) - 1, track.index_at(sc + drop) + 2):
 		if i >= 0 and i < track.pts.size():

@@ -167,6 +167,8 @@ func _start_race() -> void:
 	if _shot.has("at"):
 		var at: float = _shot["at"]
 		race.skip_to_s(at if at >= 0.0 else race.stage.track.finish_s + at)
+		if _shot.has("lat"):
+			race.player.place_at(float(at), float(_shot["lat"]))
 	_apply_post()
 	_clear_menu()
 	_back = Callable()
@@ -1376,6 +1378,8 @@ func _parse_args() -> void:
 			_shot["overhead"] = float(a.substr(11))
 		elif a.begins_with("--at="):
 			_shot["at"] = float(a.substr(5))
+		elif a.begins_with("--lat="):
+			_shot["lat"] = float(a.substr(6))
 		elif a.begins_with("--zoom="):
 			_shot["zoom"] = float(a.substr(7))
 		elif a.begins_with("--hazard="):
@@ -1825,6 +1829,30 @@ func _run_rxcheck(list: Array) -> void:
 			for sb in range(int(float(tr.joker.s0)) - 10, int(float(tr.joker.s1)) + 10, 8):
 				var bd := tr.joker_band(float(sb))
 				print("RXBAND %s s=%d hw=%.1f band=(%.1f,%.1f) on_road(lat=-8.2)=%s" % [Catalog.stages()[si].id, sb, tr.road_half_width(float(sb)), bd.x, bd.y, str(tr.on_road_at(float(sb), -8.2 * float(tr.joker.side) * -1.0))])
+		var steps := ""
+		for sti in range(0, tr.pts.size() - 1):
+			var dh := tr.road_h_i(sti + 1) - tr.road_h_i(sti)
+			if absf(dh) > 0.3:
+				steps += " s=%.0f:%+.2f" % [tr.dist[sti], dh]
+		print("RXSTEP %s steps>0.3m/sample:%s" % [Catalog.stages()[si].id, steps])
+		for a in OS.get_cmdline_user_args():
+			if a.begins_with("--rxnear="):
+				var sn := float(a.substr(9))
+				var pn: Vector2 = tr.pts[tr.index_at(sn)]
+				var out := ""
+				for oi in range(0, tr.pts.size(), 3):
+					if absf(tr.dist[oi] - sn) > 70.0 and tr.pts[oi].distance_to(pn) < 26.0:
+						out += " s=%.0f d=%.1f h=%.1f" % [tr.dist[oi], tr.pts[oi].distance_to(pn), tr.road_h_i(oi)]
+				print("RXNEAR2 %s s=%.0f h=%.1f width=%.1f others:%s" % [Catalog.stages()[si].id, sn, tr.road_h(sn), tr.road_half_width(sn) * 2.0, out])
+		for a in OS.get_cmdline_user_args():
+			if a.begins_with("--rxlat="):
+				var sl := float(a.substr(8))
+				var il := tr.index_at(sl)
+				var line := "RXLAT %s s=%.0f road_h=%.2f hw=%.1f |" % [Catalog.stages()[si].id, sl, tr.road_h(sl), tr.road_half_width(sl)]
+				for latv in range(-12, 13, 2):
+					var q: Vector2 = tr.pts[il] + tr.nrm[il] * float(latv)
+					line += " %d:%.1f(%.1f)" % [latv, tr.terrain.height(q), tr.surface_height(q, sl, float(latv))]
+				print(line)
 		print("RXCORNERS %s len=%.0f joker=%s corners=%s" % [Catalog.stages()[si].id, tr.length, str([float(tr.joker.get("s0", 0.0)), float(tr.joker.get("s1", 0.0))]), cl])
 		var gl := ""
 		var sg := 0.0
@@ -1930,9 +1958,10 @@ func _run_rxwall(list: Array) -> void:
 		var s0 := _arg_float("--rxwall_s=", 30.0)
 		var one_only := false
 		for a in OS.get_cmdline_user_args():
-			if a.begins_with("--rxwall_s="):
+			if a.begins_with("--rxwall_s=") and not OS.get_cmdline_user_args().has("--rxwall_range"):
 				one_only = true
-		while s0 < tr.length - 30.0:
+		var s_end := _arg_float("--rxwall_end=", tr.length - 30.0)
+		while s0 < s_end:
 			for side in [-1.0, 1.0]:
 				var bars := tr.barriers_at(s0, side)
 				if bars.is_empty():
@@ -1962,6 +1991,17 @@ func _run_rxwall(list: Array) -> void:
 						w2 = maxf(w2, tr.barrier_wall(bar, c.s))
 					if w2 > 0.0 and absf(c.lat) > w2 + 0.4 and signf(c.lat) == side:
 						worst = maxf(worst, absf(c.lat) - w2)
+				# Where it came to rest: is the body overlapping the wall?
+				var bars3 := tr.barriers_at(c.s, signf(c.lat))
+				var wmax := 0.0
+				for bar in bars3:
+					if str(bar.kind) != "island":
+						wmax = maxf(wmax, tr.barrier_wall(bar, c.s))
+				var nn := tr.nrm[c.track_i] * signf(c.lat)
+				var ext_end := c.half_wid * absf(c.right_axis().dot(nn)) + c.half_len * absf(c.fwd().dot(nn))
+				var overlap := absf(c.lat) + ext_end - wmax
+				if wmax > 0.0 and overlap > 0.3 and absf(c.lat) < wmax + 1.0:
+					print("RXWALLEND %s s=%.0f side=%.0f overlap=%.2f lat=%.2f wall=%.2f speed=%.1f" % [Catalog.stages()[si].id, s0, side, overlap, c.lat, wmax, c.vel.length()])
 				tested += 1
 				if worst > 0.0:
 					passed += 1

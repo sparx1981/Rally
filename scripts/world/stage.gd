@@ -118,7 +118,7 @@ func build(stage_def: Dictionary, time_of_day := -1) -> void:
 	_make_materials()
 	_make_lights()
 	var landmark: RegionalLandmark
-	if def["loc_id"] in RegionalLandmark.REGIONS:
+	if def["loc_id"] in RegionalLandmark.REGIONS and not track.rx:
 		landmark = RegionalLandmark.new()
 		if landmark.build(def["loc_id"], track, paper_mat):
 			add_child(landmark)
@@ -556,7 +556,8 @@ func _make_joker_lane() -> void:
 	add_child(mi)
 
 
-## Sawtooth kerbs on the inside of the marked corners.
+## Rumble strips on the inside of the marked corners: raised, domed red and white blocks with their own
+## end faces and a darker edge, standing proud of the tarmac like real rumble kerbs.
 func _make_kerbs() -> void:
 	var b := PaperKit.Builder.new(33)
 	var made := false
@@ -568,15 +569,35 @@ func _make_kerbs() -> void:
 		while k < s1:
 			var i := track.index_at(k)
 			var i2 := track.index_at(k + 2.0)
-			var col := Color("#c8553d") if n % 2 == 0 else PaperKit.CREAM
+			var base := Color("#c8553d") if n % 2 == 0 else PaperKit.CREAM
+			var top := PaperKit.lin(base, 1.0)
+			var face := PaperKit.lin(base.darkened(0.22), 1.0)
 			for side in [-1.0, 1.0]:
 				var hw := track.road_half_width(k)
 				var hw2 := track.road_half_width(k + 2.0)
-				var a0 := _road_point(i, side * (hw - 1.1), 0.05)
-				var a1 := _road_point(i2, side * (hw2 - 1.1), 0.05)
-				var e0 := _road_point(i, side * (hw - 0.1), 0.05)
-				var e1 := _road_point(i2, side * (hw2 - 0.1), 0.05)
-				b.quad(a0, a1, e1, e0, Vector3.UP, PaperKit.lin(col, 1.0))
+				# Profile across the strip: flush at the inner edge, a ridge in the middle, a lower rounded lip outside.
+				var offs := [1.15, 0.65, 0.12]
+				var lifts := [0.02, 0.14, 0.07]
+				var p0: Array[Vector3] = []
+				var p1: Array[Vector3] = []
+				for q in 3:
+					p0.append(_road_point(i, side * (hw - offs[q]), lifts[q]))
+					p1.append(_road_point(i2, side * (hw2 - offs[q]), lifts[q]))
+				# Two sloped top faces (inner flank and outer flank).
+				b.quad(p0[0], p1[0], p1[1], p0[1], Vector3.UP, top)
+				b.quad(p0[1], p1[1], p1[2], p0[2], Vector3.UP, top)
+				# Outer lip face down to the road, and the two end faces that give each block its depth.
+				var down0 := _road_point(i, side * (hw - offs[2]), 0.0)
+				var down1 := _road_point(i2, side * (hw2 - offs[2]), 0.0)
+				b.quad(p0[2], p1[2], down1, down0, Vector3(side, 0, 0), face)
+				var inner0 := _road_point(i, side * (hw - offs[0]), 0.0)
+				var mid0 := _road_point(i, side * (hw - offs[1]), 0.0)
+				var inner1 := _road_point(i2, side * (hw2 - offs[0]), 0.0)
+				var mid1 := _road_point(i2, side * (hw2 - offs[1]), 0.0)
+				b.quad(inner0, p0[0], p0[1], mid0, Vector3(0, 0, -1), face)
+				b.quad(mid0, p0[1], p0[2], down0, Vector3(0, 0, -1), face)
+				b.quad(p1[0], inner1, mid1, p1[1], Vector3(0, 0, 1), face)
+				b.quad(p1[1], mid1, down1, p1[2], Vector3(0, 0, 1), face)
 				made = true
 			k += 2.0
 			n += 1
