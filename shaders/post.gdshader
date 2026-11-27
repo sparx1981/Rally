@@ -19,6 +19,9 @@ uniform vec3 shadow_tint : source_color = vec3(0.23, 0.13, 0.05);
 uniform float vignette = 0.08;
 uniform vec3 vig_color : source_color = vec3(0.23, 0.13, 0.05);
 uniform float grain = 0.01;
+uniform float bloom = 0.0;          // glow around bright areas (used for the loading art)
+uniform float bloom_px = 14.0;
+uniform float bloom_cut = 0.72;
 
 float hash(vec2 p) {
 	return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
@@ -48,6 +51,18 @@ void fragment() {
 			}
 			col = acc / wsum;
 		}
+	}
+	if (bloom > 0.0) {
+		vec3 glow = vec3(0.0);
+		for (int ring = 1; ring <= 3; ring++) {
+			float rr = bloom_px * float(ring) * 0.6;
+			for (int k = 0; k < 10; k++) {
+				float a = float(k) * 0.6283 + float(ring) * 0.4;
+				vec3 sm = texture(screen, uv + vec2(cos(a), sin(a)) * rr * SCREEN_PIXEL_SIZE).rgb;
+				glow += max(sm - vec3(bloom_cut), vec3(0.0)) / float(ring);
+			}
+		}
+		col += glow * bloom * 0.28;
 	}
 	col *= exposure * tint;
 	float l = dot(col, vec3(0.299, 0.587, 0.114));

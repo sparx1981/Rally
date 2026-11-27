@@ -78,6 +78,7 @@ var _cockpit: Dictionary = {}
 var _trip_centikm := -1
 var _lights: Array = []
 var _prev_gh := 0.0
+var _s_height := 0.0
 var _slope := 0.0
 var _suspension_offset := Vector2.ZERO
 var _suspension_velocity := Vector2.ZERO
@@ -189,6 +190,10 @@ func _update_contact() -> void:
 ## Brake lights (bright red) and reversing lights (white): glowing lamp faces on the tail plus a
 ## small light that washes the road behind.
 var _brake_lamps: Array = []
+var _halos: Array = []
+var _street_light: OmniLight3D
+var _street_t := 0.0
+var _street_target := 0.0
 var _rev_lamps: Array = []
 var _brake_light: OmniLight3D
 var _rev_light: OmniLight3D
@@ -249,11 +254,14 @@ func _make_rear_lamps() -> void:
 func _update_rear_lamps() -> void:
 	var braking := service_brake > 0.08 and not frozen
 	var reversing := gear == 0 and not frozen
+	var rear_ok := false
 	for b in _brake_lamps:
-		b.visible = braking
+		var ok: bool = not b.get_meta("broken", false)
+		rear_ok = rear_ok or ok
+		b.visible = braking and ok
 	for r in _rev_lamps:
-		r.visible = reversing
-	_brake_light.visible = braking
+		r.visible = reversing and not r.get_meta("broken", false)
+	_brake_light.visible = braking and rear_ok
 	_rev_light.visible = reversing
 
 
@@ -446,10 +454,21 @@ func enable_lights(shadows: bool, night := false) -> void:
 			var hl := LightHalo.make(Color("#fff0d0"), 1.5, 0.9)
 			hl.position = mounts[i] + Vector3(0, 0, 0.12)
 			_body.add_child(hl)
+			_halos.append(hl)
 		for sx: float in [-1.0, 1.0]:
 			var tl := LightHalo.make(Color("#ff3a2a"), 0.9, 0.8)
 			tl.position = Vector3(sx * half_wid * 0.72, lamp.y, -half_len - 0.12)
 			_body.add_child(tl)
+			_halos.append(tl)
+	# Light from street and track lamps falls on the car as it passes beneath them.
+	_street_light = OmniLight3D.new()
+	_street_light.light_color = Color("#ffd9a0")
+	_street_light.light_energy = 0.0
+	_street_light.omni_range = 7.5
+	_street_light.omni_attenuation = 0.8
+	_street_light.position = Vector3(0, 3.4, 0)
+	_street_light.visible = false
+	_body.add_child(_street_light)
 	var tail := OmniLight3D.new()
 	tail.light_color = Color("#ff5a3a")
 	tail.light_energy = 0.7
@@ -464,8 +483,10 @@ func set_headlight_level(level: float) -> void:
 		var light := node as Light3D
 		if not light.has_meta("full_energy"):
 			light.set_meta("full_energy", light.light_energy)
-		light.visible = level > 0.004
+		light.visible = level > 0.004 and not light.get_meta("broken", false)
 		light.light_energy = float(light.get_meta("full_energy")) * level
+	for h: Node3D in _halos:
+		h.visible = level > 0.004 and not h.get_meta("broken", false)
 
 
 ## Sync the visible car to the physics state now (before the camera follows it), so fast-moving
@@ -504,10 +525,16 @@ func add_damage(at: Vector2, strength: float) -> void:
 	for i in vertices.size():
 		var original := _pristine_shell[i]
 		vertices[i] = _crush_point(original, vertices[i], center, outward, radius, crush)
-	for light in _brake_lamps + _rev_lamps + _lights:
+	for light in _brake_lamps + _rev_lamps + _lights + _halos:
 		if not light.has_meta("undamaged_position"):
 			light.set_meta("undamaged_position", light.position)
 		light.position = _crush_point(light.get_meta("undamaged_position"), light.position, center, outward, radius, crush)
+		# A lamp inside the crushed patch is smashed: its beam, glow and lit lens go out for good.
+		var off: Vector3 = Vector3(light.get_meta("undamaged_position")) - center
+		off.y *= 1.55
+		if off.length() < radius * 0.62:
+			light.set_meta("broken", true)
+			light.visible = false
 	arrays[Mesh.ARRAY_VERTEX] = vertices
 	var colors: PackedColorArray = arrays[Mesh.ARRAY_COLOR]
 	var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
@@ -527,6 +554,12 @@ func add_damage(at: Vector2, strength: float) -> void:
 					var value := colors[v]
 					var wear := smoothstep(0.035,0.18,shift)*0.30
 					colors[v] = value.lerp(Color(0.28,0.24,0.20,value.a),wear)
+	for v in vertices.size():
+		if colors[v].a < 0.01:
+			var lo: Vector3 = _pristine_shell[v] - center
+			lo.y *= 1.55
+			if lo.length() < radius * 0.62:
+				colors[v] = Color(0.16, 0.14, 0.13, 1.0)
 	arrays[Mesh.ARRAY_COLOR] = colors
 	arrays[Mesh.ARRAY_NORMAL] = normals
 	var dented := ArrayMesh.new()
@@ -833,7 +866,17 @@ func step(dt: float) -> void:
 	in_water = water
 	_ford_depth = maxf(0.0,float(track.feature_at(s,"splash",3.0).water_y)-track.surface_height(pos,s,lat)-Stage.ROAD_Y) if water else 0.0
 	# Vertical: follow the road over crests and ramps; leave it when it falls away faster than gravity.
-	var gh := track.surface_height(pos, s, lat)
+	# The station used for road height follows the projected station smoothly: inside a tight hairpin the
+	# projection stalls and then jumps, which would otherwise step the road height under the car.
+	var dsh := s - _s_height
+	if track.circuit:
+		dsh = wrapf(dsh, -track.length * 0.5, track.length * 0.5)
+	if not _has_prev_gh or absf(dsh) > 6.0:
+		_s_height = s
+	else:
+		var reach := (absf(v_long) * 1.35 + 0.6) * dt
+		_s_height += clampf(dsh, -reach, reach)
+	var gh := track.surface_height(pos, _s_height, lat)
 	var ground_vy := (gh - _prev_gh) / dt if _has_prev_gh else 0.0
 	_prev_gh = gh
 	_has_prev_gh = true
@@ -854,7 +897,9 @@ func step(dt: float) -> void:
 	else:
 		# Ballistic if the ground drops away faster than gravity can pull the car down.
 		var predicted := y + vy * dt - 0.5 * GRAVITY * dt * dt
-		if gh < predicted - 0.02 and vy > ground_vy + 0.5:
+		# (Margins keep ordinary steep grades and small kinks from throwing the car into the air; real
+		# ramps and crests drop away by several metres a second.)
+		if gh < predicted - 0.03 and vy > ground_vy + 1.4:
 			airborne = true
 			air_time = 0.0
 			# Cap the launch so ramps and crests give a short, controlled hop, never a fling.
@@ -974,7 +1019,19 @@ func _process(delta: float) -> void:
 		_rival_engine.mix(acoustic_rpm, throttle, lerpf(0.29, 0.74, throttle))
 
 
+func _update_street_light(delta: float) -> void:
+	_street_t -= delta
+	if _street_t <= 0.0:
+		_street_t = 0.12
+		_street_target = stage.street_light_at(pos) if stage else 0.0
+	var level := move_toward(_street_light.light_energy / 3.2, _street_target, delta * 4.0)
+	_street_light.light_energy = level * 3.2
+	_street_light.visible = level > 0.02
+
+
 func _sync_visual(delta: float) -> void:
+	if _street_light:
+		_update_street_light(delta)
 	if _brake_light:
 		_update_rear_lamps()
 	position = Vector3(pos.x, y + (Stage.ROAD_Y if on_road else 0.0), pos.y)

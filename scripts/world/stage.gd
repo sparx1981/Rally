@@ -289,6 +289,22 @@ func _make_lights() -> void:
 	_apply_lighting(float(tod))
 
 
+## How strongly street or track lamps light a spot on the ground (0 = not at all), for the cars passing under them.
+func street_light_at(p: Vector2) -> float:
+	var best := 0.0
+	if rx_props:
+		for q in rx_props.lamps:
+			var d := p.distance_squared_to(q)
+			if d < 100.0:
+				best = maxf(best, 1.0 - sqrt(d) / 10.0)
+	if scenery and scenery.lamp_level > 0.01:
+		for q in scenery.lamp_positions():
+			var d2 := p.distance_squared_to(q)
+			if d2 < 64.0:
+				best = maxf(best, (1.0 - sqrt(d2) / 8.0) * scenery.lamp_level)
+	return best
+
+
 func changing_light() -> bool:
 	return _lighting_mode in [Catalog.SUNRISE, Catalog.SUNSET]
 
@@ -348,6 +364,9 @@ func _apply_lighting(phase: float) -> void:
 	var zen: Color = warm[1].lerp(cool[1], mix_amount)
 	var mid_col := horizon.lerp(zen, 0.45).lerp(Color("#d98a92"), glow * 0.55 * (0.35 if stormy else 1.0))
 	sky_mat.set_shader_parameter("mid_ink", mid_col)
+	paper_mat.set_shader_parameter("glass_horizon", horizon)
+	paper_mat.set_shader_parameter("glass_zenith", zen)
+	paper_mat.set_shader_parameter("glass_night", darkness)
 	sky_mat.set_shader_parameter("glow_amount", glow)
 	sky_mat.set_shader_parameter("glow_ink", Color("#ffcf9a").lerp(Color("#ff6a38"), glow))
 	sky_mat.set_shader_parameter("moon_ink", Color("#d4e0ff"))
@@ -885,20 +904,37 @@ func _rx_wall(b: PaperKit.Builder, kind: String, p0: Vector2, p1: Vector2, y0: f
 			b.box(Vector3(0, 0.47, 0), Vector3(0.62, 0.94, seg + 0.02), frame, Color("#26262a"))
 			var stacks := maxi(1, roundi(seg / 0.95))
 			var pitch := seg / float(stacks)
-			var tilt := Basis(Vector3.BACK, PI * 0.5)
-			var disc := PaperKit.circle(0.46, 0.0, 0.0, 10)
-			var tread := PaperKit.circle(0.475, 0.0, 0.0, 10)
-			var hole := PaperKit.circle(0.24, 0.0, 0.0, 8)
+			var sides := 8
+			var big := 0.46
+			var small := 0.22
+			var dark := PaperKit.lin(Color("#1c1c1f"), 1.0)
+			var bas := frame.basis
 			for k in stacks:
 				var z := -seg * 0.5 + pitch * (k + 0.5)
-				var idx := n * 3 + k
-				var paint := Color("#c93a30") if idx % 2 == 0 else Color("#eee8dc")
+				var paint := Color("#c93a30") if (n * 3 + k) % 2 == 0 else Color("#eee8dc")
 				for t in 3:
-					var y := -(y1 - y0) * 0.0 + 0.165 + t * 0.33 - 0.5
-					var pos := Vector3(0, y + 0.5, z)
-					b.prism(disc, -0.15, 0.15, frame * Transform3D(tilt, pos), paint)
-					b.prism(tread, -0.035, 0.035, frame * Transform3D(tilt, pos), paint.darkened(0.28))
-				b.prism(hole, 0.0, 0.2, frame * Transform3D(tilt, Vector3(0, 0.99, z)), Color("#1c1c1f"))
+					var y_lo := 0.01 + t * 0.33
+					var y_hi := y_lo + 0.32
+					var col := PaperKit.lin(paint if t != 1 else paint.darkened(0.14), 1.0)
+					for q in sides:
+						var a0 := TAU * float(q) / sides
+						var a1 := TAU * float(q + 1) / sides
+						var am := (a0 + a1) * 0.5
+						var o0 := Vector3(cos(a0) * big, 0, z + sin(a0) * big)
+						var o1 := Vector3(cos(a1) * big, 0, z + sin(a1) * big)
+						var nrm := bas * Vector3(cos(am), 0, sin(am))
+						b.quad(frame * (o1 + Vector3(0, y_lo, 0)), frame * (o0 + Vector3(0, y_lo, 0)), frame * (o0 + Vector3(0, y_hi, 0)), frame * (o1 + Vector3(0, y_hi, 0)), nrm, col)
+				# Top face of the stack is a ring, with the hole running down through it.
+				for q in sides:
+					var a0 := TAU * float(q) / sides
+					var a1 := TAU * float(q + 1) / sides
+					var am := (a0 + a1) * 0.5
+					var o0 := Vector3(cos(a0) * big, 0.99, z + sin(a0) * big)
+					var o1 := Vector3(cos(a1) * big, 0.99, z + sin(a1) * big)
+					var i0 := Vector3(cos(a0) * small, 0.99, z + sin(a0) * small)
+					var i1 := Vector3(cos(a1) * small, 0.99, z + sin(a1) * small)
+					b.quad(frame * o1, frame * i1, frame * i0, frame * o0, bas * Vector3.UP, PaperKit.lin(paint.lightened(0.05), 1.0))
+					b.quad(frame * i0, frame * i1, frame * (i1 - Vector3(0, 0.99, 0)), frame * (i0 - Vector3(0, 0.99, 0)), bas * Vector3(-cos(am), 0, -sin(am)), dark)
 		"jersey":
 			b.box(Vector3(0, 0.50, 0), Vector3(0.55, 1.0, seg + 0.02), frame, Color("#bfbab0"), Color("#d0cbc0"))
 			b.box(Vector3(0, 0.12, 0), Vector3(0.75, 0.24, seg + 0.02), frame, Color("#aaa59b"))

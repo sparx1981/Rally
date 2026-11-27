@@ -11,6 +11,11 @@ uniform float fibre_amount = 0.09;
 uniform float fibre_scale = 0.55;
 uniform float glow = 0.0;
 uniform vec3 glow_color : source_color = vec3(1.0, 0.77, 0.35);
+// Car glass (recognised by its printed colour) mirrors the sky, with a faint glint of the lights at night.
+uniform vec3 glass_horizon : source_color = vec3(0.86, 0.75, 0.6);
+uniform vec3 glass_zenith : source_color = vec3(0.35, 0.55, 0.78);
+uniform float glass_night = 0.0;
+const vec3 GLASS_KEY = vec3(0.102, 0.159, 0.216);
 
 varying vec3 obj_pos;
 varying vec3 obj_n;
@@ -33,6 +38,16 @@ void fragment() {
 	SPECULAR = 0.0;
 	float g = 1.0 - COLOR.a;
 	EMISSION = c * glow_color * g * (0.35 + glow);
+	float pane = (1.0 - smoothstep(0.012, 0.035, distance(COLOR.rgb, GLASS_KEY))) * step(0.5, COLOR.a);
+	if (pane > 0.0) {
+		vec3 refl = (INV_VIEW_MATRIX * vec4(reflect(-VIEW, NORMAL), 0.0)).xyz;
+		float fres = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 2.2);
+		vec3 sky = mix(glass_horizon, glass_zenith, clamp(refl.y * 1.6, 0.0, 1.0));
+		sky = mix(vec3(0.05, 0.05, 0.06), sky, smoothstep(-0.35, 0.1, refl.y));
+		float glint = smoothstep(0.80, 0.97, sin((obj_pos.x + obj_pos.y * 1.4 + obj_pos.z * 0.6) * 7.0)) * 0.22;
+		vec3 lamps = vec3(1.0, 0.82, 0.55) * glint * (0.35 + glass_night * 1.2);
+		EMISSION += pane * (sky * (0.10 + 0.55 * fres) + lamps);
+	}
 }
 
 void light() {

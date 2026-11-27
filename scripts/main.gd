@@ -104,29 +104,31 @@ func _loading_stage(sdef: Dictionary, startup := false) -> void:
 	if tod_i < 0:
 		tod_i = int(sdef.get("tod", 0))
 	var sunrise := (int(sdef.get("seed", 0)) % 2 == 0 or tod_i == Catalog.SUNRISE) and tod_i != 1
-	var sky := ColorRect.new()
+	var sky := TextureRect.new()
+	sky.texture = preload("res://ui/boot.png") if startup else preload("res://ui/loading_hero.png")
+	sky.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	sky.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	sky.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var sm := ShaderMaterial.new()
-	sm.shader = preload("res://shaders/loading_sky.gdshader")
-	var vs := get_viewport().get_visible_rect().size
-	sm.set_shader_parameter("aspect", vs.x / maxf(vs.y, 1.0))
-	sm.set_shader_parameter("seed", float(int(sdef.get("seed", 1)) % 97))
-	sm.set_shader_parameter("sun_x", 0.64 + 0.1 * float(int(sdef.get("seed", 0)) % 3) * (1.0 if sunrise else -1.0) * 0.5)
-	if sunrise:
-		sm.set_shader_parameter("top_col", Color("#3b4a8c"))
-		sm.set_shader_parameter("mid_col", Color("#f2899a"))
-		sm.set_shader_parameter("low_col", Color("#ffc47a"))
-		sm.set_shader_parameter("far_col", Color("#a56f9e"))
-		sm.set_shader_parameter("near_col", Color("#241a3a"))
-	else:
-		sm.set_shader_parameter("top_col", Color("#26245a"))
-		sm.set_shader_parameter("mid_col", Color("#d4487a"))
-		sm.set_shader_parameter("low_col", Color("#ff7a3d"))
-		sm.set_shader_parameter("far_col", Color("#8a3f6a"))
-		sm.set_shader_parameter("near_col", Color("#160c20"))
-	sm.set_shader_parameter("stars", 0.55 if tod_i == 2 else 0.0)
-	sky.material = sm
 	menu.add_child(sky)
+	if startup:
+		var boot_wait := Label.new()
+		boot_wait.text = "Folding the paper…"
+		boot_wait.add_theme_font_override("font", PaperTheme.font())
+		boot_wait.add_theme_font_size_override("font_size", 22)
+		boot_wait.add_theme_color_override("font_color", Color("#fff3dc"))
+		boot_wait.add_theme_color_override("font_outline_color", Color(0.18, 0.06, 0.1, 0.85))
+		boot_wait.add_theme_constant_override("outline_size", 6)
+		boot_wait.anchor_left = 0.0
+		boot_wait.anchor_top = 1.0
+		boot_wait.anchor_bottom = 1.0
+		boot_wait.offset_left = 56
+		boot_wait.offset_top = -64
+		boot_wait.offset_bottom = -28
+		sky.add_child(boot_wait)
+		await get_tree().process_frame
+		await get_tree().process_frame
+		await get_tree().process_frame
+		return
 	var scrim := TextureRect.new()
 	var gr := Gradient.new()
 	gr.offsets = PackedFloat32Array([0.0, 0.55, 1.0])
@@ -206,12 +208,12 @@ func _loading_stage(sdef: Dictionary, startup := false) -> void:
 		card.add_child(pic)
 		card.anchor_left = 1.0
 		card.anchor_right = 1.0
-		card.anchor_top = 1.0
-		card.anchor_bottom = 1.0
+		card.anchor_top = 0.0
+		card.anchor_bottom = 0.0
 		card.offset_left = -440
 		card.offset_right = -56
-		card.offset_top = -330
-		card.offset_bottom = -90
+		card.offset_top = 56
+		card.offset_bottom = 296
 		card.rotation = deg_to_rad(-1.6)
 		sky.add_child(card)
 	var wait := Label.new()
@@ -1584,6 +1586,9 @@ func _run_bench() -> void:
 		elif a == "--rx":
 			list = Catalog.rallycross_indices()
 	Game.circuit_laps = 3
+	if OS.get_cmdline_user_args().has("--rxbump"):
+		await _run_rxbump(list)
+		return
 	if OS.get_cmdline_user_args().has("--rxcheck"):
 		await _run_rxcheck(list)
 		get_tree().quit()
@@ -1613,12 +1618,26 @@ func _run_bench() -> void:
 			var res := {}
 			race.finished.connect(func(r): res["r"] = r)
 			var frames := 0
+			var bounce_air := false
+			var bounce_gh := 0.0
+			var bounce_s := 0.0
 			var jokers := {}
 			var sec := {}       # lap -> [time at section start, time at section end]
 			var prev_s := race.player.s
 			while res.is_empty() and frames < 30 * 1500:
 				await get_tree().process_frame
 				frames += 1
+				if OS.get_cmdline_user_args().has("--rxbounce"):
+					var bp: Car = race.player
+					var gh_now: float = race.stage.track.surface_height(bp.pos, bp.s, bp.lat)
+					if absf(gh_now - bounce_gh) > 0.10 and frames > 5:
+						print("RXJUMP s=%.2f(prev %.2f) lat=%.2f gh=%.2f prev=%.2f idx=%d" % [bp.s, bounce_s, bp.lat, gh_now, bounce_gh, bp.track_i])
+					bounce_gh = gh_now
+					bounce_s = bp.s
+					if bp.airborne != bounce_air:
+						if bp.airborne:
+							print("RXAIR s=%.0f lat=%.1f lap=%d v=%.1f vy=%.2f" % [bp.s, bp.lat, bp.lap, bp.v_long, bp.vy])
+						bounce_air = bp.airborne
 				var jt: Dictionary = race.stage.track.joker
 				if not jt.is_empty() and race.player.laps_total > 0:
 					var a: float = float(jt.s0) - 60.0
@@ -1817,6 +1836,8 @@ func _run_shot() -> void:
 		var n0 := rp.knock_cones(race.player)
 		await get_tree().create_timer(0.8).timeout
 		print("CONETEST hit=", n0, " moved=", (cone.node as Node3D).position.distance_to(Vector3(cone.pos.x, cone.y, cone.pos.y)), " rest=", cone.rest)
+	if OS.get_cmdline_user_args().has("--hero") and race:
+		await _hero_setup()
 	if _shot.has("skyyaw") and race:
 		# Debug: look at the sky from the player's position (yaw 0 = along +Z, degrees).
 		var sc := Camera3D.new()
@@ -1848,6 +1869,60 @@ func _run_shot() -> void:
 	get_tree().quit()
 
 
+## Hero art for the loading screen: the car backlit by the low sun, soft focus, bloom.
+func _hero_setup() -> void:
+	var car: Car = race.player
+	var st: Stage = race.stage
+	var sun: Vector3 = st.key_light.global_basis.z
+	var flat := Vector3(sun.x, 0.0, sun.z).normalized()
+	var yaw_off := deg_to_rad(_arg_float("--heroyaw=", 30.0))
+	var face := (-flat).rotated(Vector3.UP, yaw_off)
+	car.h = atan2(face.x, face.z) + _arg_float("--carturn=", 0.62)
+	car.vel = Vector2.ZERO
+	car.frozen = true
+	car.sync_now()
+	var base := car.global_position
+	var cam := Camera3D.new()
+	cam.fov = _arg_float("--herofov=", 36.0)
+	race.add_child(cam)
+	var dist := _arg_float("--herodist=", 8.5)
+	cam.global_position = base + face * dist + Vector3(0, _arg_float("--heroh=", 0.85), 0)
+	var aim := base + Vector3(0, _arg_float("--heroaim=", 1.55), 0)
+	var right := Vector3.UP.cross((aim - cam.global_position).normalized()).normalized()
+	cam.look_at(aim + right * _arg_float("--heroshift=", 0.0))
+	cam.current = true
+	race.set_overlay_visible(false)
+	var m := post.material as ShaderMaterial
+	_apply_post()
+	m.set_shader_parameter("taps", 24)
+	m.set_shader_parameter("focus_y", _arg_float("--herofocus=", 0.62))
+	m.set_shader_parameter("band", 0.16)
+	m.set_shader_parameter("ramp", 0.30)
+	m.set_shader_parameter("max_blur_px", 26.0 * float(DisplayServer.window_get_size().y) / 1080.0)
+	m.set_shader_parameter("near_gain", 1.4)
+	m.set_shader_parameter("bloom", _arg_float("--herobloom=", 0.5))
+	m.set_shader_parameter("bloom_px", 22.0 * float(DisplayServer.window_get_size().y) / 1080.0)
+	m.set_shader_parameter("bloom_cut", _arg_float("--herocut=", 0.85))
+	m.set_shader_parameter("vignette", 0.35)
+	if OS.get_cmdline_user_args().has("--herotitle"):
+		var title := Label.new()
+		title.text = "Paper Rally"
+		title.add_theme_font_override("font", PaperTheme.font())
+		title.add_theme_font_size_override("font_size", 120)
+		title.add_theme_color_override("font_color", Color("#fff3dc"))
+		title.add_theme_color_override("font_shadow_color", Color(0.18, 0.06, 0.1, 0.65))
+		title.add_theme_constant_override("shadow_offset_x", 5)
+		title.add_theme_constant_override("shadow_offset_y", 7)
+		title.add_theme_color_override("font_outline_color", Color(0.18, 0.06, 0.1, 0.85))
+		title.add_theme_constant_override("outline_size", 10)
+		title.position = Vector2(110, 130)
+		var top := CanvasLayer.new()
+		top.layer = 100
+		add_child(top)
+		top.add_child(title)
+	await get_tree().create_timer(0.6).timeout
+
+
 func _arg_float(prefix: String, fallback: float) -> float:
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with(prefix):
@@ -1856,6 +1931,87 @@ func _arg_float(prefix: String, fallback: float) -> float:
 
 
 ## Geometry audit: where the road surface sits against the landscape, across the road and Joker lane.
+## Hidden lumps: places where the driving surface rises or dips against its own surroundings within a few metres.
+func _run_rxbump(list: Array) -> void:
+	Game.mode = Game.Mode.TIME_TRIAL
+	var only := ""
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--rxs="):
+			only = a.substr(6)
+	for si in list:
+		if not Catalog.stages()[si].has("rx"):
+			continue
+		Game.stage_index = si
+		await _start_race()
+		var tr := race.stage.track
+		var found: Array = []
+		for lat: float in [-4.0, 0.0, 4.0]:
+			var s := 6.0
+			while s < tr.length - 6.0:
+				if not tr.on_stacked_span(s) and tr.on_road_at(s, lat, 0.0):
+					var i := tr.index_at(s)
+					var h0 := _surf(tr, s, lat)
+					var ha := _surf(tr, s - 3.0, lat)
+					var hb := _surf(tr, s + 3.0, lat)
+					var bump := h0 - (ha + hb) * 0.5
+					if absf(bump) > 0.07:
+						found.append([absf(bump), s, lat, bump])
+				s += 1.0
+		found.sort_custom(func(a, b): return a[0] > b[0])
+		var shown := 0
+		var last_s := -99.0
+		var line := ""
+		for f in found:
+			if absf(float(f[1]) - last_s) < 6.0:
+				continue
+			last_s = float(f[1])
+			line += " [s=%.0f lat=%.0f bump=%+.2f]" % [f[1], f[2], f[3]]
+			shown += 1
+			if shown >= 8:
+				break
+		print("RXBUMP ", Catalog.stages()[si]["name"], " n=", found.size(), line)
+		if OS.get_cmdline_user_args().has("--rxprof"):
+			var s0 := _arg_float("--rxlo=", 140.0)
+			if s0 > tr.length - 20.0:
+				var seam := ""
+				var q := tr.length - 6.0
+				while q < tr.length + 6.0:
+					seam += " %.2f:%.3f" % [q, _surf(tr, q, 0.0)]
+					q += 0.5
+				print("RXSEAM L=", tr.length, " n=", tr.pts.size(), " step=", tr._sample_step, seam)
+			var line2 := ""
+			var s3 := s0
+			var plat := _arg_float("--rxlat=", -4.4)
+			while s3 < s0 + 12.0:
+				line2 += " %.2f:%.3f" % [s3, _surf(tr, s3, plat)]
+				s3 += 0.25
+			print("RXPROF lat=-4.4 s:surf/terrain", line2)
+			var line3 := ""
+			for lt in range(-9, 10):
+				line3 += " %d:%.2f" % [lt, _surf(tr, s0 + 10.0, float(lt))]
+			print("RXPROF across at s=", s0 + 10.0, line3, " half_w=", tr.road_half_width(s0 + 10.0))
+		if OS.get_cmdline_user_args().has("--rxfine"):
+			for lat: float in [-3.0, 0.6, 3.0]:
+				var sharp := ""
+				var s2 := 4.0
+				var last2 := -99.0
+				while s2 < tr.length - 4.0:
+					if not tr.on_stacked_span(s2) and tr.on_road_at(s2, lat, 0.0):
+						var d2 := _surf(tr, s2 + 0.5, lat) - 2.0 * _surf(tr, s2, lat) + _surf(tr, s2 - 0.5, lat)
+						if absf(d2) > 0.03 and absf(s2 - last2) > 1.5:
+							sharp += " [s=%.1f d2=%+.2f]" % [s2, d2]
+							last2 = s2
+					s2 += 0.5
+				print("RXFINE lat=", lat, sharp)
+	get_tree().quit()
+
+
+func _surf(tr: Track, s: float, lat: float) -> float:
+	var i := tr.index_at(fposmod(s, tr.length))
+	var p: Vector2 = tr.pts[i] + tr.nrm[i] * lat
+	return tr.surface_height(p, fposmod(s, tr.length), lat)
+
+
 func _run_rxcheck(list: Array) -> void:
 	Game.mode = Game.Mode.TIME_TRIAL
 	for si in list:

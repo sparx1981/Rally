@@ -606,6 +606,18 @@ func solids_near(p: Vector2) -> Array:
 
 var lights_on := false
 var lamp_level := 1.0
+var _lamp_points := PackedVector2Array()
+var _lamp_scanned := false
+
+
+## Ground positions of every street lamp (cached the first time they are asked for).
+func lamp_positions() -> PackedVector2Array:
+	if not _lamp_scanned:
+		_lamp_scanned = true
+		for pl in placements:
+			if pl["kind"] == "lamp":
+				_lamp_points.append(pl["pos"])
+	return _lamp_points
 
 # --- streaming: scenery is built in chunks of road around the camera and freed behind it ------
 const STREAM_R := 320.0

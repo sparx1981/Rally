@@ -157,6 +157,16 @@ static func build(track: Track, def: Dictionary) -> void:
 		# Positive banks into the turn: the inside edge is lower.
 		track.banks[i] = -b * turn_sign[i]
 	track.width = max_width
+	# Soften the altitude profile (keyframe seams leave kinks that make cars hop on steep grades).
+	var step := track.length / float(n)
+	var rad := maxi(2, int(14.0 / maxf(step, 0.5)))
+	for pass_i in 2:
+		var src := track.elev.duplicate()
+		for i in n:
+			var acc := 0.0
+			for k in range(-rad, rad + 1):
+				acc += src[posmod(i + k, n)]
+			track.elev[i] = acc / float(rad * 2 + 1)
 	_find_crossing(track)
 	# Surfaces: tarmac everywhere, loose sectors on top, the Joker lane last.
 	track.patches_unsorted = true
@@ -178,6 +188,15 @@ static func build(track: Track, def: Dictionary) -> void:
 	if rx.has("bridge"):
 		_add_covered_bridge(track, float(rx.bridge.f) * length)
 	_build_barriers(track, rx)
+	# The lap line must not carry a step in the road: make the end of the lap meet the start.
+	var last := n - 1
+	var gap := (track.elev[0] + track.heights[0]) - (track.elev[last] + track.heights[last])
+	if absf(gap) > 0.005:
+		var span := 60.0
+		for i in n:
+			var w := smoothstep(0.0, 1.0, (track.dist[i] - (track.length - span)) / span)
+			if w > 0.0:
+				track.elev[i] += gap * w
 	track.notes.sort_custom(func(a, b): return a.s0 < b.s0)
 	track.rx_info = {"racers": int(rx.racers), "laps": int(rx.get("laps", 5)), "joker": track.joker.duplicate(),
 		"delta": float(joker.get("delta", 0.0)), "pace": 0.0 if OS.get_cmdline_user_args().has("--nopace") else float(joker.get("pace", 0.0)), "kit": str(rx.kit)}

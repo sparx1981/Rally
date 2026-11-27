@@ -175,3 +175,12 @@ All 12 circuits complete 3 laps. A human player is not affected by the AI's lane
 
 - Subtle light glow added to lit house windows (dusk and night), the control tower windows, marshal booth flag panels and the start lights (when lit).
 - Co-driver voice pack for Nick replaced with the new recording (137 calls, converted to mono 24 kHz Ogg matched to -18.5 LUFS like the other packs).
+
+## Eleventh pass
+
+- Hidden lumps: bank slope was stepped between samples (now interpolated), the road-height station follows the car smoothly through hairpins (it used to stall and jump), the elevation profile is smoothed, the lap line no longer carries a 0.1 m step, and the launch margin is wider so steep grades do not throw the car into the air. The all-circuit bench (`--rx --rxbounce`) now shows launches only at the built jumps.
+- Street and track lamps light cars passing beneath them (a warm light follows the car near a lamp).
+- Car glass reflects the sky (and a faint glint of lamps at night).
+- Smashed lamps stay dark: beam, glow halo, tail lamp and the lit lens panes go out when the crushed patch reaches them.
+- Tyre walls are real rings with a hole through the stack (no cap on top).
+- Loading screen and splash use a rendered sunset hero image (bloom, depth of field, backlit car).

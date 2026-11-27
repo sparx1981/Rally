@@ -747,6 +747,15 @@ func build_elevation(params: Dictionary, seed_v: int) -> void:
 
 
 ## Road surface (altitude + hazard ramps) at distance s.
+## Cross-slope at station s, interpolated between samples (a stepped value makes invisible lumps off-centre).
+func bank_at(s: float) -> float:
+	if banks.is_empty():
+		return 0.0
+	var f := clampf(route_station(s) / _sample_step, 0.0, pts.size() - 1.001)
+	var i := int(f)
+	return lerpf(banks[i], banks[mini(i + 1, banks.size() - 1)], f - i)
+
+
 func road_h(s: float) -> float:
 	var f := clampf(route_station(s) / _sample_step, 0.0, pts.size() - 1.001)
 	var i := int(f)
@@ -757,7 +766,7 @@ func road_h(s: float) -> float:
 func surface_height(p: Vector2, s: float, lat: float) -> float:
 	if rx:
 		if on_road_at(s, lat, 0.1):
-			return road_h(s) + clampf(lat, -road_extent(s), road_extent(s)) * banks[index_at(s)]
+			return road_h(s) + clampf(lat, -road_extent(s), road_extent(s)) * bank_at(s)
 		# Just past the edge (a kerb, the gap beside a Joker lane) the ground eases from the road's height to the
 		# landscape, so a car that clips the edge does not drop through the surface.
 		var ext := road_half_width(s)
@@ -769,7 +778,7 @@ func surface_height(p: Vector2, s: float, lat: float) -> float:
 				ext = maxf(ext, -jb.x)
 		var over := absf(lat) - ext
 		if over < 3.0 and terrain:
-			var edge_h := road_h(s) + clampf(lat, -ext, ext) * banks[index_at(s)]
+			var edge_h := road_h(s) + clampf(lat, -ext, ext) * bank_at(s)
 			return lerpf(edge_h, terrain.height(p), smoothstep(0.0, 3.0, maxf(over, 0.0)))
 	elif absf(lat) <= road_half_width(s) + 0.1:
 		return road_h(s)
