@@ -308,7 +308,7 @@ func _tyre_mesh_for(paint: Color) -> ArrayMesh:
 
 ## A car hit a tyre wall: one to three tyres come off and tumble into the track.
 func knock_tyres(at: Vector2, toward_road: Vector2, strength: float, ground_y: float) -> void:
-	var count := 1 + (1 if strength > 7.0 else 0) + (1 if strength > 12.0 else 0)
+	var count := 1 + (1 if strength > 5.0 else 0) + (1 if strength > 9.0 else 0) + (1 if strength > 14.0 else 0)
 	for k in count:
 		var n := Node3D.new()
 		var mi := MeshInstance3D.new()
@@ -320,9 +320,9 @@ func knock_tyres(at: Vector2, toward_road: Vector2, strength: float, ground_y: f
 		var side := Vector2(-toward_road.y, toward_road.x)
 		var p := at + side * randf_range(-0.7, 0.7) + toward_road * 0.35
 		n.position = Vector3(p.x, ground_y + 0.35 + k * 0.45, p.y)
-		var spd := 1.5 + strength * 0.22 + randf_range(0.0, 1.2)
+		var spd := 3.2 + strength * 0.6 + randf_range(0.0, 2.0)
 		var dir := (toward_road + side * randf_range(-0.45, 0.45)).normalized()
-		tyres.append({"node": n, "pos": p, "y": ground_y, "vel": Vector3(dir.x * spd, randf_range(2.0, 4.0), dir.y * spd),
+		tyres.append({"node": n, "pos": p, "y": ground_y, "vel": Vector3(dir.x * spd, randf_range(2.5, 4.5), dir.y * spd),
 			"axis": Vector3(randf_range(-1, 1), randf_range(-0.2, 0.2), randf_range(-1, 1)).normalized(), "spin": randf_range(4.0, 9.0), "rest": false})
 	while tyres.size() > 18:
 		var old: Dictionary = tyres.pop_front()

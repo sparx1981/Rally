@@ -76,6 +76,7 @@ var _light_progress := 0.0
 var headlight_level := 0.0
 var _sky_mat: ShaderMaterial
 var helicopter: Helicopter
+var debug_board: Array = []
 var _reflect_t := 0.0
 var _lamp_level := 0.0
 var _head_cache := PackedVector3Array()
@@ -665,7 +666,7 @@ func _tarmac_wear() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = int(def.seed) * 13 + 5
 	var b := PaperKit.Builder.new(41)
-	var patch_col := PaperKit.lin(Color(Rallycross.SURFACES["tarmac"].color).darkened(0.16), 1.0)
+	var patch_col := PaperKit.lin(Color(Rallycross.SURFACES["tarmac"].color).darkened(0.05), 1.0)
 	var crack_col := PaperKit.lin(Color(Rallycross.SURFACES["tarmac"].color).darkened(0.38), 1.0)
 	var s := 24.0
 	while s < track.length - 24.0:
@@ -1101,11 +1102,13 @@ func _make_barriers() -> void:
 ## A sponsor board hung on a barrier: a printed card facing the road with its name on it.
 func _sponsor_board(b: PaperKit.Builder, centre: Vector3, toward: Vector2, sp: Array, height: float) -> void:
 	var n3 := Vector3(toward.x, 0.0, toward.y).normalized()
+	if debug_board.is_empty():
+		debug_board = [centre, n3]
 	var right := Vector3.UP.cross(n3).normalized()
 	var width := clampf(Pieces.text_width(sp[0], 64) + 0.5, 2.2, 3.6)
 	var basis := Basis(right, Vector3.UP, n3)
 	var xf := Transform3D(basis, centre)
-	b.card(PaperKit.rrect(width, height, 0.04, 0, 0), xf, Color(sp[1]), {"thick": 0.04, "edge": 0.03, "lip": 0.0})
+	b.card(PaperKit.rrect(width, height, 0.04, 0, -height * 0.5), xf, Color(sp[1]), {"thick": 0.04, "edge": 0.03, "lip": 0.0})
 	var label := Label3D.new()
 	label.text = String(sp[0])
 	label.font_size = 64

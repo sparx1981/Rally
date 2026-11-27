@@ -201,3 +201,10 @@ All 12 circuits complete 3 laps. A human player is not affected by the AI's lane
 
 - The procedural per-pixel ground shader (pebbles, cracks, ripples) was removed: it cost too much on phones (45 fps on a Galaxy S26 Ultra at High). Roads and sectors use the original paper material again.
 - Surface character now comes from plain geometry (no per-pixel cost): loose berms along the shoulders of gravel, dirt, sand and mud sectors, scattered stones and clods, dark mud puddles, and on tarmac repair patches and cracks.
+
+## Fifteenth pass
+
+- Joker island: a divider runs the whole length of the gap between road and lane (a single mid-gap wall where the void is too narrow for two). The AI crosses to the lane earlier so it still takes it (Chalk Valley checked: taken, about +3.6 s).
+- Tyre-wall chicanes on Chalk Valley, Timberline, Breton, Baltic, Apex and Harbor Grid (solid, AI weaves).
+- Truck, SUV and buggy engines are louder; the truck also gets a sub-octave layer.
+- Sponsor boards fixed (card was sitting half a board too high, so the text fell off the bottom); tarmac repair patches much subtler; knocked-off tyres are thrown further onto the road (up to four).

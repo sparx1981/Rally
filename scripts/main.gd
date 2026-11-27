@@ -1838,6 +1838,16 @@ func _run_shot() -> void:
 		var n0 := rp.knock_cones(race.player)
 		await get_tree().create_timer(0.8).timeout
 		print("CONETEST hit=", n0, " moved=", (cone.node as Node3D).position.distance_to(Vector3(cone.pos.x, cone.y, cone.pos.y)), " rest=", cone.rest)
+	if OS.get_cmdline_user_args().has("--atboard") and race and not race.stage.debug_board.is_empty():
+		var bc: Vector3 = race.stage.debug_board[0]
+		var bn: Vector3 = race.stage.debug_board[1]
+		var bcam := Camera3D.new()
+		bcam.fov = 50
+		race.add_child(bcam)
+		bcam.global_position = bc + bn * 3.2 + Vector3(0, 0.3, 0)
+		bcam.look_at(bc)
+		bcam.current = true
+		await get_tree().process_frame
 	if OS.get_cmdline_user_args().has("--atchicane") and race:
 		for f in race.stage.track.features:
 			if f["type"] == "chicane" and str(f.get("kind", "")) == "tyre":
