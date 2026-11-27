@@ -19,6 +19,8 @@ var _lit_nodes: Array = []   # lamp glow nodes that switch on at dusk
 var tyres: Array = []         # tyres knocked off a wall: {node, pos, y, vel, axis, spin, rest}
 var _tyre_meshes := {}
 var _focus := Vector3.ZERO
+var _focus_dir := Vector3.FORWARD
+var _focus_speed := 0.0
 var _photographers: Array = []
 var cones: Array = []         # knockable apex cones: {node, pos, y, hit, vel, axis, spin, rest}
 var _cone_mesh: ArrayMesh
@@ -227,6 +229,10 @@ func _spawn_firework(at: Vector3) -> void:
 
 
 func set_focus(f: Vector3) -> void:
+	var d := f - _focus
+	if d.length() > 0.001 and d.length() < 8.0:
+		_focus_dir = _focus_dir.lerp(Vector3(d.x, 0.0, d.z).normalized(), 0.1)
+		_focus_speed = lerpf(_focus_speed, d.length() / maxf(get_process_delta_time(), 0.001), 0.2)
 	_focus = f
 
 
@@ -467,10 +473,29 @@ func _process(delta: float) -> void:
 		match a.kind:
 			"orbit":
 				var ang: float = a.phase + t * 0.35
-				n.position = a.center + Vector3(cos(ang) * a.radius, 0.0, sin(ang) * a.radius) + Vector3(0, sin(t * 1.3) * 0.6, 0)
-				n.rotation.y = -ang
+				var orbit_pos: Vector3 = a.center + Vector3(cos(ang) * a.radius, 0.0, sin(ang) * a.radius) + Vector3(0, sin(t * 1.3) * 0.6, 0)
+				a.cool = maxf(0.0, float(a.cool) - delta)
+				var overhead := Vector2(_focus.x - n.position.x, _focus.z - n.position.z).length()
+				# A car passing underneath: the drone drops in behind it and follows it for a while.
+				if float(a.follow) <= 0.0 and float(a.cool) <= 0.0 and overhead < 16.0 and _focus_speed > 6.0:
+					a.follow = 11.0
+				var want: Vector3 = orbit_pos
+				var rate := 0.7
+				if float(a.follow) > 0.0:
+					a.follow = float(a.follow) - delta
+					want = _focus + _focus_dir * 9.0 + Vector3(0, 15.0, 0)
+					rate = 2.4
+					if float(a.follow) <= 0.0:
+						a.cool = 14.0
+				a.cur = (a.cur as Vector3).lerp(want, clampf(delta * rate, 0.0, 1.0))
+				var prev_p: Vector3 = n.position
+				n.position = a.cur
+				var mv := Vector2(n.position.x - prev_p.x, n.position.z - prev_p.z)
+				if mv.length() > 0.01:
+					n.rotation.y = lerp_angle(n.rotation.y, atan2(mv.x, mv.y), clampf(delta * 3.0, 0.0, 1.0))
+				n.rotation.z = lerpf(n.rotation.z, clampf(-mv.length() * 0.6, -0.25, 0.25) * 0.0, 0.1)
 			"rotor":
-				n.rotation.y += delta * 40.0
+				n.rotation.y += delta * 55.0 * float(a.get("dir", 1.0))
 			"flag":
 				# Cars passing stir the flags: wave harder and faster within 22 m.
 				var near := 1.0 - clampf(n.global_position.distance_to(_focus) / 22.0, 0.0, 1.0)
@@ -943,22 +968,68 @@ func _drone() -> void:
 	var center := Vector3(track.pts[ap].x, track.elev[ap] + 20.0, track.pts[ap].y)
 	var drone := Node3D.new()
 	var b := PaperKit.Builder.new(9)
-	b.box(Vector3.ZERO, Vector3(0.9, 0.25, 0.9), Transform3D(), Color("#2b2b2e"))
-	b.box(Vector3(0, 0.0, 0.5), Vector3(0.25, 0.2, 0.2), Transform3D(), Color("#c8553d"), Color(-1, 0, 0), true)
+	var I := Transform3D()
+	var dark := Color("#2b2b2e")
+	var grey := Color("#8d9298")
+	# Body shell, battery hump, camera gimbal and landing legs.
+	b.box(Vector3.ZERO, Vector3(0.7, 0.2, 0.9), I, dark)
+	b.box(Vector3(0, 0.14, -0.05), Vector3(0.5, 0.1, 0.5), I, Color("#34343a"))
+	b.box(Vector3(0, -0.2, 0.32), Vector3(0.22, 0.2, 0.22), I, grey)
+	b.box(Vector3(0, -0.2, 0.46), Vector3(0.13, 0.13, 0.05), I, Color("#9db6c8"))
+	b.box(Vector3(0, 0.0, 0.47), Vector3(0.22, 0.07, 0.04), I, Color("#c8553d"), Color(-1, 0, 0), true)
+	for sx: float in [-1.0, 1.0]:
+		b.box(Vector3(sx * 0.2, -0.28, 0.0), Vector3(0.03, 0.3, 0.03), I, dark)
+		b.box(Vector3(sx * 0.2, -0.42, 0.0), Vector3(0.04, 0.03, 0.7), I, dark)
+	# Four arms to the motor pods.
+	for k in 4:
+		var sx := 1.0 if k % 2 == 0 else -1.0
+		var sz := 1.0 if k < 2 else -1.0
+		var arm_len := 0.78
+		var ang := atan2(sx, sz)
+		b.box(Vector3(sx * 0.4, 0.04, sz * 0.4), Vector3(0.09, 0.07, arm_len), Transform3D(Basis(Vector3.UP, ang), Vector3.ZERO), dark)
+		b.box(Vector3(sx * 0.76, 0.06, sz * 0.76), Vector3(0.2, 0.14, 0.2), I, Color("#3a3a42"))
 	var body := MeshInstance3D.new()
 	body.mesh = b.mesh()
 	body.material_override = material
 	drone.add_child(body)
+	# Rotors: two tapered, swept blades on a hub, plus a faint spinning disc so they read as moving.
+	var blade := PackedVector2Array([Vector2(0.0, -0.045), Vector2(0.18, -0.05), Vector2(0.46, -0.02), Vector2(0.49, 0.025), Vector2(0.2, 0.06), Vector2(0.0, 0.05)])
+	var blade_l := PackedVector2Array()
+	for q in blade.size():
+		blade_l.append(Vector2(-blade[q].x, -blade[q].y))
+	blade_l.reverse()
+	var disc_mat := StandardMaterial3D.new()
+	disc_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	disc_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	disc_mat.albedo_color = Color(0.85, 0.88, 0.95, 0.13)
+	disc_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	disc_mat.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
 	for k in 4:
 		var rotor := Node3D.new()
-		rotor.position = Vector3(0.55 * (1 if k % 2 == 0 else -1), 0.2, 0.55 * (1 if k < 2 else -1))
+		rotor.position = Vector3(0.76 * (1 if k % 2 == 0 else -1), 0.2, 0.76 * (1 if k < 2 else -1))
 		var rb := PaperKit.Builder.new(k)
-		rb.box(Vector3.ZERO, Vector3(0.7, 0.03, 0.08), Transform3D(), Color("#444"))
+		var lay := Transform3D(Basis(Vector3.RIGHT, -PI * 0.5), Vector3.ZERO)
+		var tint := Color("#e8453c") if k < 2 else Color("#4a4a52")   # red front, dark rear: the nose reads clearly
+		rb.card(blade, lay, tint, {"thick": 0.015, "edge": 0.0, "lip": 0.0})
+		rb.card(blade_l, lay, tint, {"thick": 0.015, "edge": 0.0, "lip": 0.0})
+		rb.box(Vector3(0, 0.0, 0), Vector3(0.1, 0.07, 0.1), I, grey)
+		rb.box(Vector3(0, 0.05, 0), Vector3(0.04, 0.05, 0.04), I, dark)
 		var rm := MeshInstance3D.new()
 		rm.mesh = rb.mesh()
 		rm.material_override = material
 		rotor.add_child(rm)
+		var disc := MeshInstance3D.new()
+		var cm := CylinderMesh.new()
+		cm.top_radius = 0.5
+		cm.bottom_radius = 0.5
+		cm.height = 0.004
+		cm.radial_segments = 16
+		disc.mesh = cm
+		disc.material_override = disc_mat
+		disc.position = Vector3(0, 0.02, 0)
+		disc.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		rotor.add_child(disc)
 		drone.add_child(rotor)
-		_anim.append({"node": rotor, "kind": "rotor"})
+		_anim.append({"node": rotor, "kind": "rotor", "dir": 1.0 if k % 2 == 0 else -1.0})
 	add_child(drone)
-	_anim.append({"node": drone, "kind": "orbit", "center": center, "radius": 28.0, "phase": 0.0})
+	_anim.append({"node": drone, "kind": "orbit", "center": center, "radius": 28.0, "phase": 0.0, "follow": 0.0, "cool": 0.0, "cur": center + Vector3(28.0, 0, 0)})

@@ -95,13 +95,27 @@ func follow(dt: float) -> void:
 	var sh := Vector3.ZERO
 	if _speed_fov > 0.02:
 		var tr := _speed_fov * 0.35
-		sh = Vector3(sin(_speed_t * 47.0) + sin(_speed_t * 31.0 + 1.3), sin(_speed_t * 53.0 + 0.7), sin(_speed_t * 41.0 + 2.1)) * tr * 0.5
+		sh = Vector3(sin(_speed_t * 47.0) + sin(_speed_t * 31.0 + 1.3), sin(_speed_t * 53.0 + 0.7), sin(_speed_t * 41.0 + 2.1)) * tr * (0.0 if is_mounted(vi) else 0.5)
 	if _shake > 0.001:
 		sh += Vector3(randf_range(-1, 1), randf_range(-1, 1), randf_range(-1, 1)) * _shake
 		_shake = move_toward(_shake, 0.0, dt * 3.0)
 	if is_mounted(vi):
 		var t := target.eye_transform() if vi == COCKPIT else target.bonnet_transform()
-		global_transform = Transform3D(t.basis, t.origin + sh * 0.04)
+		# Inside the car the speed tremble is far gentler (it read as vibration), and the head leans into corners.
+		var calm := Vector3.ZERO
+		if _speed_fov > 0.02:
+			calm = Vector3(sin(_speed_t * 9.0), sin(_speed_t * 13.0 + 1.0), 0.0) * _speed_fov * 0.012
+		var lat_g := 0.0
+		var yaw_rate := 0.0
+		if target != null:
+			lat_g = target.vel.dot(target.right_axis())
+			yaw_rate = target.yaw_rate
+		var lean_t := clampf(-yaw_rate * 0.028 - lat_g * 0.004, -0.16, 0.16) * clampf(target.speed() / 20.0, 0.0, 1.0)
+		_roll = lerpf(_roll, lean_t, clampf(dt * 5.0, 0.0, 1.0))
+		var xf := Transform3D(t.basis, t.origin + sh * 0.01 + t.basis * calm)
+		xf.basis = xf.basis * Basis(Vector3.FORWARD, _roll) * Basis(Vector3.UP, -_roll * 0.5)
+		xf.origin += t.basis.x * (-_roll * 0.35)   # the head sways with the lean
+		global_transform = xf
 		near = 0.05
 		_yaw = target.h
 		return

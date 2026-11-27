@@ -19,7 +19,8 @@ uniform vec3 shadow_tint : source_color = vec3(0.23, 0.13, 0.05);
 uniform float vignette = 0.08;
 uniform vec3 vig_color : source_color = vec3(0.23, 0.13, 0.05);
 uniform float grain = 0.01;
-uniform float shimmer = 0.0;       // heat haze over hot ground (dry daytime, High only)
+uniform float shimmer = 0.0;       // 0..1: heat haze behind the exhaust
+uniform vec2 shimmer_pos = vec2(0.5, 0.7);
 uniform float speed_blur = 0.0;   // 0..1: mild radial blur toward the screen edges (High only)
 uniform float bloom = 0.0;          // glow around bright areas (used for the loading art)
 uniform float bloom_px = 14.0;
@@ -33,8 +34,11 @@ void fragment() {
 	vec2 uv = SCREEN_UV;
 	vec2 suv = uv;
 	if (shimmer > 0.0) {
-		float hb = smoothstep(0.38, 0.5, uv.y) * (1.0 - smoothstep(0.5, 0.68, uv.y));
-		suv.x += sin(uv.y * 90.0 + TIME * 3.0) * 0.0016 * shimmer * hb + sin(uv.y * 41.0 - TIME * 2.0 + uv.x * 6.0) * 0.001 * shimmer * hb;
+		// A small rising column of heat above and behind the exhaust pipe, not a screen-wide wobble.
+		vec2 d = (uv - shimmer_pos) * vec2(1.0, 1.6);
+		float colm = exp(-dot(d - vec2(0.0, -0.035), d - vec2(0.0, -0.035)) * 520.0);
+		suv.x += sin(uv.y * 160.0 + TIME * 11.0) * 0.0042 * shimmer * colm;
+		suv.y += sin(uv.x * 120.0 + TIME * 7.0) * 0.0022 * shimmer * colm;
 	}
 	vec3 col = texture(screen, suv).rgb;
 	if (taps > 0) {

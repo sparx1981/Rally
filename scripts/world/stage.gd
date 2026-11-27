@@ -78,6 +78,7 @@ var _sky_mat: ShaderMaterial
 var helicopter: Helicopter
 var debug_board: Array = []
 var arch_stations: Array = []
+static var ARCH_STYLE := 1   # night lighting: 0 none, 1 glowing name and trim, 2 LED underside and base glow, 3 floodlit
 var _crowd_boost := 0.0
 var _crowd: Array = []   # [node, base, phase, is_stand]: spectators that cheer when the action is near
 var _car_mat: ShaderMaterial
@@ -683,8 +684,13 @@ func _make_sponsor_arches() -> void:
 	cands.sort_custom(func(a, b): return a[0] < b[0])
 	for c: Array in cands:
 		var far := true
+		var cp := track.point_at(float(c[1]))
 		for q: float in picked:
-			if absf(q - float(c[1])) < 160.0:
+			var dq := absf(q - float(c[1]))
+			if track.circuit:
+				dq = minf(dq, track.length - dq)
+			# Far apart along the lap and not close together on the map (a switchback can fold the road back).
+			if dq < 220.0 or track.point_at(q).distance_to(cp) < 170.0:
 				far = false
 		if far:
 			picked.append(float(c[1]))
@@ -706,7 +712,8 @@ func _make_sponsor_arches() -> void:
 		var depth := 1.1
 		var black := PaperKit.lin(Color("#26262b"), 1.0)
 		var black2 := PaperKit.lin(Color("#34343a"), 1.0)
-		var yellow := PaperKit.lin(Color("#f2c630"), 1.0)
+		var night_arch := tod > 0 and ARCH_STYLE >= 1
+		var yellow := PaperKit.lin(Color("#f2c630"), 0.0 if night_arch else 1.0)
 		var fwd3 := Vector3(tan2.x, 0.0, tan2.y)
 		var side3 := Vector3(nrm2.x, 0.0, nrm2.y)
 		var base3 := Vector3(base.x, y0, base.y)
@@ -735,17 +742,77 @@ func _make_sponsor_arches() -> void:
 		for sx: float in [-1.0, 1.0]:
 			b.box(base3 + side3 * sx * (hw - band * 0.5) + Vector3(0, 0.15, 0), Vector3(band + 0.4, 0.3, depth + 0.5), Transform3D(), Color("#1a1a1d"))
 		var sp: Array = Pieces.SPONSORS[(n + int(def.seed)) % Pieces.SPONSORS.size()]
+		var word := String(sp[0]).to_upper()
+		var rxm := hw - band * 0.5
+		var rym := height - band * 0.5
+		# Letter widths (metres) so the word can be laid along the arch.
+		var widths: Array = []
+		var total := 0.0
+		for ch in word:
+			var wch := Pieces.text_width(String(ch), 72) * (0.0105 / 0.009) * 1.08 + 0.04
+			widths.append(wch)
+			total += wch
 		for fb: float in [1.0, -1.0]:
-			var label := Label3D.new()
-			label.text = String(sp[0]).to_upper()
-			label.font_size = 72
-			label.pixel_size = 0.0105
-			label.modulate = Color("#f4efe4")
-			label.outline_size = 0
-			label.double_sided = false
-			var lb := Basis(side3, Vector3.UP, fwd3 * fb)
-			label.transform = Transform3D(lb, base3 + Vector3(0, height - band * 0.5, 0) + fwd3 * fb * (depth * 0.5 + 0.03))
-			add_child(label)
+			var dirn := 1.0 if fb > 0.0 else -1.0   # reading direction along increasing/decreasing angle
+			var consumed := 0.0
+			for li in word.length():
+				var centre_o: float = consumed + float(widths[li]) * 0.5 - total * 0.5
+				consumed += float(widths[li])
+				# Angle at arc distance centre_o from the apex (small steps of the ellipse).
+				var ang := PI * 0.5
+				var rem := absf(centre_o)
+				var sgn := 1.0 if centre_o >= 0.0 else -1.0
+				while rem > 0.0:
+					var dsda := sqrt(pow(rxm * sin(ang), 2.0) + pow(rym * cos(ang), 2.0))
+					var stp := minf(rem, dsda * 0.02)
+					ang += sgn * dirn * (stp / dsda)
+					rem -= stp
+				var lpos := base3 + side3 * cos(ang) * rxm + Vector3(0, sin(ang) * rym, 0)
+				var tangent := (-side3 * sin(ang) * rxm + Vector3.UP * cos(ang) * rym).normalized() * dirn
+				var zf := fwd3 * fb
+				var xdir := tangent
+				var ydir := zf.cross(xdir).normalized()
+				var label := Label3D.new()
+				label.text = String(word[li])
+				label.font_size = 72
+				label.pixel_size = 0.0105
+				label.modulate = Color("#fff2c8") if night_arch else Color("#f4efe4")
+				label.outline_size = 0
+				label.double_sided = false
+				label.shaded = false
+				label.transform = Transform3D(Basis(xdir, ydir, zf), lpos + zf * (depth * 0.5 + 0.03))
+				add_child(label)
+		# Night lighting variants.
+		if tod > 0 and ARCH_STYLE >= 1:
+			var apex := base3 + Vector3(0, height - band * 0.5, 0)
+			var warm := Color("#ffd9a0")
+			if ARCH_STYLE == 1:
+				var hz := LightHalo.make(warm, 4.5, 0.55)
+				add_child(hz)
+				hz.global_position = apex + fwd3 * 0.8
+			elif ARCH_STYLE == 2:
+				# LED strip under the arch (a row of glowing dots) and a pool of light on the road beneath.
+				for q in 16:
+					var aa := PI * (float(q) + 0.5) / 16.0
+					var dot := LightHalo.make(Color("#ffe2a8"), 0.9, 0.9)
+					add_child(dot)
+					dot.global_position = base3 + side3 * cos(aa) * (hw - band) + Vector3(0, sin(aa) * (height - band) - 0.1, 0)
+				var pool := LightHalo.street(Color("#ffd9a0"), height - band, hw * 0.75, 0.55)
+				add_child(pool)
+				pool.global_position = base3 + Vector3(0, height - band, 0)
+			else:
+				# Floodlit from the feet: a lamp each side throwing warm light up the arch.
+				for sx: float in [-1.0, 1.0]:
+					var foot := base3 + side3 * sx * (hw - band * 0.5) + fwd3 * 1.2 + Vector3(0, 0.3, 0)
+					var lamp := OmniLight3D.new()
+					lamp.light_color = warm
+					lamp.light_energy = 2.2
+					lamp.omni_range = height
+					lamp.position = foot + Vector3(0, 0.6, 0)
+					add_child(lamp)
+					var gl := LightHalo.make(warm, 2.2, 0.9)
+					add_child(gl)
+					gl.global_position = foot
 		n += 1
 	var mi := MeshInstance3D.new()
 	mi.mesh = b.mesh()
