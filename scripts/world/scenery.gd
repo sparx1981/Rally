@@ -619,6 +619,14 @@ func lamp_positions() -> PackedVector2Array:
 				_lamp_points.append(pl["pos"])
 	return _lamp_points
 
+
+## Lamp head positions (ground height + the lamp's 4.1 m).
+func lamp_heads() -> PackedVector3Array:
+	var out := PackedVector3Array()
+	for q in lamp_positions():
+		out.append(Vector3(q.x, _ground(q) + 4.1, q.y))
+	return out
+
 # --- streaming: scenery is built in chunks of road around the camera and freed behind it ------
 const STREAM_R := 320.0
 var _chunk_members := {}    # chunk id -> Array of placement indices

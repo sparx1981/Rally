@@ -76,6 +76,8 @@ var _light_progress := 0.0
 var headlight_level := 0.0
 var _sky_mat: ShaderMaterial
 var helicopter: Helicopter
+var _reflect_t := 0.0
+var _head_cache := PackedVector3Array()
 
 
 func build(stage_def: Dictionary, time_of_day := -1) -> void:
@@ -246,6 +248,9 @@ func _make_materials() -> void:
 	road_mat.set_shader_parameter("rut", pal["rut"])
 	road_mat.set_shader_parameter("edge_col", Color(pal["road"]).lerp(Color(0.24, 0.15, 0.09), 0.7))
 	road_mat.set_shader_parameter("wet", 1.0 if wx["kind"] == "rain" else 0.0)
+	var road_kind: int = 0 if track.rx else int({"alpine": 7, "lakes": 7, "taiga": 7, "harbour": 2, "canyon": 2, "gorge": 2, "meadow": 1, "cliffs": 1}.get(str(def.get("loc_id", "")), 4))
+	road_mat.set_shader_parameter("surface_kind", road_kind)
+	road_mat.set_shader_parameter("detail", (0.85 if road_kind != 7 else 0.6) if bool(Settings.g("paper_detail")) else 0.0)
 
 
 func _make_lights() -> void:
@@ -303,6 +308,38 @@ func street_light_at(p: Vector2) -> float:
 			if d2 < 64.0:
 				best = maxf(best, (1.0 - sqrt(d2) / 8.0) * scenery.lamp_level)
 	return best
+
+
+## Rain at dusk or night: feed the nearest lamp heads to the road so they mirror in the wet surface.
+func _update_wet_reflections(focus: Vector3) -> void:
+	if kind() != "rain" or tod == 0 or not LightHalo.enabled():
+		road_mat.set_shader_parameter("refl", 0.0)
+		return
+	if _head_cache.is_empty():
+		if rx_props:
+			_head_cache.append_array(rx_props.lamp_heads)
+		if scenery:
+			_head_cache.append_array(scenery.lamp_heads())
+		if _head_cache.is_empty():
+			_head_cache.append(Vector3(0, -1000, 0))
+	var near: Array = []
+	for h in _head_cache:
+		var d := Vector2(h.x - focus.x, h.z - focus.z).length_squared()
+		if d < 90000.0:
+			near.append([d, h])
+	near.sort_custom(func(a, b): return a[0] < b[0])
+	var pts := PackedVector3Array()
+	for k in mini(8, near.size()):
+		pts.append(near[k][1])
+	var n := pts.size()
+	while pts.size() < 8:
+		pts.append(Vector3.ZERO)
+	road_mat.set_shader_parameter("lamp_pts", pts)
+	road_mat.set_shader_parameter("lamp_n", n)
+	var level := 1.0
+	if scenery and not rx_props:
+		level = scenery.lamp_level
+	road_mat.set_shader_parameter("refl", level if n > 0 else 0.0)
 
 
 func changing_light() -> bool:
@@ -505,6 +542,25 @@ func _quad_idx(idx: PackedInt32Array, v: PackedVector3Array, a: int, b: int, c: 
 
 
 ## Rallycross surface sectors (chalk, clay, granite ...) laid over the tarmac, the Joker lane and kerbs.
+const SURFACE_KINDS := {"tarmac": 0, "chalk": 1, "fine_gravel": 1, "granite": 2, "coarse_gravel": 2, "industrial": 2, "sand": 3,
+	"clay": 4, "forest_dirt": 4, "mud": 5, "ford": 2, "gravel": 1, "ice": 6, "deep snow": 7}
+var _surface_mats := {}
+
+
+## One shared surface material per kind of ground (procedural pebbles, clods, ripples, cracks, puddles).
+func _surface_material(kind_name: String) -> ShaderMaterial:
+	var k: int = SURFACE_KINDS.get(kind_name, 2)
+	if not _surface_mats.has(k):
+		var m := ShaderMaterial.new()
+		m.shader = preload("res://shaders/surface.gdshader")
+		m.set_shader_parameter("kind", k)
+		m.set_shader_parameter("leak", wx["leak"])
+		m.set_shader_parameter("wet", 1.0 if kind() == "rain" else 0.0)
+		m.set_shader_parameter("strength", 1.0 if bool(Settings.g("paper_detail")) else 0.0)
+		_surface_mats[k] = m
+	return _surface_mats[k]
+
+
 func _make_rx_surfaces() -> void:
 	for pt in track.patches:
 		if not pt.get("rx", false) or pt.kind == "tarmac":
@@ -548,7 +604,7 @@ func _surface_strip(s0: float, s1: float, col: Color, kind: String) -> void:
 				b.quad(a0, a1, b1, b0, Vector3.UP, cols[q])
 		var mi := MeshInstance3D.new()
 		mi.mesh = b.mesh()
-		mi.material_override = paper_mat
+		mi.material_override = _surface_material(kind)
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(mi)
 		i = j
@@ -593,7 +649,7 @@ func _make_joker_lane() -> void:
 			b.quad(t0, t1, low1, low0, Vector3(outward.x, 0, outward.y), side_col)
 	var mi := MeshInstance3D.new()
 	mi.mesh = b.mesh()
-	mi.material_override = paper_mat
+	mi.material_override = _surface_material(str(jk.surf))
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
 
@@ -828,7 +884,7 @@ func _make_hazards() -> void:
 			prev = line
 		var mi := MeshInstance3D.new()
 		mi.mesh = b.mesh()
-		mi.material_override = paper_mat
+		mi.material_override = _surface_material(str(pt["kind"]))
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(mi)
 
@@ -838,7 +894,12 @@ const BARRIER_LAT := 0.75   # metres outside the road edge
 
 ## Armco (galvanised paper strip with a pressed groove on stubby posts) and post-and-rail fences.
 func _make_barriers() -> void:
+	var shadow_b := PaperKit.Builder.new(5)
+	var board_b := PaperKit.Builder.new(6)
+	var board_count := 0
+	var next_board := 0.0
 	for bar in track.barriers:
+		next_board = float(bar["s0"]) + 14.0
 		var s0: float = bar["s0"]
 		var s1: float = bar["s1"]
 		var side: float = bar["side"]
@@ -866,6 +927,32 @@ func _make_barriers() -> void:
 					_stone_wall(b, p0, p1, y0, y1, track.nrm[i0] * side, k)
 				elif kind in ["tyre", "jersey", "island", "hay"]:
 					_rx_wall(b, kind, p0, p1, y0, y1, track.nrm[i0] * side, int(k / step))
+					# Soft contact shadow on the road in front of the wall.
+					var toward := -track.nrm[i0] * side
+					var toward1 := -track.nrm[i1] * side
+					var w_in := 0.35
+					var w_out := 2.0 if kind != "hay" else 1.4
+					var dark := Color(0.08, 0.06, 0.09, 0.62)
+					var clear := Color(0.08, 0.06, 0.09, 0.0)
+					var lift := 0.06
+					shadow_b.quad4(
+						Vector3(p0.x + toward.x * w_in, y0 + 0.1 + lift, p0.y + toward.y * w_in),
+						Vector3(p1.x + toward1.x * w_in, y1 + 0.1 + lift, p1.y + toward1.y * w_in),
+						Vector3(p1.x + toward1.x * w_out, y1 + 0.1 + lift, p1.y + toward1.y * w_out),
+						Vector3(p0.x + toward.x * w_out, y0 + 0.1 + lift, p0.y + toward.y * w_out),
+						Vector3.UP, dark, dark, clear, clear)
+					# Sponsor boards on long straight runs.
+					if kind in ["tyre", "jersey"] and k >= next_board and board_count < 70:
+						var ahead := track.index_at(minf(k + 12.0, s1))
+						var behind := track.index_at(maxf(k - 12.0, s0))
+						if absf(wrapf(track.heading_at(ahead) - track.heading_at(behind), -PI, PI)) < 0.05 and s1 - s0 > 60.0:
+							var sp: Array = Pieces.SPONSORS[(board_count + int(side) + 3) % Pieces.SPONSORS.size()]
+							var mid := (p0 + p1) * 0.5
+							var face := 0.5 if kind == "tyre" else 0.36
+							var bc := Vector3(mid.x + toward.x * (face + 0.04), (y0 + y1) * 0.5 + (0.55 if kind == "tyre" else 0.5), mid.y + toward.y * (face + 0.04))
+							_sponsor_board(board_b, bc, Vector2(toward.x, toward.y), sp, 0.72 if kind == "tyre" else 0.6)
+							board_count += 1
+							next_board = k + 30.0
 				elif armco:
 					var lo := 0.42
 					var hi := 0.78
@@ -875,6 +962,17 @@ func _make_barriers() -> void:
 				else:
 					for rh in [0.45, 0.95]:
 						b.slab(Vector3(p0.x, y0 + rh + 0.09, p0.y), Vector3(p1.x, y1 + rh + 0.09, p1.y), Vector3(p1.x, y1 + rh - 0.04, p1.y), Vector3(p0.x, y0 + rh - 0.04, p0.y), 0.06, Color("#9a7552"))
+				if kind in ["armco", "fence"] and k >= next_board and board_count < 70 and s1 - s0 > 80.0:
+					var ahead2 := track.index_at(minf(k + 12.0, s1))
+					var behind2 := track.index_at(maxf(k - 12.0, s0))
+					if absf(wrapf(track.heading_at(ahead2) - track.heading_at(behind2), -PI, PI)) < 0.04:
+						var sp2: Array = Pieces.SPONSORS[(board_count + int(side) + 1) % Pieces.SPONSORS.size()]
+						var mid2 := (p0 + p1) * 0.5
+						var tw2 := -track.nrm[i0] * side
+						var bc2 := Vector3(mid2.x + tw2.x * 0.16, (y0 + y1) * 0.5 + (0.6 if kind == "armco" else 0.72), mid2.y + tw2.y * 0.16)
+						_sponsor_board(board_b, bc2, Vector2(tw2.x, tw2.y), sp2, 0.5 if kind == "armco" else 0.62)
+						board_count += 1
+						next_board = k + 36.0
 				if k >= next_post and (kind == "armco" or kind == "fence"):
 					var ph := 0.85 if armco else 1.15
 					var pc := Color("#6d7174") if armco else Color("#6e5038")
@@ -888,6 +986,43 @@ func _make_barriers() -> void:
 			mi.position = Vector3.ZERO
 			add_child(mi)
 			s = s_end
+
+	var smi := MeshInstance3D.new()
+	smi.mesh = shadow_b.mesh()
+	var sm := StandardMaterial3D.new()
+	sm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	sm.vertex_color_use_as_albedo = true
+	sm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	sm.cull_mode = BaseMaterial3D.CULL_DISABLED
+	sm.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
+	smi.material_override = sm
+	smi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(smi)
+	var bmi := MeshInstance3D.new()
+	bmi.mesh = board_b.mesh()
+	bmi.material_override = paper_mat
+	bmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(bmi)
+
+
+## A sponsor board hung on a barrier: a printed card facing the road with its name on it.
+func _sponsor_board(b: PaperKit.Builder, centre: Vector3, toward: Vector2, sp: Array, height: float) -> void:
+	var n3 := Vector3(toward.x, 0.0, toward.y).normalized()
+	var right := Vector3.UP.cross(n3).normalized()
+	var width := clampf(Pieces.text_width(sp[0], 64) + 0.5, 2.2, 3.6)
+	var basis := Basis(right, Vector3.UP, n3)
+	var xf := Transform3D(basis, centre)
+	b.card(PaperKit.rrect(width, height, 0.04, 0, 0), xf, Color(sp[1]), {"thick": 0.04, "edge": 0.03, "lip": 0.0})
+	var label := Label3D.new()
+	label.text = String(sp[0])
+	label.font_size = 64
+	label.pixel_size = height * 0.5 / 64.0
+	label.modulate = Color(sp[2])
+	label.outline_size = 0
+	label.double_sided = false
+	label.transform = Transform3D(basis, centre + n3 * 0.05)
+	add_child(label)
+
 
 
 ## Rallycross edge walls: belted tyre stacks, FIA concrete with a catch fence, foam blocks, hay.
@@ -1746,6 +1881,10 @@ func update(dt: float, focus: Vector3, radius: float, player_s: float, cam: Came
 		_sky_mat.set_shader_parameter("t", _time)
 	if helicopter:
 		helicopter.update(dt, player_s)
+	_reflect_t -= dt
+	if _reflect_t <= 0.0:
+		_reflect_t = 0.25
+		_update_wet_reflections(focus)
 	if scenery:
 		scenery.update(Vector2(focus.x, focus.z), radius, dt)
 	if leaf_litter:

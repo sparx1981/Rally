@@ -14,6 +14,7 @@ var _lamp_mat: StandardMaterial3D
 
 
 var lamps := PackedVector2Array()   # ground points lit by the track lamps
+var lamp_heads := PackedVector3Array()   # the lamp heads themselves (for wet-road reflections)
 var cones: Array = []         # knockable apex cones: {node, pos, y, hit, vel, axis, spin, rest}
 var _cone_mesh: ArrayMesh
 var _celebrate_t := 0.0
@@ -615,6 +616,7 @@ func _track_lights(b: PaperKit.Builder) -> void:
 		add_child(pool)
 		var under: Vector2 = pt.p + inward * 3.4
 		lamps.append(under)
+		lamp_heads.append(xf * head)
 		pool.position = Vector3(under.x, track.road_h_i(i) + 0.3, under.y)
 		pool.rotation.y = atan2(track.tang[i].x, track.tang[i].y) + PI * 0.5
 

@@ -3,6 +3,8 @@
 shader_type spatial;
 render_mode diffuse_lambert, specular_disabled;
 
+#include "res://shaders/surface.gdshaderinc"
+
 uniform vec3 leak : source_color = vec3(0.627, 0.376, 0.172);
 uniform float wrap = 0.3;
 uniform vec3 road : source_color = vec3(0.79, 0.67, 0.49);
@@ -12,11 +14,18 @@ uniform sampler2D noise : hint_default_white, filter_linear_mipmap, repeat_enabl
 uniform sampler2D fibre : hint_default_white, filter_linear_mipmap, repeat_enable;
 uniform float fibre_amount = 0.09;
 uniform float wet = 0.0;
+uniform int surface_kind = 2;
+uniform float detail = 1.0;
+uniform vec3 lamp_pts[8];
+uniform int lamp_n = 0;
+uniform float refl = 0.0;
 
 varying vec3 wpos;
+varying float vdist;
 
 void vertex() {
 	wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	vdist = -(MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).z;
 }
 
 void fragment() {
@@ -43,9 +52,32 @@ void fragment() {
 			c *= 1.0 + (f - 0.5) * fibre_amount * 2.0;
 		}
 	}
+	if (COLOR.r >= 0.5 && detail > 0.0) {
+		vec2 tilt;
+		vec3 rich = surf_detail(surface_kind, wpos, vdist, c, wet, tilt);
+		c = mix(c, rich, detail);
+		vec3 nw = (INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz;
+		nw = normalize(nw + vec3(tilt.x, 0.0, tilt.y) * detail);
+		NORMAL = normalize((VIEW_MATRIX * vec4(nw, 0.0)).xyz);
+	}
 	ALBEDO = c;
 	ROUGHNESS = 1.0;
 	SPECULAR = 0.0;
+	// Wet night road: lamps mirrored in the water, broken up by puddle patches.
+	if (refl > 0.0 && wet > 0.0 && lamp_n > 0) {
+		vec3 cam = (INV_VIEW_MATRIX * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+		vec3 v = normalize(cam - wpos);
+		vec3 rv = reflect(-v, vec3(0.0, 1.0, 0.0));
+		float puddle = 0.55 + 0.45 * smoothstep(0.35, 0.6, texture(noise, wpos.xz * 0.05 + vec2(0.7, 0.3)).r);
+		vec3 sp = vec3(0.0);
+		for (int i = 0; i < 8; i++) {
+			if (i >= lamp_n) break;
+			vec3 d = lamp_pts[i] - wpos;
+			float dist = length(d);
+			sp += vec3(1.0, 0.82, 0.55) * pow(max(dot(rv, d / dist), 0.0), 38.0) / (1.0 + dist * 0.02);
+		}
+		EMISSION += sp * refl * puddle * wet * 1.5;
+	}
 }
 
 void light() {

@@ -155,7 +155,7 @@ func _update_contact() -> void:
 	_contact.visible = not in_water and not in_puddle and (on_road or not track.overlaps_water(pos, 0.0)) and ground > track.terrain.sea_y and lift < 2.1
 	if not _contact.visible:
 		return
-	_contact_ink.set_shader_parameter("opacity", 0.26 * (1.0 - smoothstep(0.12, 2.1, lift)))
+	_contact_ink.set_shader_parameter("opacity", 0.42 * (1.0 - smoothstep(0.12, 2.1, lift)))
 	if pos.distance_squared_to(_shadow_pos) < 0.035 and absf(angle_difference(_shadow_heading, h)) < 0.045:
 		return
 	_shadow_pos = pos

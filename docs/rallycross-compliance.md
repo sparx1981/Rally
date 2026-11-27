@@ -184,3 +184,10 @@ All 12 circuits complete 3 laps. A human player is not affected by the AI's lane
 - Smashed lamps stay dark: beam, glow halo, tail lamp and the lit lens panes go out when the crushed patch reaches them.
 - Tyre walls are real rings with a hole through the stack (no cap on top).
 - Loading screen and splash use a rendered sunset hero image (bloom, depth of field, backlit car).
+
+## Twelfth pass
+
+- Wet-road lamp reflections on rain stages at dusk and night (track and street lamps mirror in the road).
+- Soft contact shadows in front of tyre walls, concrete and hay, and a stronger softer shadow under cars.
+- Sponsor boards hang on long straight runs of tyre wall, concrete, Armco and fence (fictional sponsors, at most 70 per stage).
+- Procedural ground detail (`shaders/surface.gdshaderinc`): tarmac aggregate, cracks and patches; fine and coarse gravel pebbles; sand ripples; packed dirt and clay; churned mud with puddles; cracked ice; snow drifts with glitter. Used for rallycross sectors, the Joker lane, rally gravel/mud/ice/snow patches and the base road. Off with "Paper fibre & grain detail" off.
