@@ -102,6 +102,8 @@ func build(stage_def: Dictionary, time_of_day := -1) -> void:
 	if not track.stacked_crossing.is_empty():
 		var center: Vector2 = track.stacked_crossing.center
 		track.terrain.flatten_disc(center, 14.5, track.road_h(track.stacked_crossing.lower) - 0.20, 11.0)
+	if track.rx:
+		track.terrain.conform_to_road(track)
 	for br in track.bridges:
 		if br.get("stacked", false):
 			continue
@@ -136,6 +138,8 @@ func build(stage_def: Dictionary, time_of_day := -1) -> void:
 	_make_ground()
 	_make_gorge_outcrops()
 	_make_road()
+	if track.rx:
+		_rx_supports()
 	_make_gantries()
 	if track.rx:
 		_make_rx_surfaces()
@@ -154,6 +158,12 @@ func build(stage_def: Dictionary, time_of_day := -1) -> void:
 		rx_props.name = "RallycrossProps"
 		add_child(rx_props)
 		rx_props.build(track, def, paper_mat, tod > 0)
+		for sd: Array in rx_props.solids:
+			var sp: Vector2 = sd[0]
+			var cell := Vector2i(floori(sp.x / 8.0), floori(sp.y / 8.0))
+			if not scenery.obstacles.has(cell):
+				scenery.obstacles[cell] = []
+			scenery.obstacles[cell].append([sp.x, sp.y, float(sd[1]), -1, false, "rx"])
 	_make_weather()
 	_make_mist()
 	_make_birds()
@@ -2028,3 +2038,36 @@ func _make_circuit_stands() -> void:
 	stand.mesh = b.mesh()
 	stand.material_override = paper_mat
 	add_child(stand)
+
+
+## Rallycross: concrete piers and a cross beam under any stretch of road that stands clear of the ground,
+## so no deck or ramp appears to float.
+func _rx_supports() -> void:
+	var b := PaperKit.Builder.new(4242)
+	var concrete := Color("#a9a49a")
+	var count := 0
+	var s := 8.0
+	while s < track.length - 8.0:
+		if not track.on_stacked_span(s, 2.0):
+			var i := track.index_at(s)
+			var hw := track.road_half_width(s)
+			var deck_c := track.road_h_i(i)
+			var floor_c := track.terrain.height(track.pts[i])
+			if deck_c - floor_c > 1.8:
+				var left := track.pts[i] - track.nrm[i] * (hw - 1.4)
+				var right := track.pts[i] + track.nrm[i] * (hw - 1.4)
+				for q: Vector2 in [left, right]:
+					var lat := (q - track.pts[i]).dot(track.nrm[i])
+					var top := deck_c + lat * track.bank_slope(i) - 0.5
+					var bottom := minf(track.terrain.height(q), top - 0.5) - 0.3
+					_structural_member(b, Vector3(q.x, bottom, q.y), Vector3(q.x, top, q.y), 1.1, 1.1, concrete)
+				_structural_member(b, Vector3(left.x, deck_c - 0.7, left.y), Vector3(right.x, deck_c - 0.7, right.y), 0.9, 0.9, concrete)
+				count += 1
+		s += 12.0
+	if count == 0:
+		return
+	var mi := MeshInstance3D.new()
+	mi.name = "RxSupports"
+	mi.mesh = b.mesh()
+	mi.material_override = paper_mat
+	add_child(mi)

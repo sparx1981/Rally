@@ -1376,6 +1376,8 @@ func _parse_args() -> void:
 			_shot["overhead"] = float(a.substr(11))
 		elif a.begins_with("--at="):
 			_shot["at"] = float(a.substr(5))
+		elif a.begins_with("--zoom="):
+			_shot["zoom"] = float(a.substr(7))
 		elif a.begins_with("--hazard="):
 			_shot["hazard"] = a.substr(9)
 		elif a.begins_with("--mode="):
@@ -1439,6 +1441,10 @@ func _run_bench() -> void:
 		elif a == "--rx":
 			list = Catalog.rallycross_indices()
 	Game.circuit_laps = 3
+	if OS.get_cmdline_user_args().has("--rxcheck"):
+		await _run_rxcheck(list)
+		get_tree().quit()
+		return
 	for si in list:
 		for m in ([Game.Mode.TIME_TRIAL] if si == 35 else ([Game.Mode.TIME_TRIAL] if Catalog.stages()[si].has("rx") and not OS.get_cmdline_user_args().has("--grid") else ([Game.Mode.RACE] if Catalog.stages()[si].has("rx") else [Game.Mode.TIME_TRIAL, Game.Mode.RACE]))):
 			Game.mode = m
@@ -1620,7 +1626,7 @@ func _run_shot() -> void:
 			var box := race.stage.track.bounds()
 			var cen := box.get_center()
 			pp = Vector3(cen.x, race.stage.track.elev[0], cen.y)
-			hgt = maxf(box.size.x, box.size.y) * 0.62
+			hgt = maxf(box.size.x, box.size.y) * 0.62 * float(_shot.get("zoom", 1.0))
 		oc.position = pp + Vector3(hgt * float(_shot.get("ox", 0.35)), hgt, hgt * float(_shot.get("oz", 0.35)))
 		oc.look_at(pp)
 		oc.current = true
@@ -1643,3 +1649,95 @@ func _arg_float(prefix: String, fallback: float) -> float:
 		if a.begins_with(prefix):
 			return float(a.substr(prefix.length()))
 	return fallback
+
+
+## Geometry audit: where the road surface sits against the landscape, across the road and Joker lane.
+func _run_rxcheck(list: Array) -> void:
+	Game.mode = Game.Mode.TIME_TRIAL
+	for si in list:
+		if not Catalog.stages()[si].has("rx"):
+			continue
+		Game.stage_index = si
+		await _start_race()
+		var tr := race.stage.track
+		var buried := 0
+		var perched := 0
+		var worst_b := 0.0
+		var worst_p := 0.0
+		var wb := ""
+		var wp := ""
+		var total := 0
+		var s := 0.0
+		while s < tr.length:
+			if not tr.on_stacked_span(s):
+				var i := tr.index_at(s)
+				var ext := tr.road_extent(s)
+				var lat := -ext
+				while lat <= ext:
+					if tr.on_road_at(s, lat, 0.0):
+						var p: Vector2 = tr.pts[i] + tr.nrm[i] * lat
+						var ry := tr.surface_height(p, s, lat)
+						var ty := tr.terrain.height(p)
+						total += 1
+						if ty > ry + 0.05:
+							buried += 1
+							if ty - ry > worst_b:
+								worst_b = ty - ry
+								wb = "s=%.0f lat=%.1f" % [s, lat]
+						elif ry - ty > 0.6:
+							perched += 1
+							if ry - ty > worst_p:
+								worst_p = ry - ty
+								wp = "s=%.0f lat=%.1f" % [s, lat]
+					lat += 2.0
+			s += 4.0
+		for a in OS.get_cmdline_user_args():
+			if a.begins_with("--rxs="):
+				var ss := float(a.substr(6))
+				var ii := tr.index_at(ss)
+				var line := "RXPROBE %s s=%.0f road_h=%.2f ext=%.1f stacked=%s |" % [Catalog.stages()[si].id, ss, tr.road_h(ss), tr.road_extent(ss), tr.on_stacked_span(ss)]
+				for off in [0.0, 6.0, 10.0, 14.0, 20.0, 30.0, 45.0]:
+					var q: Vector2 = tr.pts[ii] + tr.nrm[ii] * (tr.road_extent(ss) + off)
+					line += " +%.0f:%.1f" % [off, tr.terrain.height(q)]
+				print(line)
+		if OS.get_cmdline_user_args().has("--rxnodes"):
+			var stack: Array = [race.stage]
+			while not stack.is_empty():
+				var nd: Node = stack.pop_back()
+				for ch in nd.get_children():
+					stack.append(ch)
+				if nd is MeshInstance3D and nd.mesh:
+					var bb: AABB = nd.global_transform * nd.mesh.get_aabb()
+					if bb.size.y > 12.0 or maxf(bb.size.x, bb.size.z) > 60.0:
+						print("RXNODE %s %s size=(%.0f,%.0f,%.0f) pos=(%.0f,%.0f,%.0f)" % [Catalog.stages()[si].id, nd.get_path(), bb.size.x, bb.size.y, bb.size.z, bb.position.x, bb.position.y, bb.position.z])
+		var on_road := 0
+		var first_bad := ""
+		var kinds := {}
+		for key in race.stage.scenery.obstacles.keys():
+			for o in race.stage.scenery.obstacles[key]:
+				var q := Vector2(float(o[0]), float(o[1]))
+				var bi := 0
+				var bd := 1e18
+				for pi in range(0, tr.pts.size(), 2):
+					var dd := q.distance_squared_to(tr.pts[pi])
+					if dd < bd:
+						bd = dd
+						bi = pi
+				var lt: float = (q - tr.pts[bi]).dot(tr.nrm[bi])
+				var st: float = tr.dist[bi]
+				var ex := tr.road_half_width(st)
+				var bnd := tr.joker_band(st)
+				if not is_nan(bnd.x):
+					if lt > 0.0 and bnd.y > 0.0:
+						ex = maxf(ex, bnd.y)
+					elif lt < 0.0 and bnd.x < 0.0:
+						ex = maxf(ex, -bnd.x)
+				if float(o[2]) > 0.0 and absf(lt) - ex < absf(float(o[2])) and not tr.on_stacked_span(st):
+					on_road += 1
+					var kk := str(o[5]) if o.size() > 5 else "?"
+					kinds[kk] = int(kinds.get(kk, 0)) + 1
+					if first_bad == "":
+						first_bad = "%s@s=%.0f lat=%.1f ext=%.1f r=%.1f" % [kk, st, lt, ex, float(o[2])]
+		print("RXOBJ %s solid_on_road=%d %s kinds=%s" % [Catalog.stages()[si].id, on_road, first_bad, str(kinds)])
+		print("RXCROSS %s %s" % [Catalog.stages()[si].id, str(tr.stacked_crossing)])
+		print("RXCHECK %s samples=%d buried=%d worst=%.2f@%s perched=%d worst=%.2f@%s" % [Catalog.stages()[si].id, total, buried, worst_b, wb, perched, worst_p, wp])

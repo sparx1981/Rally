@@ -533,7 +533,8 @@ func _apply_contact(c: Car, n: Vector2, cp: Vector2, other_vel: Vector2, other: 
 	c.yaw_rate = clampf(c.yaw_rate + clampf(j * ca / INERTIA * 0.6, -MAX_YAW_KICK, MAX_YAW_KICK), -2.5, 2.5)
 	# Tangential scrub at the contact.
 	var t := Vector2(-n.y, n.x)
-	c.vel -= t * (c.vel - vb).dot(t) * 0.12
+	# Gentle contact (leaning on a wall) must not stall the car: scrub scales with how hard the hit was.
+	c.vel -= t * (c.vel - vb).dot(t) * 0.12 * clampf(-vn / 3.0, 0.1, 1.0)
 	# A hit never leaves a car faster than it was going (or than the other car was going).
 	c.vel = c.vel.limit_length(maxf(pre_a, pre_b * 0.6))
 	if other:

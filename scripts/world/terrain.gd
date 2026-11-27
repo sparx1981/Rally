@@ -322,6 +322,106 @@ func build_meshes(parent: Node3D, mat: Material, chunk := 28) -> void:
 
 
 ## Level the ground in a disc (the parc fermé lot), blending out over the rim.
+## Rallycross circuits: make the ground meet the road surface exactly (banking, wide bowls, the Joker lane),
+## with an embankment that eases out to the surrounding land, so no road is buried or left floating.
+func conform_to_road(track: Track) -> void:
+	var total := nx * nz
+	var n := track.pts.size()
+	# Each sample's reach to either side: the road, or the Joker lane out to its far edge.
+	var ext_pos := PackedFloat32Array()
+	var ext_neg := PackedFloat32Array()
+	ext_pos.resize(n)
+	ext_neg.resize(n)
+	for i in n:
+		var hw := track.road_half_width(track.dist[i])
+		var band := track.joker_band(track.dist[i])
+		ext_pos[i] = hw
+		ext_neg[i] = hw
+		if not is_nan(band.x):
+			if band.y > 0.0:
+				ext_pos[i] = maxf(hw, band.y)
+			if band.x < 0.0:
+				ext_neg[i] = maxf(hw, -band.x)
+	var base_i := PackedFloat32Array()
+	var sink_i := PackedFloat32Array()
+	base_i.resize(n)
+	sink_i.resize(n)
+	for i in n:
+		var si := track.dist[i]
+		base_i[i] = track.road_h(si)
+		var gr := absf(track.road_h(si + 4.0) - track.road_h(si - 4.0)) / 8.0
+		# The grid is coarse: sink the ground by the road's tilt across a quarter cell so it never pokes through.
+		sink_i[i] = 0.12 + cell * 0.25 * (absf(track.bank_slope(i)) + gr)
+	var inner := cell * 0.95   # a cell of shoulder, so the road edge never overhangs a drop
+	var corr_h := PackedFloat32Array()
+	corr_h.resize(total)
+	corr_h.fill(1e9)
+	var best_m := PackedFloat32Array()
+	best_m.resize(total)
+	best_m.fill(1e9)
+	var best_i := PackedInt32Array()
+	best_i.resize(total)
+	best_i.fill(-1)
+	var reach := 46.0
+	var rc := int(ceil(reach / cell))
+	for i in range(0, n, 2):
+		if track.on_stacked_span(track.dist[i]):
+			continue
+		var p := track.pts[i]
+		var cx := int((p.x - origin.x) / cell)
+		var cz := int((p.y - origin.y) / cell)
+		for dz in range(-rc, rc + 1):
+			var z := cz + dz
+			if z < 0 or z >= nz:
+				continue
+			for dx in range(-rc, rc + 1):
+				var x := cx + dx
+				if x < 0 or x >= nx:
+					continue
+				var k := z * nx + x
+				var dv := Vector2(origin.x + x * cell - p.x, origin.y + z * cell - p.y)
+				var l := dv.dot(track.nrm[i])
+				var side_ext := ext_pos[i] if l >= 0.0 else ext_neg[i]
+				# Distance to the road's drivable surface (across and beyond its end), not to its centre line.
+				var m := Vector2(maxf(absf(l) - side_ext, 0.0), maxf(absf(dv.dot(track.tang[i])) - 4.0, 0.0)).length() + dv.length() * 0.01
+				if m < best_m[k]:
+					best_m[k] = m
+					best_i[k] = i
+				if absf(l) - side_ext <= inner and absf(dv.dot(track.tang[i])) <= 4.0:
+					# Inside this road's corridor: the ground is never higher than the lowest road claiming it.
+					corr_h[k] = minf(corr_h[k], base_i[i] + clampf(l, -side_ext, side_ext) * track.bank_slope(i) - sink_i[i])
+	for k in total:
+		var i := best_i[k]
+		if i < 0:
+			continue
+		var x := k % nx
+		var z := k / nx
+		var q := Vector2(origin.x + x * cell, origin.y + z * cell)
+		var p := track.pts[i]
+		var s := track.dist[i]
+		var lat := (q - p).dot(track.nrm[i])
+		var along := (q - p).dot(track.tang[i])
+		var ext := ext_pos[i] if lat >= 0.0 else ext_neg[i]
+		var edge := absf(lat) - ext
+		var road_here := base_i[i] + clampf(lat, -ext, ext) * track.bank_slope(i)
+		if corr_h[k] < 1e8:
+			h[k] = corr_h[k]
+			far[k] = 0
+			continue
+		# Outside every corridor: ease from the nearest road edge to whatever the land was doing.
+		var slope_len := clampf(absf(h[k] - road_here) * 1.4, 7.0, 34.0)
+		var out_d := Vector2(maxf(edge - inner, 0.0), maxf(absf(along) - 4.0, 0.0)).length()
+		var t := smoothstep(0.0, slope_len, out_d)
+		if out_d < slope_len:
+			h[k] = lerpf(road_here - sink_i[i], h[k], t)
+			far[k] = 0
+	min_h = 1e9
+	max_h = -1e9
+	for k in total:
+		min_h = minf(min_h, h[k])
+		max_h = maxf(max_h, h[k])
+
+
 func flatten_disc(c: Vector2, r: float, height: float, blend := 15.0) -> void:
 	var r2 := r + blend
 	var x0 := maxi(0, int((c.x - r2 - origin.x) / cell))

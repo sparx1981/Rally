@@ -241,7 +241,11 @@ static func _find_crossing(track: Track) -> void:
 			var low_d := _wrap_dist(track.dist[i], track.dist[lower], length)
 			track.elev[i] += add * 0.6 * (1.0 - smoothstep(30.0, 100.0, up_d))
 			track.elev[i] -= add * 0.4 * (1.0 - smoothstep(30.0, 100.0, low_d))
-	track.stacked_crossing = {"center": center, "lower": track.dist[lower], "upper": track.dist[upper], "half": 21.0}
+	# A shallow crossing angle overlaps for longer: size the bridge to cover both roads' full width at the crossing.
+	var sin_a := absf(track.tang[lower].x * track.tang[upper].y - track.tang[lower].y * track.tang[upper].x)
+	var overlap := track.road_half_width(track.dist[upper]) + track.road_half_width(track.dist[lower]) + 6.0
+	var half := clampf(overlap / maxf(sin_a, 0.2), 21.0, 56.0)
+	track.stacked_crossing = {"center": center, "lower": track.dist[lower], "upper": track.dist[upper], "half": half}
 	track._register_stacked_bridge()
 
 

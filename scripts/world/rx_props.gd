@@ -13,6 +13,9 @@ var _anim: Array = []   # {node, kind}
 var _lamp_mat: StandardMaterial3D
 
 
+var solids: Array = []        # [Vector2 position, radius] the car cannot drive through
+
+
 func build(t: Track, d: Dictionary, mat: Material, is_dark: bool) -> void:
 	track = t
 	def = d
@@ -67,14 +70,56 @@ func _process(delta: float) -> void:
 
 # --- helpers ---------------------------------------------------------------------------------------
 
-## Point beside the road at station s: side * (half width + offset), with the ground height.
+## Point beside the road at station s: clear of the road AND of any Joker lane on that side, plus offset.
 func _at(s: float, side: float, offset: float) -> Dictionary:
 	var i := track.index_at(s)
-	var p: Vector2 = track.pts[i] + track.nrm[i] * side * (track.road_half_width(s) + offset)
+	var reach := track.road_half_width(s)
+	var band := track.joker_band(s)
+	if not is_nan(band.x):
+		reach = maxf(reach, band.y if side > 0.0 else -band.x)
+	if not track.joker.is_empty():
+		# Keep clear of the lane just before and after it too.
+		var near := track.index_at(clampf(s + 20.0, 0.0, track.length))
+		var far := track.index_at(clampf(s - 20.0, 0.0, track.length))
+		for k in [near, far]:
+			var bk := track.joker_band(track.dist[k])
+			if not is_nan(bk.x):
+				reach = maxf(reach, bk.y if side > 0.0 else -bk.x)
+	var p: Vector2 = track.pts[i] + track.nrm[i] * side * (reach + offset)
+	if offset >= 3.0:
+		# Switchbacks put other stretches of road close by: move out until clear of every road and lane,
+		# trying the other side of the road as well; keep the clearest spot found.
+		var need := 21.0 + minf(offset, 12.0) * 0.3
+		var best_p := p
+		var best_c := track.clearance(p)
+		for sd: float in [side, -side]:
+			var push := 0.0
+			while push <= 56.0 and best_c < need:
+				var q: Vector2 = track.pts[i] + track.nrm[i] * sd * (reach + offset + push)
+				var cq := track.clearance(q)
+				if cq > best_c:
+					best_c = cq
+					best_p = q
+				push += 4.0
+			if best_c >= need:
+				break
+		p = best_p
 	var y := track.terrain.height(p) if track.terrain else track.elev[i]
 	if offset < 3.0:
 		y = track.elev[i]
 	return {"p": p, "y": y, "heading": track.heading_at(i), "i": i, "n": track.nrm[i]}
+
+
+## Circles that make a prop solid: along its local z axis, so the car hits it instead of driving through.
+func _solid_line(xf: Transform3D, length: float, r: float, centre := 0.0) -> void:
+	var z := -length * 0.5 + r
+	while z <= length * 0.5 - r + 0.01:
+		var w := xf * Vector3(0, 0, z + centre)
+		solids.append([Vector2(w.x, w.z), r])
+		z += r * 1.5
+	if length <= r * 2.0:
+		var w2 := xf * Vector3(0, 0, centre)
+		solids.append([Vector2(w2.x, w2.z), r])
 
 
 func _frame(pt: Dictionary, yaw_extra := 0.0) -> Transform3D:
@@ -131,6 +176,7 @@ func _control_tower(b: PaperKit.Builder) -> void:
 	var pt := _at(46.0, 1.0, 16.0)
 	var xf := _frame(pt)
 	b.box(Vector3(0, 4.0, 0), Vector3(7.0, 8.0, 6.0), xf, Color("#d4d0c6"))
+	_solid_line(xf, 7.0, 3.6)
 	for floor_i in 3:
 		b.box(Vector3(0, 1.8 + floor_i * 2.5, -3.02), Vector3(6.2, 1.3, 0.06), xf, Color("#4f7487"), Color(-1, 0, 0), night)
 	b.box(Vector3(0, 8.3, 0), Vector3(7.8, 0.5, 6.8), xf, Color("#8a4a3a"))
@@ -143,6 +189,7 @@ func _paddock(b: PaperKit.Builder) -> void:
 	var xf := _frame(pt)
 	# Hauler: cab and long trailer in team colours.
 	b.box(Vector3(0, 1.9, 0), Vector3(2.5, 3.8, 14.0), xf, Color("#efe3c8"), Color("#d8ccb0"))
+	_solid_line(xf, 18.0, 1.6, 2.0)
 	b.box(Vector3(0, 1.5, 8.6), Vector3(2.5, 3.0, 3.0), xf, Color("#c8553d"))
 	b.box(Vector3(0, 2.4, 0), Vector3(2.55, 0.5, 13.5), xf, Color("#3f6fa8"))
 	# Awning tent and tyre racks.
@@ -236,6 +283,7 @@ func _joker_signage(b: PaperKit.Builder) -> void:
 func _bleachers(b: PaperKit.Builder, station: float) -> void:
 	var pt := _at(station, 1.0, 12.0)
 	var xf := _frame(pt)
+	_solid_line(xf, 10.0, 2.6, 0.0)
 	for tier in 4:
 		b.box(Vector3(0, 0.5 + tier * 0.55, tier * 1.0), Vector3(10.0, 0.4, 1.0), xf, Color("#b6b9bd"))
 		for seat in 9:
@@ -249,6 +297,7 @@ func _floodlights(b: PaperKit.Builder) -> void:
 		var s := track.length * (float(k) + 0.5) / n
 		var pt := _at(s, 1.0 if k % 2 == 0 else -1.0, 14.0)
 		var xf := _frame(pt)
+		_solid_line(xf, 1.0, 0.9)
 		for lx in [-0.5, 0.5]:
 			for lz in [-0.5, 0.5]:
 				b.box(Vector3(lx, 8.0, lz), Vector3(0.12, 16.0, 0.12), xf, Color("#8a8f96"))
@@ -270,6 +319,7 @@ func _containers(b: PaperKit.Builder) -> void:
 		var pt := _at(s, 1.0 if k % 2 == 0 else -1.0, 9.0 + rng.randf() * 6.0)
 		var xf := _frame(pt, rng.randf_range(-0.12, 0.12))
 		var stack := 1 + rng.randi() % 3
+		_solid_line(xf, 6.1 if k % 3 else 12.2, 1.4)
 		for h in stack:
 			b.box(Vector3(0, 1.3 + h * 2.62, 0), Vector3(2.5, 2.6, 6.1 if k % 3 else 12.2), xf, cols[(k + h) % cols.size()])
 			for rib in 5:
@@ -283,6 +333,8 @@ func _monument_arch(b: PaperKit.Builder, station: float) -> void:
 	var stone := Color("#bdb8ae")
 	for side in [-1.0, 1.0]:
 		b.box(Vector3(side * (hw + 2.2), 6.0, 0), Vector3(4.0, 12.0, 3.0), xf, stone, Color("#cdc8bd"))
+		var cw := xf * Vector3(side * (hw + 2.2), 0, 0)
+		solids.append([Vector2(cw.x, cw.z), 2.2])
 	b.box(Vector3(0, 12.2, 0), Vector3(hw * 2.0 + 8.4, 3.0, 3.4), xf, stone, Color("#cdc8bd"))
 	b.box(Vector3(0, 14.2, 0), Vector3(hw * 2.0 + 3.0, 1.2, 3.8), xf, Color("#a64b37"))
 
@@ -293,19 +345,26 @@ func _campervans(b: PaperKit.Builder) -> void:
 		var pt := _at(track.length * (0.08 + k * 0.22), 1.0 if k % 2 == 0 else -1.0, 16.0 + k * 2.0)
 		var xf := _frame(pt, 0.4 * k)
 		b.box(Vector3(0, 1.4, 0), Vector3(2.3, 2.8, 5.8), xf, cols[k % 3])
+		_solid_line(xf, 6.4, 1.3)
+		for wx in [-1.2, 1.2]:
+			for wz in [-2.0, 2.0]:
+				b.box(Vector3(wx, 0.45, wz), Vector3(0.3, 0.9, 0.9), xf, Color("#26262a"))
+		for side_w in [-1.18, 1.18]:
+			b.box(Vector3(side_w, 1.9, 0.4), Vector3(0.06, 0.7, 2.0), xf, Color("#4f7487"))
 		b.box(Vector3(0, 1.1, -3.0), Vector3(2.2, 1.6, 1.2), xf, cols[k % 3].darkened(0.1))
 		b.box(Vector3(0, 2.0, -3.62), Vector3(1.8, 0.7, 0.06), xf, Color("#4f7487"))
 		b.box(Vector3(0, 2.9, 0), Vector3(2.0, 0.14, 4.6), xf, Color("#d8ccb0"))
 
 
 func _mining_relics(b: PaperKit.Builder) -> void:
+	# Piles of cut quarry blocks.
 	for k in 4:
-		var pt := _at(track.length * (0.15 + k * 0.2), -1.0 if k % 2 == 0 else 1.0, 18.0)
+		var pt := _at(track.length * (0.15 + k * 0.2), -1.0 if k % 2 == 0 else 1.0, 14.0)
 		var xf := _frame(pt, 0.7 * k)
-		b.box(Vector3(0, 1.2, 0), Vector3(3.0, 2.4, 4.0), xf, Color("#9a5a3c"))
-		b.box(Vector3(0, 3.0, 1.2), Vector3(0.5, 3.6, 0.5), xf, Color("#7a4a30"))
-		b.box(Vector3(0, 5.0, 2.6), Vector3(0.4, 0.4, 4.4), xf, Color("#7a4a30"))
-		b.box(Vector3(-1.9, 0.5, 0), Vector3(0.9, 1.0, 3.2), xf, Color("#2b2b2e"))
+		var blocks := [Vector3(-1.3, 0.8, 0), Vector3(1.3, 0.8, 0), Vector3(0, 2.4, 0), Vector3(-1.3, 0.8, 2.6), Vector3(1.3, 0.8, 2.6)]
+		for bi in blocks.size():
+			b.box(blocks[bi], Vector3(2.4, 1.6, 2.4), xf, Color("#9a6a50") if bi % 2 == 0 else Color("#8a5c44"))
+		_solid_line(xf, 5.0, 2.2, 1.0)
 
 
 func _drone() -> void:
