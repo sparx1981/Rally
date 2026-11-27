@@ -78,7 +78,7 @@ var _sky_mat: ShaderMaterial
 var helicopter: Helicopter
 var debug_board: Array = []
 var arch_stations: Array = []
-static var ARCH_STYLE := 1   # night lighting: 0 none, 1 glowing name and trim, 2 LED underside and base glow, 3 floodlit
+static var ARCH_STYLE := 2   # night lighting: 0 none, 1 glowing name and trim, 2 LED underside and base glow, 3 floodlit
 var _crowd_boost := 0.0
 var _crowd: Array = []   # [node, base, phase, is_stand]: spectators that cheer when the action is near
 var _car_mat: ShaderMaterial
