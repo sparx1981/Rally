@@ -428,8 +428,8 @@ func _update_circuit(car: Car) -> void:
 	if not car.on_road or advance <= 0.0 or advance > 8.0 or car.vel.dot(tr.tang[car.track_i]) <= 0.0:
 		return
 	var checkpoint := float(progress.gate) * tr.length * 0.25
-	var to_gate := fposmod(checkpoint - previous, tr.length)
-	if to_gate > advance or is_zero_approx(to_gate):
+	var to_gate := fposmod(checkpoint - fposmod(previous, tr.length), tr.length)
+	if to_gate > advance:
 		return
 	if progress.gate == 0:
 		if progress.started:

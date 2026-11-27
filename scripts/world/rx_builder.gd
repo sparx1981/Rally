@@ -273,7 +273,7 @@ static func _build_joker(track: Track, jk: Dictionary) -> void:
 		var u := clampf((track.dist[i] - s0) / (s1 - s0), 0.0, 1.0)
 		var hw: float = track.widths[i] * 0.5
 		max_hw = maxf(max_hw, hw)
-		var ramp := smoothstep(0.10, 0.46, u) * (1.0 - smoothstep(0.54, 0.90, u))
+		var ramp := smoothstep(0.22, 0.50, u) * (1.0 - smoothstep(0.55, 0.85, u))
 		gap[i] = ISLAND_GAP * ramp
 		var excursion := float(jk.out) * 0.5 * pow(sin(PI * u), 1.3)
 		var inner_edge := hw + gap[i] + excursion
@@ -351,8 +351,8 @@ static func _build_barriers(track: Track, rx: Dictionary) -> void:
 		# Island: a foam and tyre divider along the road edge and along the lane's inner edge, from the
 		# nose to the merge, leaving the entry and exit open.
 		var span: float = float(jk.s1) - float(jk.s0)
-		track.barriers.append(_bar(float(jk.s0) + span * 0.45, float(jk.s1) - span * 0.45, side, "island", "road"))
-		track.barriers.append(_bar(float(jk.s0) + span * 0.45, float(jk.s1) - span * 0.45, side, "island", "lane_in"))
+		track.barriers.append(_bar(float(jk.s0) + span * 0.38, float(jk.s1) - span * 0.38, side, "island", "road"))
+		track.barriers.append(_bar(float(jk.s0) + span * 0.38, float(jk.s1) - span * 0.38, side, "island", "lane_in"))
 	track.index_barriers()
 
 
