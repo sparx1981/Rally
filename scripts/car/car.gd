@@ -14,6 +14,9 @@ const BASE_TOP := 33.0
 const BASE_ACC := 14.5
 const BASE_MU := 17.0
 const BRAKE := 28.0
+## Displayed speed per m/s (the game's scale, shared by the HUD tag and the cockpit dial).
+const DISPLAY_KPH := 4.6
+const DISPLAY_MPH := 2.9
 const HANDBRAKE_DRAG := 3.6   # was 14: stopped the car faster than the pedal and killed powerslides
 const RADIUS := 1.55
 const GEAR_TORQUE := [1.0, 1.0, 0.88, 0.77, 0.69, 0.62]
@@ -992,7 +995,7 @@ func _sync_visual(delta: float) -> void:
 		if gear_readout:
 			gear_readout.text = str(gear) if gear > 0 else "R"
 			var speed_readout: Label3D = _cockpit["speed_readout"]
-			speed_readout.text = str(roundi(speed() * (2.23694 if int(Settings.g("units")) == 1 else 3.6)))
+			speed_readout.text = str(roundi(speed() * (DISPLAY_MPH if int(Settings.g("units")) == 1 else DISPLAY_KPH)))
 		var trip_display: Label3D = _cockpit["trip_display"]
 		var distance := floori(maxf(s, 0.0) / 10.0)
 		if trip_display and distance != _trip_centikm:
@@ -1000,7 +1003,7 @@ func _sync_visual(delta: float) -> void:
 			trip_display.text = "%.2f" % (distance * 0.01)
 		var speed_hand: Node3D = _cockpit["speed_hand"]
 		if speed_hand:
-			speed_hand.rotation.z = lerpf(2.2, -1.8, clampf(speed() * 3.6 / 240.0, 0.0, 1.0))
+			speed_hand.rotation.z = lerpf(2.2, -1.8, clampf(speed() * DISPLAY_KPH / 240.0, 0.0, 1.0))
 	# Suspension travel: wheels droop in the air and jiggle over rough ground, within the arches.
 	for i in _wheels.size():
 		var wnode: Node3D = _wheels[i]

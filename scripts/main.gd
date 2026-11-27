@@ -1449,6 +1449,10 @@ func _run_bench() -> void:
 		await _run_rxaccel(list)
 		get_tree().quit()
 		return
+	if OS.get_cmdline_user_args().has("--rxwall"):
+		await _run_rxwall(list)
+		get_tree().quit()
+		return
 	if OS.get_cmdline_user_args().has("--rxgrind"):
 		await _run_rxgrind(list)
 		get_tree().quit()
@@ -1876,3 +1880,53 @@ func _run_rxaccel(list: Array) -> void:
 				line += " v@5s=%.1f s=%.0f lat=%.1f" % [v, c.s, c.lat]
 		line += " t50=%.1f t80=%.1f t100=%.1f" % [marks[13.9], marks[22.2], marks[27.8]]
 		print(line)
+
+
+## Drive into every wall from the inside at speed, around the whole circuit, and report any car that ends up beyond it.
+func _run_rxwall(list: Array) -> void:
+	Game.mode = Game.Mode.TIME_TRIAL
+	for si in list:
+		Game.stage_index = si
+		await _start_race()
+		var tr := race.stage.track
+		var c: Car = race.player
+		race.drivers.erase(c)
+		while race.state != Race.State.RACING:
+			await get_tree().process_frame
+		var tested := 0
+		var passed := 0
+		var s0 := 30.0
+		while s0 < tr.length - 30.0:
+			for side in [-1.0, 1.0]:
+				var bars := tr.barriers_at(s0, side)
+				if bars.is_empty():
+					continue
+				var wall := 0.0
+				for bar in bars:
+					wall = maxf(wall, tr.barrier_wall(bar, s0))
+				# Start inside the road on that side, aimed at the wall at 45 degrees.
+				var start_lat: float = side * maxf(tr.road_half_width(s0) - 2.0, 1.0)
+				c.place_at(s0, start_lat)
+				var i := tr.index_at(s0)
+				var tang := tr.tang[i]
+				var nrm := tr.nrm[i]
+				var dir := (tang + nrm * side).normalized()
+				c.h = atan2(dir.x, dir.y)
+				c.vel = dir * 14.0
+				c.throttle = 1.0
+				c.steer = 0.0
+				var worst := 0.0
+				for f in 150:
+					await get_tree().physics_frame
+					var bars2 := tr.barriers_at(c.s, signf(c.lat))
+					var w2 := 0.0
+					for bar in bars2:
+						w2 = maxf(w2, tr.barrier_wall(bar, c.s))
+					if w2 > 0.0 and absf(c.lat) > w2 + 0.4 and signf(c.lat) == side:
+						worst = maxf(worst, absf(c.lat) - w2)
+				tested += 1
+				if worst > 0.0:
+					passed += 1
+					print("RXWALLPASS %s s=%.0f side=%.0f wall=%.1f beyond=%.1f barriers=%s" % [Catalog.stages()[si].id, s0, side, wall, worst, str(bars.map(func(b): return "%s/%s" % [b.kind, b.get("ref", "")]))])
+			s0 += 25.0
+		print("RXWALLSUM %s tested=%d passed_through=%d" % [Catalog.stages()[si].id, tested, passed])

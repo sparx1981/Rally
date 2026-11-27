@@ -383,11 +383,13 @@ func conform_to_road(track: Track) -> void:
 				var l := dv.dot(track.nrm[i])
 				var side_ext := ext_pos[i] if l >= 0.0 else ext_neg[i]
 				# Distance to the road's drivable surface (across and beyond its end), not to its centre line.
-				var m := Vector2(maxf(absf(l) - side_ext, 0.0), maxf(absf(dv.dot(track.tang[i])) - 4.0, 0.0)).length() + dv.length() * 0.01
+				# On the outside of a bend, samples are further apart the further out you go.
+				var tol := 4.0 * (1.0 + absf(l) * absf(track.curv[i])) + 0.5
+				var m := Vector2(maxf(absf(l) - side_ext, 0.0), maxf(absf(dv.dot(track.tang[i])) - tol, 0.0)).length() + dv.length() * 0.01
 				if m < best_m[k]:
 					best_m[k] = m
 					best_i[k] = i
-				if absf(l) - side_ext <= inner and absf(dv.dot(track.tang[i])) <= 4.0:
+				if absf(l) - side_ext <= inner and absf(dv.dot(track.tang[i])) <= tol:
 					# Inside this road's corridor: the ground is never higher than the lowest road claiming it.
 					corr_h[k] = minf(corr_h[k], base_i[i] + clampf(l, -side_ext, side_ext) * track.bank_slope(i) - sink_i[i])
 	for k in total:
@@ -410,7 +412,7 @@ func conform_to_road(track: Track) -> void:
 			continue
 		# Outside every corridor: ease from the nearest road edge to whatever the land was doing.
 		var slope_len := clampf(absf(h[k] - road_here) * 1.4, 7.0, 34.0)
-		var out_d := Vector2(maxf(edge - inner, 0.0), maxf(absf(along) - 4.0, 0.0)).length()
+		var out_d := Vector2(maxf(edge - inner, 0.0), maxf(absf(along) - (4.0 * (1.0 + absf(lat) * absf(track.curv[i])) + 0.5), 0.0)).length()
 		var t := smoothstep(0.0, slope_len, out_d)
 		if out_d < slope_len:
 			h[k] = lerpf(road_here - sink_i[i], h[k], t)

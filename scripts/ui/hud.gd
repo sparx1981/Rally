@@ -148,7 +148,7 @@ func set_position_text(text: String) -> void:
 
 func set_speed(v: float, gear: int) -> void:
 	var mph := int(Settings.g("units")) == 1
-	var k := v * (2.9 if mph else 4.6)
+	var k := v * (Car.DISPLAY_MPH if mph else Car.DISPLAY_KPH)
 	var g := "R" if gear == 0 else str(gear)
 	_txt(speed_tag, "%d %s   %s" % [int(absf(k)), "mph" if mph else "km/h", g])
 
