@@ -43,6 +43,7 @@ func build(t: Track, d: Dictionary, mat: Material, is_dark: bool) -> void:
 	_paddock(b)
 	_braking_boards_and_booths(b)
 	_tyre_chicanes(b)
+	_flags()
 	if not t.joker.is_empty():
 		_joker_signage(b)
 	_floodlights(b)
@@ -219,6 +220,36 @@ func _spawn_firework(at: Vector3) -> void:
 	p.emitting = true
 	get_tree().create_timer(3.5).timeout.connect(p.queue_free)
 	Sfx.play("thud", -12.0, 2.4)
+
+
+## Waving flags on poles around the start line and the paddock.
+func _flags() -> void:
+	var cols := [Color("#c8553d"), Color("#efe3c8"), Color("#3f6fa8"), Color("#e8b04a"), Color("#2f8a8a")]
+	for k in 8:
+		var s := track.length * (float(k) / 8.0) + 6.0
+		var pt := _at(s, 1.0 if k % 2 == 0 else -1.0, 3.0)
+		var pole := Node3D.new()
+		var pb := PaperKit.Builder.new(200 + k)
+		pb.box(Vector3(0, 3.5, 0), Vector3(0.1, 7.0, 0.1), Transform3D(), Color("#6a6e75"))
+		var pm := MeshInstance3D.new()
+		pm.mesh = pb.mesh()
+		pm.material_override = material
+		pole.add_child(pm)
+		var cloth := Node3D.new()
+		cloth.position = Vector3(0, 6.4, 0)
+		var fb := PaperKit.Builder.new(210 + k)
+		var cc: Color = cols[k % cols.size()]
+		fb.box(Vector3(0.9, 0, 0), Vector3(1.8, 0.95, 0.03), Transform3D(), cc)
+		fb.box(Vector3(0.9, 0, 0.02), Vector3(1.8, 0.14, 0.03), Transform3D(), Color("#2b2b2e") if k % 2 == 0 else PaperKit.CREAM)
+		var fm := MeshInstance3D.new()
+		fm.mesh = fb.mesh()
+		fm.material_override = material
+		cloth.add_child(fm)
+		pole.add_child(cloth)
+		add_child(pole)
+		pole.position = Vector3(pt.p.x, pt.y - 0.1, pt.p.y)
+		_anim.append({"node": cloth, "kind": "flag", "phase": float(k) * 0.9, "base": randf() * TAU})
+		cloth.rotation.y = float(_anim[-1]["base"])
 
 
 ## Tyre-wall chicanes: two staggered blocks of painted stacks, solid for cars.
@@ -415,6 +446,9 @@ func _process(delta: float) -> void:
 				n.rotation.y = -ang
 			"rotor":
 				n.rotation.y += delta * 40.0
+			"flag":
+				n.rotation.z = sin(t * 5.0 + a.phase) * 0.12
+				n.scale.x = 1.0 + 0.1 * sin(t * 9.0 + a.phase)
 
 
 # --- helpers ---------------------------------------------------------------------------------------

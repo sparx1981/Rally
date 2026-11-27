@@ -34,6 +34,9 @@ var race_time := 0.0
 var medals := [0.0, 0.0, 0.0]   # gold, silver, bronze
 var _acc := 0.0
 var _count := 3.5
+var _intro_t := -1.0          # intro flyover clock (seconds); -1 = none
+const INTRO_LEN := 6.0
+var _orbit_t := 0.0
 var _last_count := 4
 var _done_t := 0.0
 var _reset_cd := 0.0
@@ -127,6 +130,10 @@ func setup(stage_i: int, mode_v: int, entrants: Array, attract_v := false, tod :
 		if stage.changing_light():
 			player.set_headlight_level(stage.headlight_level)
 	camera.follow(0.016)
+	if not attract and not Game.no_save and not autopilot and DisplayServer.get_name() != "headless":
+		_intro_t = 0.0
+		set_overlay_visible(false)
+		hud.show_hint_timed("Tap to skip", INTRO_LEN)
 	var st: Dictionary = player.stats
 	var mu := Car.BASE_MU * float(st["grip"]) * stage.grip()
 	var ideal := tr.ideal_time(mu * 0.95, player.profile_braking() * 0.85, player.profile_acceleration() * 0.75, player.top_speed())
@@ -233,6 +240,10 @@ func _exit_tree() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _intro_t >= 0.0 and (event is InputEventScreenTouch or event is InputEventMouseButton or event is InputEventKey or event is InputEventJoypadButton) and event.is_pressed():
+		_end_intro()
+		get_viewport().set_input_as_handled()
+		return
 	if attract or state == State.DONE:
 		return
 	if event.is_action_pressed("pause"):
@@ -322,7 +333,12 @@ func _process(delta: float) -> void:
 		if _crossing_audio:
 			_crossing_audio.feed(player.s, player.speed(), player.on_road and not player.airborne)
 	player.sync_now()
-	camera.follow(dt)
+	if _intro_t >= 0.0:
+		_intro_camera(dt)
+	elif state == State.DONE and not attract and not autopilot and DisplayServer.get_name() != "headless":
+		_finish_camera(dt)
+	else:
+		camera.follow(dt)
 	var vi := camera.view_index()
 	stage.set_bonnet(ChaseCamera.is_ground_level(vi))
 	if vi != _last_view:
@@ -345,7 +361,49 @@ func _process(delta: float) -> void:
 	_reset_cd -= dt
 
 
+func _end_intro() -> void:
+	if _intro_t < 0.0:
+		return
+	_intro_t = -1.0
+	set_overlay_visible(true)
+	hud.show_hint("")
+	camera.snap()
+
+
+## Intro flyover: a slow sweep round the start line from high above down to the chase position. Any touch,
+## key or button skips it.
+func _intro_camera(dt: float) -> void:
+	_intro_t += dt
+	var k := clampf(_intro_t / INTRO_LEN, 0.0, 1.0)
+	var e := k * k * (3.0 - 2.0 * k)
+	var base := player.global_position
+	var heading := player.h
+	var ang := heading + PI + lerpf(1.9, 0.0, e)
+	var radius := lerpf(26.0, 9.0, e)
+	var height := lerpf(16.0, 3.4, e)
+	var pos := base + Vector3(sin(ang) * radius, height, cos(ang) * radius)
+	camera.global_position = pos
+	camera.look_at(base + Vector3(0, 1.0, 0) + Vector3(sin(heading), 0, cos(heading)) * lerpf(12.0, 3.0, e), Vector3.UP)
+	camera.fov = lerpf(46.0, 62.0, e)
+	if _intro_t >= INTRO_LEN:
+		_end_intro()
+
+
+## After the finish the camera swings slowly round the car while the results build.
+func _finish_camera(dt: float) -> void:
+	_orbit_t += dt
+	var base := player.global_position
+	var ang := player.h + PI + 0.5 + _orbit_t * 0.45
+	var radius := 8.5
+	var pos := base + Vector3(sin(ang) * radius, 3.2 + sin(_orbit_t * 0.6) * 0.5, cos(ang) * radius)
+	camera.global_position = pos
+	camera.look_at(base + Vector3(0, 0.9, 0), Vector3.UP)
+	camera.fov = 52.0
+
+
 func _update_state(dt: float) -> void:
+	if _intro_t >= 0.0:
+		return
 	if state == State.COUNTDOWN:
 		_count -= dt
 		var c := int(ceil(_count))
@@ -911,6 +969,7 @@ func _update_hud() -> void:
 		var lap_text := "  ·  Lap %d/%d" % [lap, _laps] if _laps > 0 else ""
 		hud.set_position_text("P%d/%d%s" % [pos, cars.size(), lap_text])
 	hud.set_joker(not tr.joker.is_empty() and not attract, player.joker_taken, player.lap + 1 >= _laps)
+	stage.set_lap_wear(player.lap + 1)
 	var wrong := player.vel.length() > 3.0 and player.vel.normalized().dot(tr.tang[player.track_i]) < -0.4
 	var lost := _off_track_time >= RECOVERY_WARNING and state == State.RACING
 	var seconds := maxi(1, ceili(RECOVERY_LIMIT - _off_track_time))

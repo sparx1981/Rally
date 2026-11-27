@@ -1183,6 +1183,7 @@ func _settings() -> void:
 			list.add_child(_choice("Paper fibre & grain detail", ["Off", "On"], 1 if Settings.g("paper_detail") else 0, func(i): Settings.set_value("paper_detail", i == 1)))
 			list.add_child(_choice("Frame rate cap", ["30 fps", "60 fps"], 1 if int(Settings.g("fps")) == 60 else 0, func(i): Settings.set_value("fps", 60 if i == 1 else 30)))
 			list.add_child(_choice("Show FPS counter", ["Off", "On"], 1 if Settings.g("show_fps") else 0, func(i): Settings.set_value("show_fps", i == 1)))
+			list.add_child(_choice("Speed effects (wider view, shake)", ["Off", "On"], 1 if Settings.g("speed_fx") else 0, func(i): Settings.set_value("speed_fx", i == 1)))
 			list.add_child(_choice("Debug panel (for bug reports)", ["Off", "On"], 1 if Settings.g("debug_hud") else 0, func(i): Settings.set_value("debug_hud", i == 1)))
 			list.add_child(_choice("Light glow (night)", ["Off", "On"], 1 if Settings.g("light_halos") else 0, func(i): Settings.set_value("light_halos", i == 1)))
 			list.add_child(_note("Shows car, track, sector, surface and speed in the corner of the race screen. Include it in screenshots when reporting a problem."))
@@ -1856,6 +1857,12 @@ func _run_shot() -> void:
 				race.camera.snap()
 				break
 		await get_tree().process_frame
+	if race:
+		for ia in OS.get_cmdline_user_args():
+			if ia.begins_with("--introat="):
+				race._intro_t = float(ia.substr(10)) * 6.0
+				race._intro_camera(0.0)
+				await get_tree().process_frame
 	if _shot.has("lightat") and race:
 		var tr2 := race.stage.track
 		race.stage.advance_lighting(lerpf(tr2.start_s, tr2.finish_s, float(_shot["lightat"])))

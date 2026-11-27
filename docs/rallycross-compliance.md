@@ -208,3 +208,10 @@ All 12 circuits complete 3 laps. A human player is not affected by the AI's lane
 - Tyre-wall chicanes on Chalk Valley, Timberline, Breton, Baltic, Apex and Harbor Grid (solid, AI weaves).
 - Truck, SUV and buggy engines are louder; the truck also gets a sub-octave layer.
 - Sponsor boards fixed (card was sitting half a board too high, so the text fell off the bottom); tarmac repair patches much subtler; knocked-off tyres are thrown further onto the road (up to four).
+
+## Sixteenth pass
+
+- Snow and mud: snowbanks (mud banks on wet stages) along road edges on rally stages; deep-rut lips beside both wheel tracks on mud and snow sectors; circuit grooves darken at laps 2 and 4; mud and snow relief on rally patches; mud splatter builds on the car flanks.
+- Speed: reflector posts every ~20 m near the road edge on rally stages; the camera widens its view with speed and trembles slightly (Settings > "Speed effects").
+- Ambient: dust/pollen motes (flurries on snowy stages), waving flags around circuits, cheering crowds near the action.
+- Presentation: a 6 s skippable intro flyover round the start, and a slow orbit of the car after the finish.

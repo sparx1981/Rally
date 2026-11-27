@@ -5,6 +5,7 @@ extends Camera3D
 ## Cockpit are mounted rigidly on the car (no smoothing, no lag) and look at the horizon with a
 ## paper-sky fog.
 
+const LOW_VIEW_INDEX := 1
 const VIEWS := [
 	{"name": "Chase", "dist": 50.0, "pitch": 44.0, "fov": 30.0, "lead": 5.0},
 	{"name": "Low chase", "dist": 7.8, "pitch": 10.0, "fov": 62.0, "lead": 2.5, "low": true},
@@ -22,6 +23,8 @@ var _yaw := 0.0
 var _pos := Vector3.ZERO
 var _look := Vector3.ZERO
 var _shake := 0.0
+var _speed_fov := 0.0
+var _speed_t := 0.0
 var _init_done := false
 var _last_view := -1
 
@@ -81,9 +84,19 @@ func follow(dt: float) -> void:
 		_last_view = vi
 		_init_done = false
 	fov = float(Settings.g("cockpit_fov")) if vi == COCKPIT else float(v["fov"])
+	# Speed feel: the view widens a little as the car gets quick, and the camera trembles with engine and road.
+	var fast := 0.0
+	if bool(Settings.g("speed_fx")) and target != null:
+		fast = clampf((target.speed() - 10.0) / 32.0, 0.0, 1.0)
+	_speed_fov = lerpf(_speed_fov, fast, clampf(dt * 1.8, 0.0, 1.0))
+	fov += _speed_fov * (7.0 if vi == LOW_VIEW_INDEX else (4.0 if is_mounted(vi) else 3.0))
+	_speed_t += dt
 	var sh := Vector3.ZERO
+	if _speed_fov > 0.02:
+		var tr := _speed_fov * 0.35
+		sh = Vector3(sin(_speed_t * 47.0) + sin(_speed_t * 31.0 + 1.3), sin(_speed_t * 53.0 + 0.7), sin(_speed_t * 41.0 + 2.1)) * tr * 0.5
 	if _shake > 0.001:
-		sh = Vector3(randf_range(-1, 1), randf_range(-1, 1), randf_range(-1, 1)) * _shake
+		sh += Vector3(randf_range(-1, 1), randf_range(-1, 1), randf_range(-1, 1)) * _shake
 		_shake = move_toward(_shake, 0.0, dt * 3.0)
 	if is_mounted(vi):
 		var t := target.eye_transform() if vi == COCKPIT else target.bonnet_transform()
@@ -154,6 +167,6 @@ func _follow_low(dt: float, v: Dictionary, sh: Vector3) -> void:
 	_low_h = maxf(_low_h, gh + 1.1)
 	_pos = Vector3(p2.x, _low_h, p2.y)
 	_look = _look.lerp(look, clampf(dt * 10.0, 0.0, 1.0))
-	fov = float(v["fov"])
+	fov = float(v["fov"]) + _speed_fov * 7.0
 	global_position = _pos + sh * 0.08
 	look_at(_look + sh * 0.05, Vector3.UP)

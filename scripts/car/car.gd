@@ -121,6 +121,7 @@ func setup(car_stats: Dictionary, num: int, stg: Stage, mat: Material) -> void:
 	_make_contact()
 	_make_dust()
 	_make_wheel_debris()
+	_make_dirt()
 	_make_rear_lamps()
 	if not is_player:
 		# AI engines are positional: you hear rivals close behind and alongside.
@@ -368,6 +369,45 @@ func _update_wheel_debris() -> void:
 	for p in _debris:
 		p.emitting = on
 		p.speed_scale = clampf(0.7 + absf(v_long) / 30.0 + slip, 0.7, 1.8)
+
+
+## Mud and wet-ground splatter along the lower flanks: grows while the car drives through muck, never washes off.
+var dirt := 0.0
+var _dirt_nodes: Array = []
+
+
+func _make_dirt() -> void:
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.albedo_color = Color(0.30, 0.22, 0.14, 0.0)
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	m.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
+	for sx: float in [-1.0, 1.0]:
+		var mi := MeshInstance3D.new()
+		var q := QuadMesh.new()
+		q.size = Vector2(half_len * 1.55, wheel_r * 1.1)
+		mi.mesh = q
+		mi.material_override = m
+		mi.position = Vector3(sx * (half_wid + 0.012), wheel_r * 0.95, -half_len * 0.02)
+		mi.rotation.y = sx * PI * 0.5
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.visible = false
+		_body.add_child(mi)
+		_dirt_nodes.append(mi)
+
+
+func _update_dirt(delta: float) -> void:
+	var mucky := patch_kind == "mud" or in_puddle or in_water or (stage.kind() == "rain" and (patch_kind in ["", "gravel"]) and (not stage.track.rx or on_road == false))
+	if mucky and speed() > 3.0 and not airborne:
+		dirt = minf(1.0, dirt + delta * 0.012 * clampf(speed() / 14.0, 0.0, 2.0))
+	if _dirt_nodes.is_empty():
+		return
+	var show := dirt > 0.04
+	for n: MeshInstance3D in _dirt_nodes:
+		n.visible = show
+	if show:
+		(_dirt_nodes[0].material_override as StandardMaterial3D).albedo_color.a = clampf(dirt, 0.0, 1.0) * 0.6
 
 
 func _make_dust() -> void:
@@ -1030,6 +1070,8 @@ func _update_street_light(delta: float) -> void:
 
 
 func _sync_visual(delta: float) -> void:
+	if not _dirt_nodes.is_empty() or _body != null:
+		_update_dirt(delta)
 	if _street_light:
 		_update_street_light(delta)
 	if _brake_light:

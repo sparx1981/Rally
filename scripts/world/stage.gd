@@ -77,6 +77,7 @@ var headlight_level := 0.0
 var _sky_mat: ShaderMaterial
 var helicopter: Helicopter
 var debug_board: Array = []
+var _crowd: Array = []   # [node, base, phase, is_stand]: spectators that cheer when the action is near
 var _reflect_t := 0.0
 var _lamp_level := 0.0
 var _head_cache := PackedVector3Array()
@@ -163,6 +164,8 @@ func build(stage_def: Dictionary, time_of_day := -1) -> void:
 	_make_switchback_tunnel()
 	_make_hazards()
 	_make_barriers()
+	_make_edge_banks()
+	_make_markers()
 	if track.rx:
 		rx_props = RxProps.new()
 		rx_props.name = "RallycrossProps"
@@ -176,6 +179,7 @@ func build(stage_def: Dictionary, time_of_day := -1) -> void:
 				scenery.obstacles[cell] = []
 			scenery.obstacles[cell].append([sp.x, sp.y, float(sd[1]), -1, false, "rx"])
 	_make_weather()
+	_make_ambient()
 	_make_mist()
 	_make_birds()
 	apply_settings()
@@ -593,6 +597,103 @@ func _surface_strip(s0: float, s1: float, col: Color, kind: String) -> void:
 		i = j
 
 
+## Snowbanks along both edges of snowy stages (and mud banks on wet ones): plain geometry, built in chunks that
+## are hidden when far away.
+func _make_edge_banks() -> void:
+	if track.rx:
+		return
+	var snowy: bool = str(def.get("loc_id", "")) in ["alpine", "lakes", "taiga"] or kind() == "snow"
+	var muddy: bool = kind() == "rain"
+	if not snowy and not muddy:
+		return
+	var col := Color("#f3f4f8") if snowy else Color(def["pal"]["road"]).lerp(Color(def["pal"]["ground"]), 0.45).darkened(0.1)
+	var shade := Color("#dfe5f1") if snowy else col.darkened(0.25)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(def.seed) * 5 + 17
+	var step := 2
+	var i := track.index_at(track.start_s)
+	var i_end := track.index_at(track.finish_s)
+	var chunk := 36
+	while i < i_end:
+		var j := mini(i + chunk, i_end)
+		var b := PaperKit.Builder.new(i)
+		for k in range(i, j, step):
+			var k2 := mini(k + step, j)
+			var hw0 := track.road_half_width(track.dist[k])
+			var hw1 := track.road_half_width(track.dist[k2])
+			var h0 := (0.42 if snowy else 0.2) * (0.5 + 0.9 * absf(sin(track.dist[k] * 0.11 + float(def.seed))))
+			var h1 := (0.42 if snowy else 0.2) * (0.5 + 0.9 * absf(sin(track.dist[k2] * 0.11 + float(def.seed))))
+			for side: float in [-1.0, 1.0]:
+				# Drifts follow the road, but give way where a barrier or bridge already stands.
+				if not track.barriers_at(track.dist[k], side).is_empty() or not track.bridge_at(track.dist[k], 14).is_empty():
+					continue
+				var f0 := _road_point(k, side * (hw0 + 0.15), 0.03)
+				var f1 := _road_point(k2, side * (hw1 + 0.15), 0.03)
+				var c0 := _road_point(k, side * (hw0 + 0.9), 0.03 + h0)
+				var c1 := _road_point(k2, side * (hw1 + 0.9), 0.03 + h1)
+				var o0 := _road_point(k, side * (hw0 + 2.8), -0.05)
+				var o1 := _road_point(k2, side * (hw1 + 2.8), -0.05)
+				b.quad(f0, f1, c1, c0, Vector3.UP, PaperKit.lin(col, 1.0))
+				b.quad(c0, c1, o1, o0, Vector3.UP, PaperKit.lin(shade, 1.0))
+		var mi := MeshInstance3D.new()
+		mi.mesh = b.mesh()
+		mi.material_override = paper_mat
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.visibility_range_end = 260.0
+		add_child(mi)
+		i = j
+
+
+## Reflector posts close to the road edge, alternating sides every ~20 m: nearby fast-moving objects are what
+## makes speed readable. (Circuits already have walls.)
+func _make_markers() -> void:
+	if track.rx:
+		return
+	var b := PaperKit.Builder.new(77)
+	var cream := Color("#efe8d6")
+	var red := Color("#c8553d")
+	var chunk_start := 0
+	var side := 1.0
+	var s := track.start_s + 14.0
+	var count := 0
+	var meshes: Array = []
+	while s < track.finish_s - 10.0:
+		var i := track.index_at(s)
+		if track.barriers_at(s, side).is_empty() and track.bridge_at(s, 10).is_empty() and not track.on_stacked_span(s):
+			var p: Vector2 = track.pts[i] + track.nrm[i] * side * (track.road_half_width(s) + 1.1)
+			var y := (track.terrain.height(p) if track.terrain else track.elev[i]) + 0.0
+			var xf := Transform3D(Basis(Vector3.UP, track.heading_at(i)), Vector3(p.x, y, p.y))
+			b.box(Vector3(0, 0.45, 0), Vector3(0.11, 0.9, 0.11), xf, cream)
+			b.box(Vector3(0, 0.78, 0), Vector3(0.12, 0.16, 0.12), xf, red)
+			b.box(Vector3(0, 0.9, 0), Vector3(0.09, 0.03, 0.09), xf, Color("#2b2b2e"))
+			count += 1
+			if count % 40 == 0:
+				var mi := MeshInstance3D.new()
+				mi.mesh = b.mesh()
+				mi.material_override = paper_mat
+				mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				mi.visibility_range_end = 200.0
+				add_child(mi)
+				b = PaperKit.Builder.new(77 + count)
+		side = -side
+		s += 20.0
+	var last := MeshInstance3D.new()
+	last.mesh = b.mesh()
+	last.material_override = paper_mat
+	last.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	last.visibility_range_end = 200.0
+	add_child(last)
+
+
+var _wear: Array = []   # [lap needed, MeshInstance3D] grooves that darken as laps pass
+
+
+## Circuits: the racing grooves in loose sectors get darker and wider lap by lap.
+func set_lap_wear(lap: int) -> void:
+	for w: Array in _wear:
+		(w[1] as MeshInstance3D).visible = lap >= int(w[0])
+
+
 ## Cheap relief for loose sectors (no per-pixel work): loose berms along both shoulders, scattered stones and,
 ## on mud, dark puddles. It is all plain geometry in the one paper material.
 func _surface_relief(s0: float, s1: float, col: Color, kind: String) -> void:
@@ -605,7 +706,7 @@ func _surface_relief(s0: float, s1: float, col: Color, kind: String) -> void:
 	var i1 := track.index_at(s1)
 	var light := PaperKit.lin(col.lightened(0.16), 1.0)
 	var dark := PaperKit.lin(col.darkened(0.22), 1.0)
-	var hmax: float = float({"sand": 0.045, "mud": 0.06, "chalk": 0.07, "fine_gravel": 0.07}.get(kind, 0.09))
+	var hmax: float = float({"sand": 0.045, "mud": 0.07, "snow": 0.16, "chalk": 0.07, "fine_gravel": 0.07}.get(kind, 0.09))
 	for k in range(i0, i1):
 		var d0 := minf(track.dist[k] - s0, s1 - track.dist[k])
 		var d1 := minf(track.dist[k + 1] - s0, s1 - track.dist[k + 1])
@@ -625,9 +726,51 @@ func _surface_relief(s0: float, s1: float, col: Color, kind: String) -> void:
 			var e1 := _road_point(k + 1, side * hw1 * 0.99, 0.045)
 			b.quad(a0, a1, c1, c0, Vector3.UP, light)
 			b.quad(c0, c1, e1, e0, Vector3.UP, dark)
+	# Deep ruts in mud and snow: a raised lip along each side of both wheel tracks, and (on circuits) darker
+	# worn grooves that appear as laps pass.
+	if kind in ["mud", "snow"]:
+		var lip_col := PaperKit.lin(col.darkened(0.1) if kind == "mud" else col.lightened(0.04), 1.0)
+		var rut_wear := [PaperKit.Builder.new(int(s0) + 9), PaperKit.Builder.new(int(s0) + 10)]
+		for k in range(i0, i1):
+			var fk0 := clampf(minf(track.dist[k] - s0, s1 - track.dist[k]) / 6.0, 0.0, 1.0)
+			var fk1 := clampf(minf(track.dist[k + 1] - s0, s1 - track.dist[k + 1]) / 6.0, 0.0, 1.0)
+			var hwk0 := track.road_half_width(track.dist[k]) - 0.15
+			var hwk1 := track.road_half_width(track.dist[k + 1]) - 0.15
+			for rut: float in [-0.37, 0.37]:
+				for edge: float in [-0.3, 0.3]:
+					var la0 := rut * hwk0 + edge
+					var la1 := rut * hwk1 + edge
+					var lip_h := 0.055 * fk0
+					var lip_h2 := 0.055 * fk1
+					var q0 := _road_point(k, la0 - 0.09, 0.045)
+					var q1 := _road_point(k + 1, la1 - 0.09, 0.045)
+					var q2 := _road_point(k + 1, la1, 0.045 + lip_h2)
+					var q3 := _road_point(k, la0, 0.045 + lip_h)
+					var q4 := _road_point(k + 1, la1 + 0.09, 0.045)
+					var q5 := _road_point(k, la0 + 0.09, 0.045)
+					b.quad(q0, q1, q2, q3, Vector3.UP, lip_col)
+					b.quad(q3, q2, q4, q5, Vector3.UP, lip_col)
+				if track.circuit:
+					for lvl in 2:
+						var wb: PaperKit.Builder = rut_wear[lvl]
+						var wd := 0.32 + 0.12 * lvl
+						var w0 := rut * hwk0
+						var w1 := rut * hwk1
+						var dark_w := PaperKit.lin(col.darkened(0.38), 1.0)
+						wb.quad(_road_point(k, w0 - wd, 0.049), _road_point(k + 1, w1 - wd, 0.049),
+							_road_point(k + 1, w1 + wd, 0.049), _road_point(k, w0 + wd, 0.049), Vector3.UP, dark_w)
+		if track.circuit:
+			for lvl in 2:
+				var wm := MeshInstance3D.new()
+				wm.mesh = (rut_wear[lvl] as PaperKit.Builder).mesh()
+				wm.material_override = paper_mat
+				wm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				wm.visible = false
+				add_child(wm)
+				_wear.append([2 if lvl == 0 else 4, wm])
 	# Stones and clods, gathering toward the shoulders where tyres throw them.
 	var s := s0 + 3.0
-	while s < s1 - 3.0:
+	while s < s1 - 3.0 and kind != "snow":
 		var i := track.index_at(s)
 		var hw := track.road_half_width(s) - 0.3
 		for q in 4:
@@ -981,6 +1124,9 @@ func _make_hazards() -> void:
 		mi.material_override = paper_mat
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(mi)
+		var relief_kind: String = {"gravel": "fine_gravel", "mud": "mud", "deep snow": "snow"}.get(str(pt["kind"]), "")
+		if relief_kind != "":
+			_surface_relief(float(pt["s0"]), float(pt["s1"]), col, relief_kind)
 
 
 const BARRIER_LAT := 0.75   # metres outside the road edge
@@ -1757,6 +1903,7 @@ func _make_parc_ferme() -> void:
 			smi.position = Vector3(side * (18.0 + rng.randf() * 1.0), 0.0, -12.0 + k * 6.5 + rng.randf() * 1.5)
 			smi.rotation.y = -side * PI * 0.5
 			root.add_child(smi)
+			_crowd.append([smi, smi.position.y, rng.randf() * TAU, false])
 	# PARC FERMÉ gantry over the entrance, lettered on both faces.
 	var gate := MeshInstance3D.new()
 	gate.mesh = Pieces.arch(track.width + 3.0, false)
@@ -1792,6 +1939,44 @@ func _flat_mat(c: Color) -> Material:
 
 
 ## Autumn: dry leaves gusting across the road around the camera, tumbling as they go.
+## Gentle ambient life near the camera: dust and pollen motes in dry weather, light flurries on snowy stages that
+## are not actually snowing. (Autumn already has falling leaves.)
+func _make_ambient() -> void:
+	var snowy_loc: bool = str(def.get("loc_id", "")) in ["alpine", "lakes", "taiga"]
+	var raining: bool = kind() == "rain"
+	var snowing: bool = kind() == "snow"
+	if raining or snowing or not weather_fx:
+		return
+	var p := CPUParticles3D.new()
+	p.local_coords = false
+	var q := QuadMesh.new()
+	q.size = Vector2(0.06, 0.06)
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.albedo_color = Color(1, 1, 1, 0.55) if snowy_loc else Color(1.0, 0.92, 0.7, 0.35)
+	m.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
+	q.material = m
+	p.mesh = q
+	p.amount = roundi(lerpf(14.0, 46.0, float(Settings.g("particles"))))
+	p.lifetime = 7.0
+	p.preprocess = 7.0
+	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	p.emission_box_extents = Vector3(18, 3.0, 18)
+	p.direction = Vector3(1, -0.1, 0.4)
+	p.spread = 70.0
+	p.initial_velocity_min = 0.3
+	p.initial_velocity_max = 1.1
+	p.gravity = Vector3(0.2, -0.25 if snowy_loc else 0.04, 0.1)
+	p.scale_amount_min = 0.6
+	p.scale_amount_max = 1.5 if snowy_loc else 1.0
+	p.position = Vector3(0, 2.0, 0)
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	weather_fx.add_child(p)
+	p.emitting = true
+
+
 func _make_leaves() -> void:
 	var lp := CPUParticles3D.new()
 	lp.local_coords = false
@@ -1977,6 +2162,14 @@ func update(dt: float, focus: Vector3, radius: float, player_s: float, cam: Came
 		_sky_mat.set_shader_parameter("t", _time)
 	if helicopter:
 		helicopter.update(dt, player_s)
+	for c: Array in _crowd:
+		var cn: Node3D = c[0]
+		var near := cn.global_position.distance_to(focus) < 70.0
+		var cheer := absf(sin(_time * 7.0 + float(c[2]))) * (1.0 if near else 0.0)
+		if bool(c[3]):
+			cn.scale.y = 1.0 + 0.012 * cheer
+		else:
+			cn.position.y = float(c[1]) + 0.07 * cheer
 	_reflect_t -= dt
 	if _reflect_t <= 0.0:
 		_reflect_t = 0.25
@@ -2397,6 +2590,7 @@ func _make_circuit_stands() -> void:
 	stand.mesh = b.mesh()
 	stand.material_override = paper_mat
 	add_child(stand)
+	_crowd.append([stand, 1.0, randf() * TAU, true])
 
 
 ## Rallycross: concrete piers and a cross beam under any stretch of road that stands clear of the ground,
