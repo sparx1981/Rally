@@ -532,6 +532,66 @@ func scare(p: Vector2) -> void:
 					tw.tween_property(pv, "position", pv.position + away * 3.2, 0.2).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 
 
+## Trees that a fast car brushes past drop leaves (or a clump of snow). One pooled burst per tree, with a cooldown.
+var _shaken := {}
+var _shake_pool: Array = []
+var _shake_clock := 0.0
+
+func shake(p: Vector2, speed: float, y: float, snowy: bool, leaf: Color) -> void:
+	if speed < 12.0 or Settings.fx_level() < 1:
+		return
+	_shake_clock += 0.0
+	var now := Time.get_ticks_msec() / 1000.0
+	for o in props_near(p):
+		var idx: int = o[3]
+		var kind: String = placements[idx]["kind"]
+		if not (kind.begins_with("pine") or kind.begins_with("tree") or kind.begins_with("birch")):
+			continue
+		var tp := Vector2(float(o[0]), float(o[1]))
+		if tp.distance_to(p) > 5.5 or float(_shaken.get(idx, -99.0)) > now - 6.0:
+			continue
+		_shaken[idx] = now
+		var ps: CPUParticles3D = null
+		for q in _shake_pool:
+			if not q.emitting:
+				ps = q
+				break
+		if ps == null:
+			if _shake_pool.size() >= 4:
+				return
+			ps = CPUParticles3D.new()
+			ps.one_shot = true
+			ps.explosiveness = 0.9
+			ps.amount = 14
+			ps.lifetime = 1.8
+			ps.direction = Vector3.DOWN
+			ps.spread = 50.0
+			ps.initial_velocity_min = 0.3
+			ps.initial_velocity_max = 1.6
+			ps.gravity = Vector3(0, -2.2, 0)
+			ps.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+			ps.emission_sphere_radius = 1.2
+			ps.scale_amount_min = 0.5
+			ps.scale_amount_max = 1.0
+			var qm := QuadMesh.new()
+			qm.size = Vector2(0.16, 0.12)
+			var mat := StandardMaterial3D.new()
+			mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			mat.vertex_color_use_as_albedo = true
+			mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+			qm.material = mat
+			ps.mesh = qm
+			add_child(ps)
+			_shake_pool.append(ps)
+		var c := Color("#f4f6fa") if snowy else leaf.lerp(Color("#c8a23a"), randf() * 0.5)
+		ps.color = c
+		ps.position = Vector3(tp.x, y + 3.2, tp.y)
+		ps.restart()
+		ps.emitting = true
+		if _shaken.size() > 200:
+			_shaken.clear()
+
+
 ## Props near p that a car can hit: Array of [x, z, r, index, breakable] (broken ones excluded).
 func props_near(p: Vector2) -> Array:
 	var out: Array = []

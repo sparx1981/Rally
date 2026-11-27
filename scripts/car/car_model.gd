@@ -110,6 +110,8 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 	var cab_f: float = P["cab_f"]
 	var cab_r: float = P["cab_r"]
 	var b := PaperKit.Builder.new(number * 13 + 1)
+	# Parts that can be torn off in a crash are separate meshes: front and rear bumper, left and right mirror.
+	var det := {"bf": PaperKit.Builder.new(61), "br": PaperKit.Builder.new(62), "ml": PaperKit.Builder.new(63), "mr": PaperKit.Builder.new(64)}
 	var I := Transform3D()
 	var y0 := ride
 	var ink := Color("#2e2a28")
@@ -249,9 +251,10 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 				b.card(PaperKit.rect(0.44, 0.06, pz, y0 + low * 0.74 + 0.06), body_side * Transform3D(Basis(), Vector3(0, 0, 0.03)), sc, {"thick": 0.005, "edge": 0.0, "lip": 0.0, "sides": false})
 			# A recessed door pull, mirror stalk and a rear-facing mirror insert.
 			b.box(Vector3(xs * (W * 0.5 + 0.018), top_y - 0.08, dz - 0.22), Vector3(0.027, 0.035, 0.16), I, ink)
-			b.box(Vector3(xs * (cw * 0.5 + 0.056), top_y + 0.10, cab_f - 0.12), Vector3(0.14, 0.035, 0.046), I, ink)
-			b.box(Vector3(xs * (cw * 0.5 + 0.12), top_y + 0.12, cab_f - 0.160), Vector3(0.11, 0.057, 0.013), I, glass.lightened(0.3))
-			b.box(Vector3(xs * (cw * 0.5 + 0.12), top_y + 0.12, cab_f - 0.12), Vector3(0.14, 0.09, 0.07), I, body_c)
+			var mb: PaperKit.Builder = det["mr"] if xs > 0.0 else det["ml"]
+			mb.box(Vector3(xs * (cw * 0.5 + 0.056), top_y + 0.10, cab_f - 0.12), Vector3(0.14, 0.035, 0.046), I, ink)
+			mb.box(Vector3(xs * (cw * 0.5 + 0.12), top_y + 0.12, cab_f - 0.160), Vector3(0.11, 0.057, 0.013), I, glass.lightened(0.3))
+			mb.box(Vector3(xs * (cw * 0.5 + 0.12), top_y + 0.12, cab_f - 0.12), Vector3(0.14, 0.09, 0.07), I, body_c)
 		var front := Transform3D(Basis(), Vector3(0, 0, L * 0.5 + 0.012))
 		var back := Transform3D(Basis(Vector3.UP, PI), Vector3(0, 0, -L * 0.5 - 0.012))
 		var lamp_y := y0 + (float(P["nose"]) - 0.05) * 0.72
@@ -360,8 +363,8 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 				b.box(Vector3(0, y0 + float(P["nose"]) * 0.42 + 0.025 + k * 0.035, front.origin.z + 0.018), Vector3(W * 0.25, 0.012, 0.012), I, ink.lightened(0.32))
 		if P.get("bumpers", false):
 			var bumper := Vector3(W * 0.96, 0.055 if style == "mini" else 0.12, 0.12)
-			b.box(Vector3(0, y0 + 0.08, L * 0.5 + 0.07), bumper, I, Color("#d8d4cc"))
-			b.box(Vector3(0, y0 + 0.08, -L * 0.5 - 0.07), bumper, I, Color("#d8d4cc"))
+			det["bf"].box(Vector3(0, y0 + 0.08, L * 0.5 + 0.07), bumper, I, Color("#d8d4cc"))
+			det["br"].box(Vector3(0, y0 + 0.08, -L * 0.5 - 0.07), bumper, I, Color("#d8d4cc"))
 		else:
 			b.slab(Vector3(-W * 0.5, y0 + 0.04, L * 0.5 + 0.16), Vector3(W * 0.5, y0 + 0.04, L * 0.5 + 0.16), Vector3(W * 0.5, y0 + 0.04, L * 0.5 - 0.1), Vector3(-W * 0.5, y0 + 0.04, L * 0.5 - 0.1), 0.04, ink)
 		if BULLS.has(style):
@@ -514,6 +517,16 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 	mi.mesh = b.mesh()
 	mi.material_override = mat
 	body.add_child(mi)
+	var detach := {}
+	for key in det.keys():
+		var dmesh: ArrayMesh = (det[key] as PaperKit.Builder).mesh()
+		if dmesh.get_surface_count() == 0:
+			continue
+		var dn := MeshInstance3D.new()
+		dn.mesh = dmesh
+		dn.material_override = mat
+		body.add_child(dn)
+		detach[key] = dn
 	var gold: bool = car.get("gold_wheels", false)
 	var wheel_mesh := _wheel_mesh(Color("#d9b24a") if gold else acc, wr, 0.42 if style in ["buggy", "truck", "suv"] else 0.3, style)
 	var wheels: Array = []
@@ -537,7 +550,7 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 	if style == "buggy":
 		head = Vector3(0.0, y0 + 1.0, 0.0)
 	return {"root": root, "body": body, "wheels": wheels, "length": L, "width": W, "wheel_r": wr, "head": head,
-		"lamp": Vector3(0, y0 + float(P["nose"]) * 0.7, L * 0.5 + 0.1), "exhaust": Vector3(-W * 0.29, y0 + 0.03, -L * 0.5 - 0.12), "style": style, "beam_mounts": beams, "rear_lenses": rear_lenses}
+		"lamp": Vector3(0, y0 + float(P["nose"]) * 0.7, L * 0.5 + 0.1), "exhaust": Vector3(-W * 0.29, y0 + 0.03, -L * 0.5 - 0.12), "style": style, "beam_mounts": beams, "rear_lenses": rear_lenses, "detach": detach}
 
 
 static func _grille(b: PaperKit.Builder, kind: String, g: Transform3D, W: float, ink: Color) -> void:
@@ -833,7 +846,25 @@ static func _wheel_mesh(hub: Color, r: float, width: float, style: String) -> Ar
 	var spoke_count := 6 if open else 10
 	var depth := 0.032 if steel else 0.016
 	var backplate := face.translated_local(Vector3.FORWARD*0.061 if open else Vector3.BACK*0.003)
-	b.card(PaperKit.circle(r*(0.43 if open else 0.62),0,0,16),backplate,Color("#716f69") if open else rim_color.darkened(0.18),{"thick":0.014,"lip":0.0})
+	# Behind the wheel face: a brake disc with a coloured caliper, seen through the openings in the wheel.
+	var disc_face := face.translated_local(Vector3.FORWARD * 0.075)
+	b.card(PaperKit.circle(r * 0.52, 0, 0, 18), disc_face, Color("#8d9298"), {"thick": 0.012, "lip": 0.0})
+	b.card(PaperKit.circle(r * 0.40, 0, 0, 16), disc_face.translated_local(Vector3.BACK * 0.014), Color("#5a5d62"), {"thick": 0.006, "edge": 0.0, "lip": 0.0})
+	b.card(PaperKit.rrect(r * 0.2, r * 0.46, 0.02, r * 0.4, r * 0.12), face.translated_local(Vector3.FORWARD * 0.045), Color("#c8553d"), {"thick": 0.03, "edge": 0.0, "lip": 0.0})
+	if open:
+		b.card(PaperKit.circle(r*0.43,0,0,16),backplate,Color("#716f69"),{"thick":0.014,"lip":0.0})
+	else:
+		# Steel and plain wheels: an outer ring and five broad spokes, with open gaps between them.
+		for k in 16:
+			var u0 := Vector2.from_angle(k*TAU/16)
+			var v0 := Vector2.from_angle((k+1)*TAU/16)
+			b.quad(face*Vector3(u0.x*r*0.64,u0.y*r*0.64,0.004), face*Vector3(v0.x*r*0.64,v0.y*r*0.64,0.004),
+				face*Vector3(v0.x*r*0.46,v0.y*r*0.46,0.004), face*Vector3(u0.x*r*0.46,u0.y*r*0.46,0.004), Vector3.RIGHT, PaperKit.lin(rim_color.darkened(0.18)))
+		for k in 5:
+			var dir5 := Vector2.from_angle(k*TAU/5 + 0.3)
+			var tan5 := dir5.orthogonal()
+			var sp5 := PackedVector2Array([dir5*r*0.1 - tan5*r*0.07, dir5*r*0.52 - tan5*r*0.055, dir5*r*0.52 + tan5*r*0.055, dir5*r*0.1 + tan5*r*0.07])
+			b.card(sp5, face.translated_local(Vector3.BACK*0.006), rim_color.darkened(0.1), {"thick": 0.012, "edge": 0.0, "lip": 0.0})
 	for k in 16:
 		var u := Vector2.from_angle(k*TAU/16)
 		var v := Vector2.from_angle((k+1)*TAU/16)
@@ -850,8 +881,7 @@ static func _wheel_mesh(hub: Color, r: float, width: float, style: String) -> Ar
 			var spoke := PackedVector2Array([dir*r*0.14-tangent*0.08,tip-tangent*0.04,tip+tangent*0.08,dir*r*0.14+tangent*0.08])
 			b.card(spoke,face.translated_local(Vector3.BACK*0.014),rim_color,{"thick":0.014,"edge":0.0,"lip":0.0})
 		else:
-			var port := dir*r*(0.43 if steel else 0.49)
-			b.card(PaperKit.circle(r*(0.075 if steel else 0.044),port.x,port.y,8),face.translated_local(Vector3.BACK*0.012),tyre,{"thick":0.006,"lip":0.0})
+			pass
 	b.card(PaperKit.circle(r*0.22,0,0,10),face.translated_local(Vector3.BACK*0.020),rim_color.lightened(0.12),{"thick":0.014,"lip":0.0})
 	for k in 5:
 		var lug := Vector2.from_angle(k*TAU/5)*r*0.15
@@ -1223,6 +1253,16 @@ static func build_cockpit(car: Dictionary, model: Dictionary, mat: Material) -> 
 		var spoke := face * Transform3D(Basis(Vector3.BACK, angle), Vector3(0, 0, 0.004))
 		wb.card(PackedVector2Array([Vector2(-0.026, 0.02), Vector2(0.026, 0.02), Vector2(0.014, 0.155), Vector2(-0.014, 0.155)]), spoke, Color("#686057"), {"thick": 0.012, "edge": 0.0, "lip": 0.0})
 	wb.box(Vector3(0, 0.168, 0.018), Vector3(0.029, 0.036, 0.024), face, car["accent"])
+	# Gloved hands at nine and three o'clock, turning with the wheel: a fist over the rim, a thumb and a sleeve cuff trailing back.
+	var glove := Color("#2d2f36")
+	var skin := Color("#e0b48f")
+	for hs: float in [-1.0, 1.0]:
+		var hx := hs * 0.105
+		var hy := 0.134
+		wb.box(Vector3(hx, hy, -0.01), Vector3(0.062, 0.085, 0.07), I, glove)
+		wb.box(Vector3(hx - hs * 0.012, hy + 0.052, -0.02), Vector3(0.03, 0.045, 0.04), I, glove)
+		wb.box(Vector3(hx + hs * 0.002, hy - 0.07, -0.085), Vector3(0.05, 0.05, 0.12), I, Color(car["accent"]).darkened(0.35))
+		wb.box(Vector3(hx + hs * 0.002, hy - 0.085, -0.15), Vector3(0.045, 0.045, 0.045), I, skin)
 	var wmi := MeshInstance3D.new()
 	wmi.mesh = wb.mesh()
 	wmi.material_override = mat

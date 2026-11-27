@@ -516,6 +516,10 @@ func _make_brake_glow() -> void:
 		_disc_glow.append(disc)
 
 
+func disc_heat() -> float:
+	return _disc_heat
+
+
 func _update_brake_glow(delta: float) -> void:
 	if _disc_glow.is_empty():
 		return
@@ -719,6 +723,39 @@ func damage_level() -> int:
 
 
 ## A bumper or mirror torn off in a hard hit tumbles away (visual only; the car keeps its shape).
+## Tear off the bumper or mirror nearest the hit: it disappears from the car and tumbles away.
+func _tear_off(side_hit: bool, x: float, z: float) -> void:
+	var det: Dictionary = _model.get("detach", {})
+	var key := ""
+	if side_hit:
+		key = "mr" if x > 0.0 else "ml"
+	else:
+		key = "bf" if z > 0.0 else "br"
+	if not det.has(key):
+		return
+	var node: MeshInstance3D = det[key]
+	if not node.visible:
+		# Already gone: the other bumper or mirror goes next.
+		key = {"bf": "br", "br": "bf", "ml": "mr", "mr": "ml"}[key]
+		if not det.has(key):
+			return
+		node = det[key]
+		if not node.visible:
+			return
+	node.visible = false
+	var out := Vector3.ZERO
+	var size := Vector3(0.9, 0.12, 0.2)
+	var col := Color("#d8d4cc")
+	if key == "ml" or key == "mr":
+		out = right_axis3() * (1.0 if key == "mr" else -1.0)
+		size = Vector3(0.18, 0.16, 0.12)
+		col = Color("#2b2b2e")
+	else:
+		out = fwd3() * (1.0 if key == "bf" else -1.0)
+	var at := global_position + out * (half_len if key.begins_with("b") else half_wid) + Vector3(0, 0.45, 0)
+	_throw_part(at, out, col, size)
+
+
 func _throw_part(at_world: Vector3, outward: Vector3, colour: Color, size: Vector3) -> void:
 	if Settings.fx_level() < 1 or _parts.size() > 6:
 		return
@@ -828,8 +865,7 @@ func add_damage(at: Vector2, strength: float) -> void:
 		nose.mesh = CarModel.cockpit_nose(dented, _cockpit["nose_clip"])
 	_damage_count += 1
 	if strength > 9.0 and _damage_count >= 3:
-		var wp := global_position + (fwd3() if not side_hit else right_axis3() * signf(x)) * (half_len if not side_hit else half_wid) * signf(z if not side_hit else 1.0) + Vector3(0, 0.5, 0)
-		_throw_part(wp, Vector3(outward.x, 0.0, outward.z) if side_hit else Vector3(0, 0, 0), Color("#d8d4cc") if not side_hit else Color("#2b2b2e"), Vector3(0.9, 0.12, 0.2) if not side_hit else Vector3(0.18, 0.16, 0.12))
+		_tear_off(side_hit, x, z)
 
 
 func _crush_point(original: Vector3, current: Vector3, center: Vector3, outward: Vector3, radius: float, crush: float) -> Vector3:

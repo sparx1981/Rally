@@ -251,3 +251,13 @@ All 12 circuits complete 3 laps. A human player is not affected by the AI's lane
 - Circuits: chequered start line, grid boxes, centre dashes and arrows on tarmac. Rally stages: crumbling edge chips and grass tufts on the verge (High).
 - Camera: slight FOV squeeze when braking hard, a small kick on gear changes. Lap delta vs best lap at each quarter-lap gate (circuits).
 - Texture compression was already on (ETC2/ASTC import); scenery batching left as is (draw calls measured at 130-280).
+
+## Twenty-second pass: brake discs and the deferred visuals
+
+- Wheels now have open spokes and gaps so the vented disc and red caliper behind them show (inspected in a lineup render only).
+- Front/rear bumpers and both mirrors are separate meshes; after 3+ hard hits (impact strength > 9) the nearest one disappears and a matching piece is thrown. Not exercised in a real collision test.
+- Disc heat shimmer: a small post-process wobble over each of the player's wheels after hard braking (not the exhaust). Untested on device.
+- Trees shed leaves (or snow clumps on snow/alpine stages) when a car above 12 m/s passes within 5.5 m; pooled, 6 s cooldown per tree. Not visually verified.
+- Cockpit: gloved hands at 10 and 2 o'clock turning with the wheel (render-checked).
+- Sunrise stages get six stacked low mist banks instead of three. Not visually compared.
+- Fence, armco and wall chunks drop out beyond 240-480 m depending on quality tier.

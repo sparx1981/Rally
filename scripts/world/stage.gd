@@ -1529,6 +1529,11 @@ func _make_barriers() -> void:
 			mi.mesh = b.mesh()
 			mi.material_override = paper_mat
 			mi.position = Vector3.ZERO
+			# Far fence, rail and wall sections drop out of view: they are thin lines by then.
+			if kind in ["armco", "fence", "wall"]:
+				mi.visibility_range_end = 240.0 + 120.0 * Settings.fx_level()
+				mi.visibility_range_end_margin = 20.0
+				mi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
 			add_child(mi)
 			s = s_end
 
@@ -2412,7 +2417,13 @@ func _make_mist() -> void:
 	if wx["kind"] == "snow":
 		col = Color("#f2f3f8") if tod < 2 else Color("#343c60")
 	var k := 0
-	for off in [0.6, 2.2, 4.2]:
+	var offs: Array = [0.6, 2.2, 4.2]
+	var dawn_banks: bool = _lighting_mode == Catalog.SUNRISE
+	if dawn_banks:
+		# Dawn: extra low banks stacked up the valley sides, thicker and slower, that burn off as the sun climbs.
+		offs = [0.3, 1.2, 2.2, 3.2, 4.2, 5.6]
+		col = Color("#f1ece4")
+	for off in offs:
 		var y = road_min - off
 		if y < track.terrain.min_h + 0.3:
 			continue
@@ -2423,7 +2434,10 @@ func _make_mist() -> void:
 		m.set_shader_parameter("noise", noise_tex())
 		m.set_shader_parameter("col", col.darkened(0.04 * k))
 		m.set_shader_parameter("leak", wx["leak"])
-		m.set_shader_parameter("cut", 0.5 + k * 0.04)
+		m.set_shader_parameter("cut", (0.42 + k * 0.035) if dawn_banks else (0.5 + k * 0.04))
+		if dawn_banks:
+			m.set_shader_parameter("drift", Vector2(0.004, 0.0015) * (1.0 + 0.3 * k))
+			m.set_shader_parameter("scale", 0.0045)
 		m.set_shader_parameter("seed", float(k) * 0.37)
 		var mi := MeshInstance3D.new()
 		mi.mesh = pm

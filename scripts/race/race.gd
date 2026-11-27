@@ -332,6 +332,7 @@ func _process(delta: float) -> void:
 		ghost.update(race_time)
 	if not attract and player:
 		stage.scenery.scare(player.pos)
+		stage.scenery.shake(player.pos, absf(player.v_long), player.global_position.y, stage.wx["kind"] == "snow" or str(stage.def.get("id", "")).begins_with("alpine"), Color(stage.def.get("leaf", "#6f9a4a")))
 	if _laps == 0:
 		_check_finish()
 	if state == State.RACING:

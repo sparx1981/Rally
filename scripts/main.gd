@@ -637,7 +637,29 @@ func _process(delta: float) -> void:
 		want = clampf((race.player.speed() - 18.0) / 30.0, 0.0, 1.0)
 	_blur = lerpf(_blur, want, clampf(delta * 3.0, 0.0, 1.0))
 	(post.material as ShaderMaterial).set_shader_parameter("speed_blur", _blur)
-	(post.material as ShaderMaterial).set_shader_parameter("shimmer", 0.0)   # exhaust heat shimmer removed
+	var pm := post.material as ShaderMaterial
+	pm.set_shader_parameter("shimmer", 0.0)   # exhaust heat shimmer removed
+	# Brake-disc heat: only after hard braking, only over the player's wheels.
+	var heat := 0.0
+	if Settings.fx_level() >= 1 and race != null and not race.attract and race.player != null and race.camera != null:
+		var pc: Car = race.player
+		var vp := get_viewport()
+		var cam3 := vp.get_camera_3d()
+		heat = clampf((pc.disc_heat() - 0.45) * 2.0, 0.0, 1.0)
+		if heat > 0.0 and cam3 != null:
+			var names := ["disc_a", "disc_b", "disc_c", "disc_d"]
+			var size := vp.get_visible_rect().size
+			for i in 4:
+				var uvp := Vector2(-1, -1)
+				if i < pc._wheels.size():
+					var wp: Vector3 = (pc._wheels[i] as Node3D).global_position
+					if not cam3.is_position_behind(wp):
+						var sp := cam3.unproject_position(wp)
+						uvp = Vector2(sp.x / size.x, sp.y / size.y)
+						if uvp.x < 0.0 or uvp.x > 1.0 or uvp.y < 0.0 or uvp.y > 1.0:
+							uvp = Vector2(-1, -1)
+				pm.set_shader_parameter(names[i], uvp)
+	pm.set_shader_parameter("disc_heat", heat)
 	var god := 0.0
 	var sun_uv := Vector2(0.5, 0.2)
 	if Settings.fx_level() >= 2 and race != null and race.stage != null and race.camera != null and not race.attract:

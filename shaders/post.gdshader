@@ -21,6 +21,11 @@ uniform vec3 vig_color : source_color = vec3(0.23, 0.13, 0.05);
 uniform float grain = 0.01;
 uniform float shimmer = 0.0;       // 0..1: heat haze behind the exhaust
 uniform vec2 shimmer_pos = vec2(0.5, 0.7);
+uniform float disc_heat = 0.0;       // 0..1: hot brake discs after hard braking
+uniform vec2 disc_a = vec2(-1.0);    // screen positions of the four wheels (negative = off)
+uniform vec2 disc_b = vec2(-1.0);
+uniform vec2 disc_c = vec2(-1.0);
+uniform vec2 disc_d = vec2(-1.0);
 uniform float god = 0.0;           // sunset light shafts through gaps (High)
 uniform vec2 sun_uv = vec2(0.5, 0.3);
 uniform float speed_blur = 0.0;   // 0..1: mild radial blur toward the screen edges (High only)
@@ -41,6 +46,17 @@ void fragment() {
 		float colm = exp(-dot(d - vec2(0.0, -0.035), d - vec2(0.0, -0.035)) * 520.0);
 		suv.x += sin(uv.y * 160.0 + TIME * 11.0) * 0.0042 * shimmer * colm;
 		suv.y += sin(uv.x * 120.0 + TIME * 7.0) * 0.0022 * shimmer * colm;
+	}
+	if (disc_heat > 0.0) {
+		// Heat rising off each hot disc: a small wobble over the wheel, not a screen-wide effect.
+		vec2 ds[4] = vec2[4](disc_a, disc_b, disc_c, disc_d);
+		for (int i = 0; i < 4; i++) {
+			if (ds[i].x < 0.0) { continue; }
+			vec2 dd = (uv - ds[i] - vec2(0.0, -0.02)) * vec2(1.0, 1.7);
+			float cm = exp(-dot(dd, dd) * 900.0) * disc_heat;
+			suv.x += sin(uv.y * 190.0 + TIME * 12.0 + float(i)) * 0.0032 * cm;
+			suv.y += sin(uv.x * 140.0 + TIME * 8.0) * 0.0018 * cm;
+		}
 	}
 	vec3 col = texture(screen, suv).rgb;
 	if (taps > 0) {
