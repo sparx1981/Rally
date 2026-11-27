@@ -13,6 +13,8 @@ var _anim: Array = []   # {node, kind}
 var _lamp_mat: StandardMaterial3D
 
 
+var cones: Array = []         # knockable apex cones: {node, pos, y, hit, vel, axis, spin, rest}
+var _cone_mesh: ArrayMesh
 var solids: Array = []        # [Vector2 position, radius] the car cannot drive through
 
 
@@ -35,6 +37,8 @@ func build(t: Track, d: Dictionary, mat: Material, is_dark: bool) -> void:
 	if not t.joker.is_empty():
 		_joker_signage(b)
 	_floodlights(b)
+	if night:
+		_track_lights(b)
 	for band: Array in rx.get("bank", []):
 		if float(band[2]) > 0.05:
 			_bleachers(b, (float(band[0]) + float(band[1])) * 0.5 * t.length)
@@ -53,7 +57,66 @@ func build(t: Track, d: Dictionary, mat: Material, is_dark: bool) -> void:
 	_drone()
 
 
+func _add_cone(p: Vector2, y: float) -> void:
+	if _cone_mesh == null:
+		var cb := PaperKit.Builder.new(3)
+		var I := Transform3D()
+		cb.box(Vector3(0, 0.025, 0), Vector3(0.44, 0.05, 0.44), I, Color("#2d2c30"))
+		var widths := [0.34, 0.27, 0.20, 0.12]
+		for k in 4:
+			cb.box(Vector3(0, 0.05 + 0.15 * k + 0.075, 0), Vector3(widths[k], 0.15, widths[k]), I, PaperKit.CREAM if k == 1 else Color("#e8761f"))
+		_cone_mesh = cb.mesh()
+	var n := Node3D.new()
+	var mi := MeshInstance3D.new()
+	mi.mesh = _cone_mesh
+	mi.material_override = material
+	n.add_child(mi)
+	add_child(n)
+	n.position = Vector3(p.x, y, p.y)
+	cones.append({"node": n, "pos": p, "y": y, "hit": false, "vel": Vector3.ZERO, "axis": Vector3.RIGHT, "spin": 0.0, "rest": false})
+
+
+## A car driving through standing cones knocks them over; returns how many were hit.
+func knock_cones(car) -> int:
+	if car.airborne:
+		return 0
+	var f: Vector2 = car.fwd()
+	var r: Vector2 = car.right_axis()
+	var hits := 0
+	for c: Dictionary in cones:
+		if c.hit:
+			continue
+		var d: Vector2 = c.pos - car.pos
+		if absf(d.dot(r)) < car.half_wid + 0.25 and absf(d.dot(f)) < car.half_len + 0.25 and absf(car.y - float(c.y)) < 1.2:
+			c.hit = true
+			var dir: Vector2 = car.vel.normalized() if car.vel.length() > 0.5 else f
+			var spd := clampf(car.vel.length() * 0.7, 2.5, 14.0)
+			c.vel = Vector3(dir.x * spd + randf_range(-1.5, 1.5), randf_range(2.5, 5.5), dir.y * spd + randf_range(-1.5, 1.5))
+			c.axis = Vector3(randf_range(-1, 1), 0.0, randf_range(-1, 1)).normalized()
+			c.spin = randf_range(6.0, 12.0)
+			hits += 1
+	return hits
+
+
 func _process(delta: float) -> void:
+	for c: Dictionary in cones:
+		if c.hit and not c.rest:
+			var n: Node3D = c.node
+			var v: Vector3 = c.vel
+			v.y -= 22.0 * delta
+			n.position += v * delta
+			n.rotate(c.axis, c.spin * delta)
+			c.vel = v
+			if n.position.y <= float(c.y) + 0.12 and v.y < 0.0:
+				if v.length() < 3.0:
+					c.rest = true
+					n.position.y = float(c.y) + 0.12
+				else:
+					v.y = -v.y * 0.3
+					v.x *= 0.6
+					v.z *= 0.6
+					c.vel = v
+					c.spin *= 0.6
 	var t := Time.get_ticks_msec() * 0.001
 	for a in _anim:
 		var n: Node3D = a.node
@@ -256,14 +319,14 @@ func _braking_boards_and_booths(b: PaperKit.Builder) -> void:
 					b.box(Vector3(-0.28 + k * 0.28, 1.25, -0.04), Vector3(0.12, 0.42, 0.03), xf, Color("#c8553d"))
 				if dist < 60.0:
 					b.box(Vector3(0, 1.25, -0.04), Vector3(0.3, 0.1, 0.03), xf, Color("#2b2b2e"))
-			# Apex bollards on the inside kerb, each standing on the road at its own station.
+			# Apex cones on the inside kerb, each standing on the road at its own station. They can be knocked down.
 			for k in 3:
 				var sb: float = float(c.apex_s if c.has("apex_s") else track.dist[i]) + (k - 1) * 5.0
 				var ib := track.index_at(sb)
 				var lat_b := inner * (track.road_half_width(sb) - 0.5)
 				var bp: Vector2 = track.pts[ib] + track.nrm[ib] * lat_b
 				var by := track.road_h_i(ib) + track.bank_slope(ib) * lat_b
-				b.box(Vector3(0, 0.4, 0), Vector3(0.18, 0.8, 0.18), Transform3D(Basis(), Vector3(bp.x, by, bp.y)), Color("#e8761f") if k % 2 == 0 else PaperKit.CREAM)
+				_add_cone(bp, by)
 		# Marshal booth with an LED flag panel at the exit of the bigger corners.
 		if absf(float(c.s1) - float(c.s0)) > 14.0 and booths < 9:
 			var pt := _at(float(c.s1) + 8.0, outer, 4.5)
@@ -342,6 +405,74 @@ func _floodlights(b: PaperKit.Builder) -> void:
 		b.box(Vector3(0, 16.5, 0), Vector3(3.2, 1.0, 0.5), xf, Color("#4a4e54"))
 		for h in 6:
 			b.box(Vector3(-1.3 + h * 0.52, 16.5, -0.3), Vector3(0.36, 0.5, 0.1), xf, Color("#fff2c4"), Color(-1, 0, 0), night)
+
+
+## Night: lamp masts along the main straight (the run into and out of the start line), each throwing a
+## warm pool of light on the tarmac.
+func _track_lights(b: PaperKit.Builder) -> void:
+	var first_s := 90.0
+	if not track.corners.is_empty():
+		first_s = clampf(float(track.corners[0].s0) - 12.0, 60.0, 260.0)
+	var last_s := track.length - 70.0
+	if not track.corners.is_empty():
+		last_s = maxf(float(track.corners[-1].s1) + 12.0, track.length - 260.0)
+	var stations: Array = []
+	var s := 8.0
+	while s < first_s:
+		stations.append(s)
+		s += 34.0
+	s = last_s
+	while s < track.length - 6.0:
+		stations.append(s)
+		s += 34.0
+	var pool_tex := _pool_texture()
+	for k in stations.size():
+		var st: float = stations[k]
+		var side := 1.0 if k % 2 == 0 else -1.0
+		var pt := _at(st, side, 1.4)
+		var xf := _frame(pt)
+		var i: int = pt.i
+		# Mast, arm over the road and a lamp head.
+		b.box(Vector3(0, 4.5, 0), Vector3(0.22, 9.0, 0.22), xf, Color("#6a6e75"))
+		var toward := -side
+		b.box(Vector3(0, 9.0, 0), Vector3(0.18, 0.18, 0.18), xf, Color("#6a6e75"))
+		var head := Vector3(toward * 1.7, 9.0, 0)
+		b.box(Vector3(toward * 0.85, 9.0, 0), Vector3(1.7, 0.14, 0.14), Transform3D(xf.basis, xf.origin), Color("#6a6e75"))
+		b.box(head, Vector3(0.9, 0.18, 0.5), xf, Color("#fff2c4"), Color(-1, 0, 0), true)
+		solids.append([pt.p, 0.4])
+		# Pool of light on the road under the head.
+		var c: Vector2 = track.pts[i]
+		var pool := MeshInstance3D.new()
+		var q := PlaneMesh.new()
+		q.size = Vector2(12.0, 24.0)
+		pool.mesh = q
+		var pm := StandardMaterial3D.new()
+		pm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		pm.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		pm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		pm.albedo_texture = pool_tex
+		pm.albedo_color = Color(1.0, 0.82, 0.5, 1.0)
+		pm.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
+		pm.no_depth_test = false
+		pool.material_override = pm
+		pool.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(pool)
+		pool.position = Vector3(c.x, track.road_h_i(i) + 0.3, c.y)
+		pool.rotation.y = atan2(track.tang[i].x, track.tang[i].y) + PI * 0.5
+
+
+func _pool_texture() -> GradientTexture2D:
+	var g := Gradient.new()
+	g.offsets = PackedFloat32Array([0.0, 0.45, 1.0])
+	g.colors = PackedColorArray([Color(1, 1, 1, 1), Color(0.3, 0.3, 0.3, 0.35), Color(0, 0, 0, 0)])
+	var t := GradientTexture2D.new()
+	t.gradient = g
+	t.fill = GradientTexture2D.FILL_RADIAL
+	t.fill_from = Vector2(0.5, 0.5)
+	t.fill_to = Vector2(1.0, 0.5)
+	t.width = 128
+	t.height = 128
+	return t
 
 
 # --- kit props -------------------------------------------------------------------------------------

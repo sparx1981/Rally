@@ -97,38 +97,137 @@ const TIPS := [
 ]
 
 
-## The native splash and the first interactive frame share the same original rally print.
+## Loading screen: a cut-paper sunrise or sunset, the stage name in large type, a preview card and a tip.
 func _loading_stage(sdef: Dictionary, startup := false) -> void:
 	_clear_menu()
-	var poster := TextureRect.new()
-	poster.texture = preload("res://ui/boot.png")
-	poster.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	poster.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-	poster.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	menu.add_child(poster)
-	var footer := PanelContainer.new()
-	footer.add_theme_stylebox_override("panel", PaperTheme.box(PaperTheme.CREAM, PaperTheme.EDGE, 1, 0, 0))
-	poster.add_child(footer)
-	footer.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE, Control.PRESET_MODE_MINSIZE)
-	footer.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	var rows := VBoxContainer.new()
-	footer.add_child(rows)
-	var stage_name := Label.new()
-	stage_name.text = "Folding %s…" % sdef["name"] if startup else "%s  ·  %s" % [sdef["name"], sdef["variant_name"]]
-	stage_name.add_theme_font_size_override("font_size", 25)
-	stage_name.add_theme_color_override("font_color", PaperTheme.INK)
-	rows.add_child(stage_name)
+	var tod_i := Game.race_tod()
+	if tod_i < 0:
+		tod_i = int(sdef.get("tod", 0))
+	var sunrise := (int(sdef.get("seed", 0)) % 2 == 0 or tod_i == Catalog.SUNRISE) and tod_i != 1
+	var sky := ColorRect.new()
+	sky.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var sm := ShaderMaterial.new()
+	sm.shader = preload("res://shaders/loading_sky.gdshader")
+	var vs := get_viewport().get_visible_rect().size
+	sm.set_shader_parameter("aspect", vs.x / maxf(vs.y, 1.0))
+	sm.set_shader_parameter("seed", float(int(sdef.get("seed", 1)) % 97))
+	sm.set_shader_parameter("sun_x", 0.64 + 0.1 * float(int(sdef.get("seed", 0)) % 3) * (1.0 if sunrise else -1.0) * 0.5)
+	if sunrise:
+		sm.set_shader_parameter("top_col", Color("#3b4a8c"))
+		sm.set_shader_parameter("mid_col", Color("#f2899a"))
+		sm.set_shader_parameter("low_col", Color("#ffc47a"))
+		sm.set_shader_parameter("far_col", Color("#a56f9e"))
+		sm.set_shader_parameter("near_col", Color("#241a3a"))
+	else:
+		sm.set_shader_parameter("top_col", Color("#26245a"))
+		sm.set_shader_parameter("mid_col", Color("#d4487a"))
+		sm.set_shader_parameter("low_col", Color("#ff7a3d"))
+		sm.set_shader_parameter("far_col", Color("#8a3f6a"))
+		sm.set_shader_parameter("near_col", Color("#160c20"))
+	sm.set_shader_parameter("stars", 0.55 if tod_i == 2 else 0.0)
+	sky.material = sm
+	menu.add_child(sky)
+	var scrim := TextureRect.new()
+	var gr := Gradient.new()
+	gr.offsets = PackedFloat32Array([0.0, 0.55, 1.0])
+	gr.colors = PackedColorArray([Color(0.08, 0.04, 0.12, 0.0), Color(0.08, 0.04, 0.12, 0.35), Color(0.08, 0.04, 0.12, 0.88)])
+	var gt := GradientTexture2D.new()
+	gt.gradient = gr
+	gt.fill_from = Vector2(0, 0.0)
+	gt.fill_to = Vector2(0, 1.0)
+	scrim.texture = gt
+	scrim.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	scrim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	scrim.anchor_top = 0.35
+	scrim.offset_top = 0
+	sky.add_child(scrim)
+	var font := PaperTheme.font()
+	var left := VBoxContainer.new()
+	left.add_theme_constant_override("separation", 6)
+	left.anchor_left = 0.0
+	left.anchor_top = 1.0
+	left.anchor_right = 0.62
+	left.anchor_bottom = 1.0
+	left.offset_left = 56
+	left.offset_bottom = -52
+	left.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	sky.add_child(left)
+	var over := Label.new()
+	over.text = "PAPER RALLY  ·  %s" % ("NOW FOLDING" if startup else ("RALLYCROSS CIRCUIT" if sdef.get("circuit", false) else "RALLY STAGE"))
+	over.add_theme_font_override("font", font)
+	over.add_theme_font_size_override("font_size", 20)
+	over.add_theme_color_override("font_color", Color("#ffd9a8"))
+	left.add_child(over)
+	var title := Label.new()
+	title.text = String(sdef["name"])
+	title.add_theme_font_override("font", font)
+	title.add_theme_font_size_override("font_size", 76)
+	title.add_theme_color_override("font_color", Color("#fff6e4"))
+	title.add_theme_color_override("font_outline_color", Color(0.1, 0.05, 0.12, 0.9))
+	title.add_theme_constant_override("outline_size", 8)
+	title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.5))
+	title.add_theme_constant_override("shadow_offset_x", 3)
+	title.add_theme_constant_override("shadow_offset_y", 4)
+	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	left.add_child(title)
 	if not startup:
-		var tod_i := Game.race_tod()
-		if tod_i < 0:
-			tod_i = int(sdef.get("tod", 0))
-		var info := Label.new()
+		var sub := Label.new()
+		sub.text = String(sdef["variant_name"])
+		sub.add_theme_font_override("font", font)
+		sub.add_theme_font_size_override("font_size", 32)
+		sub.add_theme_color_override("font_color", Color("#ffc08a"))
+		sub.add_theme_color_override("font_outline_color", Color(0.1, 0.05, 0.12, 0.9))
+		sub.add_theme_constant_override("outline_size", 5)
+		left.add_child(sub)
+		var chips := HBoxContainer.new()
+		chips.add_theme_constant_override("separation", 10)
 		var distance := "%d laps" % Game.circuit_laps if sdef.get("circuit", false) else "%.1f km" % (float(sdef["length"]) / 1000.0)
-		info.text = "%s  ·  %s  ·  %s     |     %s" % [distance, Catalog.weather(sdef["weather"])["label"], Catalog.TOD_NAMES[clampi(tod_i, 0, Catalog.TOD_NAMES.size() - 1)], TIPS.pick_random()]
-		info.add_theme_font_size_override("font_size", 17)
-		info.add_theme_color_override("font_color", PaperTheme.EDGE)
-		info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		rows.add_child(info)
+		for txt in [distance, Catalog.weather(sdef["weather"])["label"], Catalog.TOD_NAMES[clampi(tod_i, 0, Catalog.TOD_NAMES.size() - 1)]]:
+			chips.add_child(PaperTheme.tag(String(txt), 22))
+		left.add_child(chips)
+		var tip := PanelContainer.new()
+		tip.add_theme_stylebox_override("panel", PaperTheme.box(Color(0.1, 0.05, 0.14, 0.62), Color("#ffd9a8"), 1, 8, 0))
+		tip.custom_minimum_size = Vector2(620, 0)
+		var tip_text := Label.new()
+		tip_text.text = "TIP   " + String(TIPS.pick_random())
+		tip_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		tip_text.add_theme_font_size_override("font_size", 20)
+		tip_text.add_theme_color_override("font_color", Color("#fff1da"))
+		tip.add_child(tip_text)
+		left.add_child(tip)
+	if not startup:
+		var card := PanelContainer.new()
+		card.add_theme_stylebox_override("panel", PaperTheme.box(PaperTheme.CREAM, PaperTheme.EDGE, 3, 6, 10))
+		var pic := TextureRect.new()
+		pic.texture = Catalog.stage_preview(sdef)
+		pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		pic.custom_minimum_size = Vector2(380, 228)
+		card.add_child(pic)
+		card.anchor_left = 1.0
+		card.anchor_right = 1.0
+		card.anchor_top = 1.0
+		card.anchor_bottom = 1.0
+		card.offset_left = -440
+		card.offset_right = -56
+		card.offset_top = -330
+		card.offset_bottom = -90
+		card.rotation = deg_to_rad(-1.6)
+		sky.add_child(card)
+	var wait := Label.new()
+	wait.text = "Folding the course…"
+	wait.add_theme_font_size_override("font_size", 18)
+	wait.add_theme_color_override("font_color", Color("#ffd9a8"))
+	wait.anchor_left = 1.0
+	wait.anchor_right = 1.0
+	wait.anchor_top = 1.0
+	wait.anchor_bottom = 1.0
+	wait.offset_left = -300
+	wait.offset_right = -56
+	wait.offset_top = -64
+	wait.offset_bottom = -30
+	wait.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	sky.add_child(wait)
 	await get_tree().process_frame
 	await get_tree().process_frame
 	await get_tree().process_frame
@@ -1687,6 +1786,28 @@ func _run_shot() -> void:
 		oc.look_at(pp)
 		oc.current = true
 		await get_tree().process_frame
+	if OS.get_cmdline_user_args().has("--heli") and race:
+		var hc: Helicopter = race.stage.helicopter
+		hc._begin(race.player.s + 60.0)
+		for k in 20:
+			hc.update(0.1, race.player.s)
+		var hcam := Camera3D.new()
+		hcam.fov = 55
+		race.add_child(hcam)
+		hcam.global_position = hc.global_position + Vector3(14, 3, 16)
+		hcam.look_at(hc.global_position)
+		hcam.current = true
+		await get_tree().process_frame
+	if OS.get_cmdline_user_args().has("--conetest") and race and race.stage.rx_props:
+		var rp: RxProps = race.stage.rx_props
+		print("CONETEST cones=", rp.cones.size())
+		var cone: Dictionary = rp.cones[0]
+		race.player.pos = cone.pos
+		race.player.y = float(cone.y)
+		race.player.vel = Vector2(0, 12)
+		var n0 := rp.knock_cones(race.player)
+		await get_tree().create_timer(0.8).timeout
+		print("CONETEST hit=", n0, " moved=", (cone.node as Node3D).position.distance_to(Vector3(cone.pos.x, cone.y, cone.pos.y)), " rest=", cone.rest)
 	if _shot.has("skyyaw") and race:
 		# Debug: look at the sky from the player's position (yaw 0 = along +Z, degrees).
 		var sc := Camera3D.new()

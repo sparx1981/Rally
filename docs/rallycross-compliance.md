@@ -152,3 +152,10 @@ All 12 circuits complete 3 laps. A human player is not affected by the AI's lane
 - New papercraft sky: three drifting cloud decks, stepped paper tones, silver-lined edges, light shafts from sun and moon, sunset glow band, paper moon, twinkling stars, and a dark layered storm deck with rain curtains.
 - Grille shapes per style, roof racks and bull bars on utility bodies.
 - Settings > Graphics > Debug panel: car, track, sector, lap, surface, position, speed and world state on the race screen.
+
+## Seventh pass
+
+- Apex cones are real objects now: driving through one knocks it over and sends it tumbling.
+- Night circuits get lamp masts and light pools along the main straight.
+- A broadcast helicopter flies the course on a schedule (first pass about 22 s in, then every ~110 s), with rotor sound and a night searchlight.
+- New loading screen: cut-paper sunrise or sunset, large stage name, preview card and tips.

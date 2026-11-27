@@ -553,6 +553,14 @@ const BREAK_KEEP := {"bale": 0.58, "snowbank": 0.72, "crates": 0.82, "tent": 0.8
 
 
 func _collide() -> void:
+	if stage.rx_props:
+		for c in cars:
+			var knocked: int = stage.rx_props.knock_cones(c)
+			if knocked > 0:
+				c.vel *= pow(0.985, knocked)
+				if c == player:
+					Sfx.impact(0.2, true)
+					Haptics.impulse(0.15, 0.05)
 	for c in cars:
 		if stage.track.on_stacked_span(c.s) and c.y > stage.track.terrain.height(c.pos) + 2.0:
 			continue

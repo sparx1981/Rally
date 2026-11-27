@@ -75,6 +75,7 @@ var _light_presets: Array[Dictionary] = []
 var _light_progress := 0.0
 var headlight_level := 0.0
 var _sky_mat: ShaderMaterial
+var helicopter: Helicopter
 
 
 func build(stage_def: Dictionary, time_of_day := -1) -> void:
@@ -118,6 +119,10 @@ func build(stage_def: Dictionary, time_of_day := -1) -> void:
 		track.terrain.flatten_disc(parc_center(), 26.0, track.road_h_i(track.index_at(track.length - PARC_BACK)) - 0.1)
 	_make_materials()
 	_make_lights()
+	helicopter = Helicopter.new()
+	helicopter.name = "Helicopter"
+	add_child(helicopter)
+	helicopter.setup(track, paper_mat, tod > 0)
 	var landmark: RegionalLandmark
 	if def["loc_id"] in RegionalLandmark.REGIONS and not track.rx:
 		landmark = RegionalLandmark.new()
@@ -1692,6 +1697,8 @@ func update(dt: float, focus: Vector3, radius: float, player_s: float, cam: Came
 	_time += dt
 	if _sky_mat:
 		_sky_mat.set_shader_parameter("t", _time)
+	if helicopter:
+		helicopter.update(dt, player_s)
 	if scenery:
 		scenery.update(Vector2(focus.x, focus.z), radius, dt)
 	if leaf_litter:
