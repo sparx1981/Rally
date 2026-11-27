@@ -1868,6 +1868,22 @@ func _run_shot() -> void:
 		bcam.look_at(bc)
 		bcam.current = true
 		await get_tree().process_frame
+	if OS.get_cmdline_user_args().has("--jokermap") and race:
+		var jm := JokerMock.new()
+		jm.track = race.stage.track
+		jm.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		var jl := CanvasLayer.new()
+		jl.layer = 200
+		add_child(jl)
+		jl.add_child(jm)
+		await get_tree().process_frame
+	if OS.get_cmdline_user_args().has("--atarch") and race and not race.stage.arch_stations.is_empty():
+		race.player.place_at(float(race.stage.arch_stations[0]) - 24.0, 0.0)
+		race.camera.snap()
+		await get_tree().process_frame
+	if OS.get_cmdline_user_args().has("--jokerinfo") and race:
+		var jt: Dictionary = race.stage.track.joker
+		print("JOKERINFO s0=", jt.s0, " s1=", jt.s1, " len=", race.stage.track.length)
 	if OS.get_cmdline_user_args().has("--atchicane") and race:
 		for f in race.stage.track.features:
 			if f["type"] == "chicane" and str(f.get("kind", "")) == "tyre":

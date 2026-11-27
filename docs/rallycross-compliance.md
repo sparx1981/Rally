@@ -220,3 +220,8 @@ All 12 circuits complete 3 laps. A human player is not affected by the AI's lane
 
 - First visit to Circuits shows an animated Joker explainer (what it is, take it once, it costs time, 15 s penalty if skipped). Replay from Settings.
 - Joker penalty raised from 10 s to 15 s. The measured AI Joker cost is about 2-10 s (worst: Breton), so skipping always costs more than taking it.
+
+## Eighteenth pass
+
+- Joker explainer rebuilt on a real in-game overhead image of Chalk Valley's Joker lane with animated gold lane, flowing chevrons, a moving car and the on-screen tag; same five steps and 15 s penalty message.
+- Sponsor arches: black tyre-band arches with yellow trim and the sponsor name span the road three times per stage, on straight clear stretches (circuits and rally stages). A drivable humpback bridge was not built.

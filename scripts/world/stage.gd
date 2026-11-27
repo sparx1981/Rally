@@ -77,6 +77,7 @@ var headlight_level := 0.0
 var _sky_mat: ShaderMaterial
 var helicopter: Helicopter
 var debug_board: Array = []
+var arch_stations: Array = []
 var _crowd: Array = []   # [node, base, phase, is_stand]: spectators that cheer when the action is near
 var _reflect_t := 0.0
 var _lamp_level := 0.0
@@ -165,6 +166,7 @@ func build(stage_def: Dictionary, time_of_day := -1) -> void:
 	_make_hazards()
 	_make_barriers()
 	_make_edge_banks()
+	_make_sponsor_arches()
 	_make_markers()
 	if track.rx:
 		rx_props = RxProps.new()
@@ -642,6 +644,102 @@ func _make_edge_banks() -> void:
 		mi.visibility_range_end = 260.0
 		add_child(mi)
 		i = j
+
+
+## Sponsor arches spanning the road (like the slot-car track arches): a black tyre-band arch with yellow side
+## trim and the sponsor's name across the front. A few per stage, on straight clear stretches.
+func _make_sponsor_arches() -> void:
+	var want := 3
+	var picked: Array = []
+	var s := track.start_s + 90.0
+	var cands: Array = []
+	while s < track.finish_s - 60.0:
+		var ok := track.bridge_at(s, 45).is_empty() and not track.on_stacked_span(s) and not track.on_stacked_span(s + 30.0)
+		for f: Dictionary in track.features:
+			if absf(float(f.get("s", -999.0)) - s) < 60.0:
+				ok = false
+		if ok and not track.joker.is_empty() and s > float(track.joker.s0) - 40.0 and s < float(track.joker.s1) + 40.0:
+			ok = false
+		if ok and track.rx and absf(fposmod(s, track.length)) < 120.0:
+			ok = false
+		if ok:
+			var k := 0.0
+			for off in range(-3, 4):
+				k += absf(float(track.curv[track.index_at(s + off * 5.0)]))
+			cands.append([k, s])
+		s += 10.0
+	cands.sort_custom(func(a, b): return a[0] < b[0])
+	for c: Array in cands:
+		var far := true
+		for q: float in picked:
+			if absf(q - float(c[1])) < 160.0:
+				far = false
+		if far:
+			picked.append(float(c[1]))
+		if picked.size() >= want:
+			break
+	var b := PaperKit.Builder.new(303)
+	var n := 0
+	arch_stations = picked.duplicate()
+	for st: float in picked:
+		var i := track.index_at(st)
+		var hw := track.road_half_width(st) + 0.9
+		var tan2 := track.tang[i]
+		var base := track.pts[i]
+		var nrm2 := track.nrm[i]
+		var y0 := track.road_h_i(i)
+		var height := 6.6
+		var segs := 14
+		var band := 1.5
+		var depth := 1.1
+		var black := PaperKit.lin(Color("#26262b"), 1.0)
+		var black2 := PaperKit.lin(Color("#34343a"), 1.0)
+		var yellow := PaperKit.lin(Color("#f2c630"), 1.0)
+		var fwd3 := Vector3(tan2.x, 0.0, tan2.y)
+		var side3 := Vector3(nrm2.x, 0.0, nrm2.y)
+		var base3 := Vector3(base.x, y0, base.y)
+		for q in segs:
+			var a0 := PI * float(q) / segs
+			var a1 := PI * float(q + 1) / segs
+			var o0 := base3 + side3 * cos(a0) * hw + Vector3(0, sin(a0) * height, 0)
+			var o1 := base3 + side3 * cos(a1) * hw + Vector3(0, sin(a1) * height, 0)
+			var i0 := base3 + side3 * cos(a0) * (hw - band) + Vector3(0, sin(a0) * (height - band), 0)
+			var i1 := base3 + side3 * cos(a1) * (hw - band) + Vector3(0, sin(a1) * (height - band), 0)
+			var df := fwd3 * depth * 0.5
+			var col := black if q % 2 == 0 else black2
+			# front and back faces, outer and inner surfaces
+			b.quad(o0 + df, o1 + df, i1 + df, i0 + df, fwd3, col)
+			b.quad(o1 - df, o0 - df, i0 - df, i1 - df, -fwd3, col)
+			var am := (a0 + a1) * 0.5
+			var up := (side3 * cos(am) + Vector3.UP * sin(am)).normalized()
+			b.quad(o0 - df, o1 - df, o1 + df, o0 + df, up, col)
+			b.quad(i1 - df, i0 - df, i0 + df, i1 + df, -up, col)
+			# yellow trim fins along both edges of the outer face
+			var fin := up * 0.12
+			for sgn: float in [-1.0, 1.0]:
+				var d2 := df * sgn
+				b.quad(o0 + d2, o1 + d2, o1 + d2 + fin, o0 + d2 + fin, fwd3 * sgn, yellow)
+		# feet
+		for sx: float in [-1.0, 1.0]:
+			b.box(base3 + side3 * sx * (hw - band * 0.5) + Vector3(0, 0.15, 0), Vector3(band + 0.4, 0.3, depth + 0.5), Transform3D(), Color("#1a1a1d"))
+		var sp: Array = Pieces.SPONSORS[(n + int(def.seed)) % Pieces.SPONSORS.size()]
+		for fb: float in [1.0, -1.0]:
+			var label := Label3D.new()
+			label.text = String(sp[0]).to_upper()
+			label.font_size = 72
+			label.pixel_size = 0.0105
+			label.modulate = Color("#f4efe4")
+			label.outline_size = 0
+			label.double_sided = false
+			var lb := Basis(side3, Vector3.UP, fwd3 * fb)
+			label.transform = Transform3D(lb, base3 + Vector3(0, height - band * 0.5, 0) + fwd3 * fb * (depth * 0.5 + 0.03))
+			add_child(label)
+		n += 1
+	var mi := MeshInstance3D.new()
+	mi.mesh = b.mesh()
+	mi.material_override = paper_mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi)
 
 
 ## Reflector posts close to the road edge, alternating sides every ~20 m: nearby fast-moving objects are what

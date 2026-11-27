@@ -107,84 +107,74 @@ func _process(delta: float) -> void:
 	queue_redraw()
 
 
-# --- drawing: a top-down circuit with its Joker lane ----------------------------------------------
+# --- drawing: a real in-game overhead of Chalk Valley's Joker lane, with animated overlays -------------
 
-const JOKER_A0 := 3.55   # angles (radians) the Joker lane spans on the loop
-const JOKER_A1 := 4.55
+const LANE := [Vector2(1430, 915), Vector2(1250, 700), Vector2(1050, 480), Vector2(850, 300), Vector2(700, 190),
+	Vector2(560, 110), Vector2(450, 150), Vector2(415, 260)]
+var _bg: Texture2D = preload("res://ui/joker_overhead.png")
 
 
-func _route(a: float, joker: bool, c: Vector2, rx: float, ry: float) -> Vector2:
-	var bump := 0.0
-	if joker and a >= JOKER_A0 and a <= JOKER_A1:
-		var k := (a - JOKER_A0) / (JOKER_A1 - JOKER_A0)
-		bump = pow(sin(PI * k), 0.6) * 0.2
-	return c + Vector2(cos(a) * rx * (1.0 + bump), sin(a) * ry * (1.0 + bump))
+func _to_screen(p: Vector2) -> Vector2:
+	var k := maxf(size.x / 1920.0, size.y / 1080.0)
+	return p * k + (size - Vector2(1920, 1080) * k) * 0.5
+
+
+func _lane_point(u: float) -> Vector2:
+	var f := clampf(u, 0.0, 1.0) * float(LANE.size() - 1)
+	var i := mini(int(f), LANE.size() - 2)
+	return _to_screen((LANE[i] as Vector2).lerp(LANE[i + 1], f - i))
 
 
 func _draw() -> void:
 	var w := size.x
 	var h := size.y
-	draw_rect(Rect2(Vector2.ZERO, size), Color(0.1, 0.06, 0.12, 0.92))
-	var c := Vector2(w * 0.27, h * 0.52)
-	var rx := w * 0.2
-	var ry := h * 0.3
+	var k := maxf(w / 1920.0, h / 1080.0)
+	var tw := 1920.0 * k
+	var th := 1080.0 * k
+	draw_texture_rect(_bg, Rect2((size - Vector2(tw, th)) * 0.5, Vector2(tw, th)), false, Color(0.82, 0.78, 0.74))
+	draw_rect(Rect2(Vector2.ZERO, size), Color(0.1, 0.06, 0.12, 0.25))
 	var step_i := _step_index()
-	# Ground sheet.
-	draw_rect(Rect2(Vector2(w * 0.03, h * 0.08), Vector2(w * 0.47, h * 0.84)), Color("#e8d8b4"), true)
-	draw_rect(Rect2(Vector2(w * 0.03, h * 0.08), Vector2(w * 0.47, h * 0.84)), PaperTheme.EDGE, false, 3.0)
-	var main_pts := PackedVector2Array()
-	for k in 97:
-		main_pts.append(_route(float(k) / 96.0 * TAU, false, c, rx, ry))
-	draw_polyline(main_pts, PaperTheme.EDGE, 44.0, true)
-	draw_polyline(main_pts, Color("#8d8274"), 36.0, true)
-	var lane_pts := PackedVector2Array()
-	for k in 41:
-		lane_pts.append(_route(JOKER_A0 + (JOKER_A1 - JOKER_A0) * float(k) / 40.0, true, c, rx, ry))
+	var lane := PackedVector2Array()
+	for q in LANE.size():
+		lane.append(_to_screen(LANE[q]))
 	var pulse := 0.5 + 0.5 * sin(_t * 5.0)
-	var lane_on := step_i >= 1
-	draw_polyline(lane_pts, PaperTheme.EDGE, 38.0, true)
-	draw_polyline(lane_pts, Color("#b6a68c"), 30.0, true)
-	if lane_on:
+	if step_i >= 1:
+		draw_polyline(lane, Color(0.23, 0.13, 0.05, 0.5), 30.0 * k, true)
 		var gold := Color("#f2c630")
-		gold.a = 0.35 + 0.4 * pulse if step_i == 1 else 0.7
-		draw_polyline(lane_pts, gold, 8.0, true)
-	# Start / finish line at the bottom.
-	var sf := _route(PI * 0.5, false, c, rx, ry)
-	draw_line(sf + Vector2(0, -22), sf + Vector2(0, 22), Color("#f3e9d6"), 6.0)
-	draw_string(_font, sf + Vector2(-46, 52), "START / FINISH", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, PaperTheme.INK)
-	if lane_on:
-		var lp := _route((JOKER_A0 + JOKER_A1) * 0.5, true, c, rx, ry)
-		var tag := Rect2(lp + Vector2(-70, -64), Vector2(140, 28))
-		draw_rect(tag, Color("#f2c630"), true)
-		draw_rect(tag, PaperTheme.EDGE, false, 2.0)
-		draw_string(_font, tag.position + Vector2(10, 21), "JOKER LANE", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, PaperTheme.INK)
-	# Rival cars on the main route, and the player's car.
-	for r in 3:
-		var ru := fposmod(_t * 0.07 + float(r) * 0.33, 1.0)
-		draw_circle(_route(PI * 0.5 + ru * TAU, false, c, rx, ry), 9.0, Color("#3f6fa8") if r != 1 else Color("#2f8a8a"))
-	var pu := fposmod(_t * 0.075 + 0.08, 1.0)
-	var pa := PI * 0.5 + pu * TAU
-	var use_joker := step_i >= 2
-	var pp := _route(pa, use_joker, c, rx, ry)
-	var ahead := _route(pa + 0.02, use_joker, c, rx, ry)
-	var ang := (ahead - pp).angle()
-	var car := PackedVector2Array([Vector2(16, 0), Vector2(-12, -9), Vector2(-12, 9)])
-	var xf := Transform2D(ang, pp)
-	var pts := PackedVector2Array()
-	for p in car:
-		pts.append(xf * p)
-	draw_colored_polygon(pts, PaperTheme.ACCENT)
-	draw_polyline(PackedVector2Array([pts[0], pts[1], pts[2], pts[0]]), PaperTheme.EDGE, 2.0)
-	# The on-screen Joker tag, as the player will see it.
+		gold.a = 0.45 + 0.4 * pulse if step_i == 1 else 0.85
+		draw_polyline(lane, gold, 16.0 * k, true)
+		# Chevrons flowing along the lane.
+		for c in 8:
+			var u := fposmod(_t * 0.18 + float(c) / 8.0, 1.0)
+			var a := _lane_point(u)
+			var b := _lane_point(u + 0.015)
+			var dir := (b - a).normalized()
+			var nrm := Vector2(-dir.y, dir.x)
+			var ch := PackedVector2Array([a + nrm * 8.0 * k, a + dir * 14.0 * k, a - nrm * 8.0 * k])
+			draw_polyline(ch, Color("#fff4d0"), 4.0 * k, true)
+	if step_i >= 1:
+		var tp := _lane_point(0.55) + Vector2(60, -60) * k
+		var tag := Rect2(tp, Vector2(180, 36) * k)
+		draw_rect(Rect2(tag.position + Vector2(3, 4), tag.size), PaperTheme.SHADOW)
+		draw_rect(tag, Color("#e8b04a"))
+		draw_rect(tag, PaperTheme.EDGE, false, 3.0)
+		draw_string(_font, tag.position + Vector2(14, 26) * k, "JOKER LANE", HORIZONTAL_ALIGNMENT_LEFT, -1, int(22.0 * k), PaperTheme.INK)
+	# The player's car: along the main road at first, then through the lane.
+	var cu := fposmod(_t * 0.09, 1.0)
+	var car_p := _to_screen(Vector2(1560, 1010).lerp(Vector2(1000, 520), cu)) if step_i < 2 else _lane_point(cu)
+	draw_circle(car_p + Vector2(2, 4), 13.0 * k, PaperTheme.SHADOW)
+	draw_circle(car_p, 13.0 * k, PaperTheme.ACCENT)
+	draw_circle(car_p, 13.0 * k, PaperTheme.EDGE, false, 3.0)
 	if step_i >= 3:
 		var states := ["JOKER: TO DO", "JOKER: NEEDED NOW", "JOKER: DONE"]
 		var colours := [Color("#8a5a12"), Color("#b0301f"), Color("#2e7a3a")]
 		var si := int(_t * 0.45) % 3 if step_i == 4 else 0
-		var box := Rect2(Vector2(w * 0.05, h * 0.82), Vector2(320, 36))
-		draw_rect(box, PaperTheme.CREAM, true)
+		var box := Rect2(Vector2(40, h - 130), Vector2(330, 40))
+		draw_rect(Rect2(box.position + Vector2(3, 4), box.size), PaperTheme.SHADOW)
+		draw_rect(box, PaperTheme.CREAM)
 		draw_rect(box, PaperTheme.EDGE, false, 3.0)
-		draw_string(_font, box.position + Vector2(14, 26), String(states[si]), HORIZONTAL_ALIGNMENT_LEFT, -1, 22, colours[si])
+		draw_string(_font, box.position + Vector2(14, 29), String(states[si]), HORIZONTAL_ALIGNMENT_LEFT, -1, 24, colours[si])
 	if step_i == 4:
-		var pen := Rect2(Vector2(w * 0.05, h * 0.74), Vector2(320, 36))
-		draw_rect(pen, Color("#b0301f"), true)
-		draw_string(_font, pen.position + Vector2(14, 26), "+15 s if skipped", HORIZONTAL_ALIGNMENT_LEFT, -1, 22, Color("#fff3dc"))
+		var pen := Rect2(Vector2(40, h - 80), Vector2(330, 40))
+		draw_rect(pen, Color("#b0301f"))
+		draw_string(_font, pen.position + Vector2(14, 29), "+15 s if skipped", HORIZONTAL_ALIGNMENT_LEFT, -1, 24, Color("#fff3dc"))
