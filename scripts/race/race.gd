@@ -35,7 +35,7 @@ var medals := [0.0, 0.0, 0.0]   # gold, silver, bronze
 var _acc := 0.0
 var _count := 3.5
 var _intro_t := -1.0          # intro flyover clock (seconds); -1 = none
-const INTRO_LEN := 6.0
+const INTRO_LEN := 10.0
 var _orbit_t := 0.0
 var _last_count := 4
 var _done_t := 0.0
@@ -130,10 +130,6 @@ func setup(stage_i: int, mode_v: int, entrants: Array, attract_v := false, tod :
 		if stage.changing_light():
 			player.set_headlight_level(stage.headlight_level)
 	camera.follow(0.016)
-	if not attract and not Game.no_save and not autopilot and DisplayServer.get_name() != "headless":
-		_intro_t = 0.0
-		set_overlay_visible(false)
-		hud.show_hint_timed("Tap to skip", INTRO_LEN)
 	var st: Dictionary = player.stats
 	var mu := Car.BASE_MU * float(st["grip"]) * stage.grip()
 	var ideal := tr.ideal_time(mu * 0.95, player.profile_braking() * 0.85, player.profile_acceleration() * 0.75, player.top_speed())
@@ -153,6 +149,11 @@ func setup(stage_i: int, mode_v: int, entrants: Array, attract_v := false, tod :
 			add_child(_crossing_audio)
 			_crossing_audio.setup(tr, player.half_len - 0.78)
 		Sfx.engine_start(player.stats["style"])
+		# Intro flyover (after the HUD exists): any touch skips it.
+		if not Game.no_save and not autopilot and DisplayServer.get_name() != "headless":
+			_intro_t = 0.0
+			set_overlay_visible(false)
+			hud.show_hint_timed("Tap to skip", INTRO_LEN)
 
 
 ## Test helper: start the cars just before the first hazard of a type, countdown skipped.

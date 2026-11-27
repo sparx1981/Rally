@@ -44,6 +44,8 @@ func _ready() -> void:
 	Settings.changed.connect(func(_k): _apply_post())
 	get_tree().get_root().size_changed.connect(_apply_post)
 	_parse_args()
+	if _shot.has("introreal"):
+		Game.no_save = false
 	if _shot.is_empty():
 		await _start_attract(randi() % Catalog.stages().size(), true)
 		_title()
@@ -1463,6 +1465,8 @@ func _parse_args() -> void:
 			Settings.apply_preset(a.substr(9))
 		elif a.begins_with("--halo="):
 			Settings.data["light_halos"] = a.substr(7) == "1"
+		elif a == "--introreal":
+			_shot["introreal"] = true
 		elif a == "--debughud":
 			Settings.data["debug_hud"] = true
 		elif a.begins_with("--popups="):
@@ -1860,7 +1864,7 @@ func _run_shot() -> void:
 	if race:
 		for ia in OS.get_cmdline_user_args():
 			if ia.begins_with("--introat="):
-				race._intro_t = float(ia.substr(10)) * 6.0
+				race._intro_t = float(ia.substr(10)) * Race.INTRO_LEN
 				race._intro_camera(0.0)
 				await get_tree().process_frame
 	if _shot.has("lightat") and race:
