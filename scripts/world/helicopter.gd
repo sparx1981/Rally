@@ -31,51 +31,92 @@ func setup(t: Track, mat: Material, night: bool) -> void:
 	_night = night
 	var b := PaperKit.Builder.new(77)
 	var I := Transform3D()
-	var white := Color("#f1eadb")
+	var silver := Color("#cfd2d6")
+	var grey := Color("#8d9298")
 	var red := Color("#c8553d")
+	var navy := Color("#26345a")
 	var ink := Color("#2b2b2e")
-	b.box(Vector3(0, 0, 0.2), Vector3(1.7, 1.6, 3.4), I, white)
-	b.box(Vector3(0, -0.05, 2.15), Vector3(1.5, 1.3, 1.0), I, white)
-	b.box(Vector3(0, 0.15, 2.5), Vector3(1.3, 0.9, 0.4), I, Color("#5a6f80"))
-	b.box(Vector3(0, -0.2, 0.3), Vector3(1.74, 0.28, 3.0), I, red)
-	b.box(Vector3(0, 0.25, -3.2), Vector3(0.45, 0.55, 4.2), I, white)
-	b.box(Vector3(0, 0.95, -5.1), Vector3(0.12, 1.3, 0.9), I, red)
-	b.box(Vector3(0, 1.0, 0.1), Vector3(0.7, 0.4, 1.0), I, ink)
+	var glass := Color("#3f566b")
+	# Rounded cabin: a side profile (z, y) extruded across the width.
+	var cabin := PackedVector2Array([Vector2(1.9, -0.7), Vector2(2.3, -0.3), Vector2(2.25, 0.1), Vector2(1.5, 0.85),
+		Vector2(0.5, 1.1), Vector2(-1.0, 1.05), Vector2(-1.8, 0.55), Vector2(-1.95, -0.6)])
+	b.prism(cabin, -0.85, 0.85, I, silver)
+	# Glass nose and side windows.
+	b.prism(PackedVector2Array([Vector2(1.92, -0.62), Vector2(2.33, -0.28), Vector2(2.28, 0.1), Vector2(1.52, 0.88),
+		Vector2(0.95, 0.9), Vector2(0.95, -0.62)]), -0.8, 0.8, I, glass)
 	for sx: float in [-1.0, 1.0]:
-		b.box(Vector3(sx * 0.85, -1.25, 0.3), Vector3(0.08, 0.08, 3.2), I, ink)
-		for pz: float in [-0.7, 1.2]:
-			b.box(Vector3(sx * 0.85, -0.95, pz), Vector3(0.08, 0.6, 0.08), I, ink)
+		b.box(Vector3(sx * 0.86, 0.3, 1.25), Vector3(0.04, 0.62, 1.5), I, glass)
+		b.box(Vector3(sx * 0.86, 0.32, 0.05), Vector3(0.04, 0.5, 0.7), I, glass)
+		# Livery stripe down each flank.
+		b.box(Vector3(sx * 0.87, -0.32, -0.1), Vector3(0.03, 0.16, 3.7), I, red)
+		b.box(Vector3(sx * 0.87, -0.5, -0.1), Vector3(0.03, 0.05, 3.7), I, navy)
+	# Engine cowling, mast and hub.
+	b.box(Vector3(0, 1.2, -0.45), Vector3(1.0, 0.38, 1.5), I, grey)
+	b.box(Vector3(0, 1.6, -0.1), Vector3(0.16, 0.5, 0.16), I, ink)
+	# Long thin tail boom, vertical fin, tail plane and the lower fin.
+	b.prism(PackedVector2Array([Vector2(-1.7, 0.6), Vector2(-1.7, -0.05), Vector2(-6.9, 0.2), Vector2(-6.9, 0.45)]), -0.15, 0.15, I, silver)
+	b.prism(PackedVector2Array([Vector2(-6.0, 0.4), Vector2(-6.95, 0.4), Vector2(-7.25, 1.65), Vector2(-6.7, 1.65)]), -0.04, 0.04, I, silver)
+	b.prism(PackedVector2Array([Vector2(-6.2, 0.2), Vector2(-6.95, 0.2), Vector2(-7.0, -0.65), Vector2(-6.6, -0.65)]), -0.035, 0.035, I, grey)
+	b.box(Vector3(0, 0.42, -6.3), Vector3(1.7, 0.05, 0.55), I, silver)
+	b.box(Vector3(0.87, 0.42, -6.3), Vector3(0.05, 0.12, 0.55), I, Color("#2fb34a"))
+	b.box(Vector3(-0.87, 0.42, -6.3), Vector3(0.05, 0.12, 0.55), I, red)
+	b.box(Vector3(0, 0.3, -5.0), Vector3(0.32, 0.03, 0.5), I, red)
+	# High skid undercarriage: two skids, braced by cross tubes.
+	for sx: float in [-1.0, 1.0]:
+		b.box(Vector3(sx * 0.95, -1.55, 0.2), Vector3(0.09, 0.09, 3.6), I, grey)
+		for pz: float in [1.0, -0.8]:
+			b.box(Vector3(sx * 0.9, -1.1, pz), Vector3(0.08, 0.95, 0.08), I, grey)
+	for pz: float in [1.0, -0.8]:
+		b.box(Vector3(0, -0.72, pz), Vector3(1.8, 0.08, 0.08), I, grey)
+	# Camera gimbal under the nose.
+	b.box(Vector3(0, -0.95, 2.1), Vector3(0.55, 0.55, 0.6), I, ink)
+	b.box(Vector3(0, -0.95, 2.43), Vector3(0.3, 0.3, 0.1), I, Color("#9db6c8"))
+	b.box(Vector3(0, -0.72, 2.0), Vector3(0.14, 0.2, 0.14), I, grey)
 	var body := MeshInstance3D.new()
 	body.mesh = b.mesh()
 	body.material_override = mat
 	add_child(body)
+	for sx: float in [-1.0, 1.0]:
+		var logo := Label3D.new()
+		logo.text = "PAPER NEWS"
+		logo.font_size = 72
+		logo.pixel_size = 0.0042
+		logo.modulate = navy
+		logo.outline_size = 0
+		logo.no_depth_test = false
+		logo.position = Vector3(sx * 0.885, 0.22, -0.95)
+		logo.rotation.y = sx * PI * 0.5
+		add_child(logo)
+	# Three-bladed main rotor.
 	_main_rotor = Node3D.new()
-	_main_rotor.position = Vector3(0, 1.3, 0.1)
+	_main_rotor.position = Vector3(0, 1.9, -0.1)
 	var rb := PaperKit.Builder.new(78)
-	rb.box(Vector3.ZERO, Vector3(10.0, 0.05, 0.32), I, ink)
-	rb.box(Vector3.ZERO, Vector3(0.32, 0.05, 10.0), I, ink)
-	rb.box(Vector3(0, -0.12, 0), Vector3(0.3, 0.25, 0.3), I, ink)
+	for k in 3:
+		var blade := Transform3D(Basis(Vector3.UP, TAU * float(k) / 3.0), Vector3.ZERO)
+		rb.box(Vector3(2.7, 0.0, 0.0), Vector3(5.2, 0.035, 0.3), blade, ink)
+	rb.box(Vector3.ZERO, Vector3(0.38, 0.2, 0.38), I, ink)
 	var rm := MeshInstance3D.new()
 	rm.mesh = rb.mesh()
 	rm.material_override = mat
 	_main_rotor.add_child(rm)
 	add_child(_main_rotor)
+	# Tail rotor on the fin.
 	_tail_rotor = Node3D.new()
-	_tail_rotor.position = Vector3(0.28, 1.0, -5.1)
+	_tail_rotor.position = Vector3(0.1, 1.05, -7.05)
 	var tb := PaperKit.Builder.new(79)
-	tb.box(Vector3.ZERO, Vector3(0.05, 1.5, 0.12), I, ink)
-	tb.box(Vector3.ZERO, Vector3(0.05, 0.12, 1.5), I, ink)
+	tb.box(Vector3.ZERO, Vector3(0.04, 1.3, 0.1), I, ink)
+	tb.box(Vector3.ZERO, Vector3(0.04, 0.1, 1.3), I, ink)
 	var tm := MeshInstance3D.new()
 	tm.mesh = tb.mesh()
 	tm.material_override = mat
 	_tail_rotor.add_child(tm)
 	add_child(_tail_rotor)
 	var nb := PaperKit.Builder.new(80)
-	nb.box(Vector3.ZERO, Vector3(0.28, 0.28, 0.28), I, Color("#ff4a3a"), Color(-1, 0, 0), true)
+	nb.box(Vector3.ZERO, Vector3(0.26, 0.26, 0.26), I, Color("#ff4a3a"), Color(-1, 0, 0), true)
 	_strobe = MeshInstance3D.new()
 	_strobe.mesh = nb.mesh()
 	_strobe.material_override = mat
-	_strobe.position = Vector3(0, 1.9, -5.0)
+	_strobe.position = Vector3(0, 1.75, -7.2)
 	add_child(_strobe)
 	if night:
 		_beam = SpotLight3D.new()
@@ -83,7 +124,7 @@ func setup(t: Track, mat: Material, night: bool) -> void:
 		_beam.light_energy = 6.0
 		_beam.spot_range = 70.0
 		_beam.spot_angle = 14.0
-		_beam.position = Vector3(0, -1.0, 2.0)
+		_beam.position = Vector3(0, -1.1, 2.2)
 		_beam.rotation = Vector3(-1.2, PI, 0)
 		add_child(_beam)
 	_audio = AudioStreamPlayer3D.new()
