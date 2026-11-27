@@ -375,6 +375,12 @@ func _start_gantry(b: PaperKit.Builder) -> void:
 		# Cylinder axis is Y; turn it to face -z.
 		mi.transform = xf * Transform3D(Basis(Vector3.RIGHT, -PI * 0.5), Vector3(lx, 5.95, -0.2 - 0.16))
 		add_child(mi)
+		if LightHalo.enabled():
+			var sh := LightHalo.make(Color("#ff3a24"), 2.2, 0.9)
+			sh.visible = false
+			add_child(sh)
+			sh.global_position = xf * Vector3(lx, 5.95, -0.55)
+			mi.set_meta("halo", sh)
 		start_lights.append(mi)
 
 
@@ -384,6 +390,8 @@ func set_start_lights(n: int) -> void:
 		var m := start_lights[k].material_override as StandardMaterial3D
 		m.emission_energy_multiplier = 3.0 if k < n else 0.0
 		m.albedo_color = Color("#ff3a24") if k < n else Color("#3a1210")
+		if start_lights[k].has_meta("halo"):
+			(start_lights[k].get_meta("halo") as Node3D).visible = k < n
 
 
 func _control_tower(b: PaperKit.Builder) -> void:
@@ -393,6 +401,10 @@ func _control_tower(b: PaperKit.Builder) -> void:
 	_solid_line(xf, 7.0, 3.6)
 	for floor_i in 3:
 		b.box(Vector3(0, 1.8 + floor_i * 2.5, -3.02), Vector3(6.2, 1.3, 0.06), xf, Color("#4f7487"), Color(-1, 0, 0), night)
+		if night and LightHalo.enabled():
+			var th := LightHalo.make(Color("#ffe2a0"), 5.0, 0.3)
+			add_child(th)
+			th.global_position = xf * Vector3(0, 1.8 + floor_i * 2.5, -3.6)
 	b.box(Vector3(0, 8.3, 0), Vector3(7.8, 0.5, 6.8), xf, Color("#8a4a3a"))
 	b.box(Vector3(2.8, 10.4, 2.0), Vector3(0.12, 4.0, 0.12), xf, Color("#6a6e74"))
 	b.box(Vector3(2.8, 12.2, 1.0), Vector3(0.05, 0.5, 2.0), xf, Color("#e8903a"))   # wind sock
@@ -457,6 +469,10 @@ func _braking_boards_and_booths(b: PaperKit.Builder) -> void:
 			b.box(Vector3(0, 2.3, 0), Vector3(2.3, 0.2, 2.3), xf, Color("#c8553d"))
 			b.box(Vector3(1.6, 1.6, 0), Vector3(0.1, 3.2, 0.1), xf, Color("#5a5f66"))
 			b.box(Vector3(1.6, 3.3, 0), Vector3(0.1, 0.9, 1.1), xf, Color("#f2c630") if booths % 2 == 0 else Color("#3f6fa8"), Color(-1, 0, 0), true)
+			if night and LightHalo.enabled():
+				var bh := LightHalo.make(Color("#f2c630") if booths % 2 == 0 else Color("#6fa0e0"), 3.2, 0.5)
+				add_child(bh)
+				bh.global_position = xf * Vector3(1.6, 3.3, 0)
 			booths += 1
 
 

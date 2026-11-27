@@ -778,6 +778,20 @@ func _make_fx(members: Array, node: Node3D) -> Array:
 				ol.add_child(LightHalo.street(Color("#ffb878"), 3.6, 4.5, 0.9))
 			out.append([ol, ol.position, -1])
 			continue
+		if lights_on and info.has("windows") and LightHalo.enabled():
+			# Lit windows give off a soft warm glow.
+			var wl: Array = info["windows"]
+			var wp: Vector2 = pl["pos"]
+			var wxf := Transform3D(Basis(Vector3.UP, float(pl["yaw"])), Vector3(wp.x, _ground(wp), wp.y))
+			for wi in mini(wl.size(), 5):
+				var halo := LightHalo.make(Color("#ffb860"), 1.7, 0.4)
+				var wlocal: Vector3 = wl[wi]
+				if popups and _pivots[i] != null:
+					(_pivots[i] as Node3D).get_child(0).add_child(halo)
+					halo.position = wlocal
+				else:
+					node.add_child(halo)
+					halo.position = wxf * wlocal
 		if not info.has("chimney"):
 			continue
 		var p: Vector2 = pl["pos"]

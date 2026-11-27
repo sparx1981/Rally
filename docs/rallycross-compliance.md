@@ -170,3 +170,8 @@ All 12 circuits complete 3 laps. A human player is not affected by the AI's lane
 
 - Tyre barriers are now stacks of three painted tyres (red and white in turn) with tread rings and dark centres.
 - Light glow is on by default (Settings > Graphics > Light glow). Vehicle lamps and floodlights use a round glow; street and track lamps throw light downward only (small halo at the head, a faint cone, a pool on the ground).
+
+## Tenth pass
+
+- Subtle light glow added to lit house windows (dusk and night), the control tower windows, marshal booth flag panels and the start lights (when lit).
+- Co-driver voice pack for Nick replaced with the new recording (137 calls, converted to mono 24 kHz Ogg matched to -18.5 LUFS like the other packs).

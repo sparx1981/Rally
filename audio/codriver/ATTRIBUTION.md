@@ -1,6 +1,6 @@
 # Co-driver recordings
 
-Blake, Darren, James, Nick and Stephane were supplied to Paper Rally with permission to distribute the recordings. The shipped clips are mono Ogg files prepared from the supplied WAVs with speech loudness matching.
+Blake, Darren, James, Nick and Stephane were supplied (Nick was re-recorded and updated on 27 Nov 2026) to Paper Rally with permission to distribute the recordings. The shipped clips are mono Ogg files prepared from the supplied WAVs with speech loudness matching.
 
 ## Original fallback voice
 

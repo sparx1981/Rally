@@ -60,7 +60,11 @@ static func _crown(b: PaperKit.Builder, r: float, y: float, col: Color, col2: Co
 
 
 static func _out(b: PaperKit.Builder, r: float, solid: bool, h: float, size: float) -> Dictionary:
-	return {"mesh": b.mesh(), "r": r, "solid": solid, "h": h, "size": size}
+	var out := {"mesh": b.mesh(), "r": r, "solid": solid, "h": h, "size": size}
+	if not _win_log.is_empty():
+		out["windows"] = _win_log.duplicate()
+		_win_log.clear()
+	return out
 
 
 static func _y(a: float) -> Transform3D:
@@ -311,7 +315,11 @@ static func cactus(pal: Dictionary, rng: RandomNumberGenerator) -> Dictionary:
 
 # --- buildings ---------------------------------------------------------------------------------
 
+static var _win_log: Array = []
+
+
 static func _window(b: PaperKit.Builder, xf: Transform3D, x: float, y: float, w: float, h: float, frame: Color) -> void:
+	_win_log.append(xf * Vector3(x, y + h * 0.5, 0.25))
 	b.card(PaperKit.rrect(w, h, 0.05, x, y), xf, frame, {"thick": 0.03, "edge": 0.03, "lip": 0.0})
 	b.card(PaperKit.rect(w * 0.72, h * 0.72, x, y + h * 0.14), xf * Transform3D(Basis(), Vector3(0, 0, 0.025)), Color("#f0b85a"), {"thick": 0.01, "edge": 0.0, "lip": 0.0, "glow": true, "sides": false})
 	b.card(PaperKit.rect(w * 0.08, h * 0.72, x, y + h * 0.14), xf * Transform3D(Basis(), Vector3(0, 0, 0.035)), frame, {"thick": 0.01, "edge": 0.0, "lip": 0.0, "sides": false})
