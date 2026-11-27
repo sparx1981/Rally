@@ -719,6 +719,60 @@ func _event_type() -> void:
 		MenuCards.pop_in(cards[i], 0.05 + i * 0.1)
 
 
+## Settings > Benchmark: a card over the menu that shows progress, then the results.
+func _benchmark_ui() -> void:
+	var overlay := ColorRect.new()
+	overlay.color = Color(0.1, 0.06, 0.12, 0.85)
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	menu.add_child(overlay)
+	var card := PanelContainer.new()
+	card.add_theme_stylebox_override("panel", PaperTheme.box(PaperTheme.CREAM, PaperTheme.EDGE, 3, 10, 8))
+	var centre := CenterContainer.new()
+	centre.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.add_child(centre)
+	centre.add_child(card)
+	card.custom_minimum_size = Vector2(620, 0)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 12)
+	card.add_child(col)
+	var title := Label.new()
+	title.text = "Benchmark"
+	title.add_theme_font_size_override("font_size", 38)
+	title.add_theme_color_override("font_color", PaperTheme.ACCENT)
+	col.add_child(title)
+	var body := Label.new()
+	body.text = "Running the demo race at your current settings…"
+	body.add_theme_font_size_override("font_size", 24)
+	body.add_theme_color_override("font_color", PaperTheme.INK)
+	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	col.add_child(body)
+	var bar := ProgressBar.new()
+	bar.max_value = 1.0
+	bar.custom_minimum_size = Vector2(0, 24)
+	col.add_child(bar)
+	var close := _button("Close", func(): overlay.queue_free(), 160)
+	close.visible = false
+	col.add_child(close)
+	if DisplayServer.get_name() == "headless" or governor == null:
+		body.text = "The benchmark needs a device with a screen."
+		close.visible = true
+		bar.visible = false
+		return
+	governor.benchmark_progress.connect(func(f): if is_instance_valid(bar): bar.value = f)
+	governor.benchmark_done.connect(func(r: Dictionary):
+		if not is_instance_valid(body):
+			return
+		var avg: float = r.avg_fps
+		var low1: float = r.low1_fps
+		var target := 1000.0 / float(r.target_ms)
+		var verdict := "Smooth" if avg >= target * 0.95 and low1 >= target * 0.7 else ("Playable" if avg >= target * 0.75 else "Too heavy: try a lower preset")
+		body.text = "Average: %.0f fps (target %.0f)\nSlowest 1%%: %.0f fps\n95%% of frames under %.1f ms\nDraw calls %d, triangles %dk, render scale %d%%\nResult: %s" % [
+			avg, target, low1, r.p95_ms, r.draw_calls, int(r.triangles) / 1000, int(float(r.scale) * 100.0), verdict]
+		bar.visible = false
+		close.visible = true, CONNECT_ONE_SHOT)
+	governor.run_benchmark()
+
+
 ## First visit to Circuits: the animated Joker explainer, then on to the circuit carousel.
 func _joker_intro(done: Callable) -> void:
 	var intro := JokerIntro.new()
@@ -1224,6 +1278,7 @@ func _settings() -> void:
 			list.add_child(_note("Match display runs at your screen's full refresh rate (120 Hz on the Galaxy S26 Ultra if Motion smoothness is set to Adaptive). Higher rates use more battery."))
 			list.add_child(_choice("Show FPS counter", ["Off", "On"], 1 if Settings.g("show_fps") else 0, func(i): Settings.set_value("show_fps", i == 1)))
 			list.add_child(_button("Replay the Joker explainer", func(): _joker_intro(func(): _settings()), 360))
+			list.add_child(_button("Run benchmark (12 s, current settings)", func(): _benchmark_ui(), 460))
 			list.add_child(_choice("Automatic resolution", ["Off", "On (keeps the frame rate steady)"], 1 if Settings.g("dynamic_res") else 0, func(i): Settings.set_value("dynamic_res", i == 1)))
 			list.add_child(_choice("Speed effects (wider view, shake)", ["Off", "On"], 1 if Settings.g("speed_fx") else 0, func(i): Settings.set_value("speed_fx", i == 1)))
 			list.add_child(_choice("Debug panel (for bug reports)", ["Off", "On"], 1 if Settings.g("debug_hud") else 0, func(i): Settings.set_value("debug_hud", i == 1)))
@@ -1818,6 +1873,7 @@ func _run_shot() -> void:
 			"series": _series_select()
 			"details": _stage_details(int(_shot.get("stage", 0)))
 			"settings": _settings()
+			"benchmark": _benchmark_ui()
 	var t: float = _shot.get("time", 6.0)
 	var frames := 0
 	var t0 := Time.get_ticks_msec()

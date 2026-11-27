@@ -13,6 +13,12 @@ var _scale := 1.0
 var _cool := 0.0
 var _up_ok := 0.0
 var _bench_running := false
+signal benchmark_progress(fraction: float)
+signal benchmark_done(result: Dictionary)
+
+
+func is_benchmarking() -> bool:
+	return _bench_running
 
 
 func _ready() -> void:
@@ -106,3 +112,45 @@ func run_self_check() -> void:
 	Engine.max_fps = old_fps
 	Settings.apply()
 	_bench_running = false
+
+
+## Settings > Benchmark: measures the demo race at the current settings for 12 seconds (automatic resolution is
+## paused so the result shows the real settings) and reports frame rate, the slowest 1% of frames and draw load.
+func run_benchmark() -> void:
+	if _bench_running or DisplayServer.get_name() == "headless":
+		return
+	_bench_running = true
+	var vp := get_viewport()
+	vp.scaling_3d_scale = _user_scale()
+	await get_tree().create_timer(1.0).timeout
+	var stamps: Array = []
+	var t0 := Time.get_ticks_msec()
+	var dur := 12000
+	while Time.get_ticks_msec() - t0 < dur:
+		await get_tree().process_frame
+		stamps.append(Time.get_ticks_usec())
+		benchmark_progress.emit(float(Time.get_ticks_msec() - t0) / float(dur))
+	var times: Array = []
+	for i in range(1, stamps.size()):
+		times.append(float(stamps[i] - stamps[i - 1]) / 1000.0)
+	times.sort()
+	var n := times.size()
+	var avg := 0.0
+	for v in times:
+		avg += float(v)
+	avg /= maxf(n, 1.0)
+	var low1 := 0.0
+	var worst := int(maxf(1.0, n * 0.01))
+	for k in worst:
+		low1 += float(times[n - 1 - k])
+	low1 /= float(worst)
+	var res := {
+		"avg_fps": 1000.0 / maxf(avg, 0.001),
+		"low1_fps": 1000.0 / maxf(low1, 0.001),
+		"p95_ms": float(times[int(n * 0.95)]) if n > 10 else 0.0,
+		"draw_calls": RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME),
+		"triangles": RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_PRIMITIVES_IN_FRAME),
+		"scale": _user_scale(), "target_ms": _target_ms(), "frames": n,
+	}
+	_bench_running = false
+	benchmark_done.emit(res)
