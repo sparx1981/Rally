@@ -396,7 +396,9 @@ func set_start_lights(n: int) -> void:
 
 func _control_tower(b: PaperKit.Builder) -> void:
 	var pt := _at(46.0, 1.0, 16.0)
-	var xf := _frame(pt)
+	# Windows are on the -z face: turn the tower so they look at the track.
+	var toward := -Vector2(pt.n.x, pt.n.y)
+	var xf := Transform3D(Basis.looking_at(Vector3(toward.x, 0.0, toward.y), Vector3.UP), _frame(pt).origin)
 	b.box(Vector3(0, 4.0, 0), Vector3(7.0, 8.0, 6.0), xf, Color("#d4d0c6"))
 	_solid_line(xf, 7.0, 3.6)
 	for floor_i in 3:
@@ -532,8 +534,11 @@ func _floodlights(b: PaperKit.Builder) -> void:
 	var n := 6
 	for k in n:
 		var s := track.length * (float(k) + 0.5) / n
-		var pt := _at(s, 1.0 if k % 2 == 0 else -1.0, 14.0)
-		var xf := _frame(pt)
+		var fside := 1.0 if k % 2 == 0 else -1.0
+		var pt := _at(s, fside, 14.0)
+		# Turn the tower so its lamp bank (-z face) looks at the road, not along it.
+		var toward := -Vector2(pt.n.x, pt.n.y) * fside
+		var xf := Transform3D(Basis.looking_at(Vector3(toward.x, 0.0, toward.y), Vector3.UP), _frame(pt).origin)
 		_solid_line(xf, 1.0, 0.9)
 		for lx in [-0.5, 0.5]:
 			for lz in [-0.5, 0.5]:
