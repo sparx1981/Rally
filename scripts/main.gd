@@ -637,16 +637,7 @@ func _process(delta: float) -> void:
 		want = clampf((race.player.speed() - 18.0) / 30.0, 0.0, 1.0)
 	_blur = lerpf(_blur, want, clampf(delta * 3.0, 0.0, 1.0))
 	(post.material as ShaderMaterial).set_shader_parameter("speed_blur", _blur)
-	var hot := 0.0
-	var hot_pos := Vector2(0.5, 0.7)
-	if Settings.fx_level() >= 2 and race != null and race.player != null and not race.attract and race.camera != null:
-		var pl: Car = race.player
-		var ex: Vector3 = pl.global_position - Vector3(sin(pl.h), 0.0, cos(pl.h)) * (pl.half_len + 0.2) + Vector3(0, 0.45, 0)
-		if not race.camera.is_position_behind(ex):
-			hot_pos = race.camera.unproject_position(ex) / Vector2(get_viewport().get_visible_rect().size)
-			hot = clampf(pl.throttle * 0.8 + 0.2, 0.0, 1.0) * clampf(pl.speed() / 12.0, 0.15, 1.0)
-	(post.material as ShaderMaterial).set_shader_parameter("shimmer", hot)
-	(post.material as ShaderMaterial).set_shader_parameter("shimmer_pos", hot_pos)
+	(post.material as ShaderMaterial).set_shader_parameter("shimmer", 0.0)   # exhaust heat shimmer removed
 
 
 # --- stage / series select --------------------------------------------------------------------------
