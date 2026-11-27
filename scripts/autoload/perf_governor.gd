@@ -20,7 +20,12 @@ func _ready() -> void:
 
 
 func _target_ms() -> float:
-	return 1000.0 / float(maxi(int(Settings.g("fps")), 30))
+	var f := int(Settings.g("fps"))
+	if f <= 0:
+		f = int(roundf(DisplayServer.screen_get_refresh_rate()))
+		if f < 30:
+			f = 60
+	return 1000.0 / float(f)
 
 
 ## The scale the player chose; dynamic resolution never goes above it.

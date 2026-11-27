@@ -1219,7 +1219,9 @@ func _settings() -> void:
 			list.add_child(_slider("Draw distance", 60.0, 160.0, 10.0, float(Settings.g("draw_distance")), func(v): Settings.set_value("draw_distance", v), "%d m", 1.0))
 			list.add_child(_slider("Weather particles", 0.2, 1.0, 0.1, float(Settings.g("particles")), func(v): Settings.set_value("particles", v), "%d%%", 100.0))
 			list.add_child(_choice("Paper fibre & grain detail", ["Off", "On"], 1 if Settings.g("paper_detail") else 0, func(i): Settings.set_value("paper_detail", i == 1)))
-			list.add_child(_choice("Frame rate cap", ["30 fps", "60 fps"], 1 if int(Settings.g("fps")) == 60 else 0, func(i): Settings.set_value("fps", 60 if i == 1 else 30)))
+			var fps_vals := [30, 60, 90, 120, 0]
+			list.add_child(_choice("Frame rate", ["30 fps", "60 fps", "90 fps", "120 fps", "Match display"], maxi(0, fps_vals.find(int(Settings.g("fps")))), func(i): Settings.set_value("fps", fps_vals[i])))
+			list.add_child(_note("Match display runs at your screen's full refresh rate (120 Hz on the Galaxy S26 Ultra if Motion smoothness is set to Adaptive). Higher rates use more battery."))
 			list.add_child(_choice("Show FPS counter", ["Off", "On"], 1 if Settings.g("show_fps") else 0, func(i): Settings.set_value("show_fps", i == 1)))
 			list.add_child(_button("Replay the Joker explainer", func(): _joker_intro(func(): _settings()), 360))
 			list.add_child(_choice("Automatic resolution", ["Off", "On (keeps the frame rate steady)"], 1 if Settings.g("dynamic_res") else 0, func(i): Settings.set_value("dynamic_res", i == 1)))
