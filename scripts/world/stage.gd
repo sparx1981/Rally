@@ -916,7 +916,7 @@ func _tarmac_wear() -> void:
 		if tarmac_here and not track.on_stacked_span(s):
 			var i := track.index_at(s)
 			var hw := track.road_half_width(s) - 1.0
-			if rng.randf() < 0.45:
+			if false:
 				var lat := rng.randf_range(-0.7, 0.7) * hw
 				var len_p := rng.randf_range(2.5, 6.0)
 				var wid := rng.randf_range(1.6, 3.4)
