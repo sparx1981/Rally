@@ -1738,6 +1738,28 @@ func _run_rxcheck(list: Array) -> void:
 					kinds[kk] = int(kinds.get(kk, 0)) + 1
 					if first_bad == "":
 						first_bad = "%s@s=%.0f lat=%.1f ext=%.1f r=%.1f" % [kk, st, lt, ex, float(o[2])]
+		var drive := {}
+		var drive_n := 0
+		var drive_first := ""
+		for key in race.stage.scenery.obstacles.keys():
+			for o in race.stage.scenery.obstacles[key]:
+				var q2 := Vector2(float(o[0]), float(o[1]))
+				var bi2 := 0
+				var bd2 := 1e18
+				for pi in range(0, tr.pts.size(), 2):
+					var dd2 := q2.distance_squared_to(tr.pts[pi])
+					if dd2 < bd2:
+						bd2 = dd2
+						bi2 = pi
+				var lt2: float = (q2 - tr.pts[bi2]).dot(tr.nrm[bi2])
+				var st2: float = tr.dist[bi2]
+				if absf(lt2) < tr.road_half_width(st2) - 0.3 and not tr.on_stacked_span(st2):
+					var k2 := str(o[5]) if o.size() > 5 else "?"
+					drive[k2] = int(drive.get(k2, 0)) + 1
+					drive_n += 1
+					if drive_first == "":
+						drive_first = "%s@s=%.0f lat=%.1f r=%.1f" % [k2, st2, lt2, float(o[2])]
+		print("RXDRIVE %s on_driving_surface=%d first=%s kinds=%s" % [Catalog.stages()[si].id, drive_n, drive_first, str(drive)])
 		print("RXOBJ %s solid_on_road=%d %s kinds=%s" % [Catalog.stages()[si].id, on_road, first_bad, str(kinds)])
 		print("RXCROSS %s %s" % [Catalog.stages()[si].id, str(tr.stacked_crossing)])
 		print("RXCHECK %s samples=%d buried=%d worst=%.2f@%s perched=%d worst=%.2f@%s" % [Catalog.stages()[si].id, total, buried, worst_b, wb, perched, worst_p, wp])
