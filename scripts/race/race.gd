@@ -610,13 +610,26 @@ func _collide() -> void:
 			var wall: float = stage.track.barrier_wall(bar, c.s)
 			var offset := absf(c.lat) - wall
 			var pen := ext - absf(offset)
+			var pull_in := false
 			if offset > 0.0:
 				wn = -wn
+				# Past an outer wall by more than the car's half-size: it has slipped through (a fast hit, or a
+				# wall sweeping inward at a lane exit). Outer walls have nothing legitimate behind them, so
+				# bring the car back inside. (The island's walls do have a lane behind them, so they are exempt.)
+				var ref := str(bar.get("ref", ""))
+				if offset < 14.0 and (ref == "lane_out" or (ref == "road" and str(bar.kind) != "island")):
+					pen = ext + offset
+					pull_in = true
+			if pen > 4.0 and OS.get_cmdline_user_args().has("--rxwall"):
+				print("  BIGPEN pen=%.1f ext=%.2f offset=%.2f lat=%.2f wall=%.2f ref=%s s=%.1f" % [pen, ext, offset, c.lat, wall, str(bar.get("ref", "")), c.s])
 			if pen > 0.0:
-				c.pos -= wn * pen
-				var cp := _corner_support(c, wn)
+				# wn points inward when the car is beyond the wall: an outer wall pulls it back in, an island wall
+				# keeps whichever side it is on.
+				var push := wn if pull_in else -wn
+				c.pos += push * pen
+				var cp := _corner_support(c, -push)
 				var v_before := c.vel.length()
-				var hit := _apply_contact(c, -wn, cp, Vector2.ZERO, null)
+				var hit := _apply_contact(c, push, cp, Vector2.ZERO, null)
 				if OS.get_cmdline_user_args().has("--rxgrind") and v_before - c.vel.length() > 0.4:
 					print("  WALLHIT v %.1f -> %.1f vn=%.2f pen=%.2f ext=%.2f wall=%.2f lat=%.2f" % [v_before, c.vel.length(), hit, pen, ext, wall, c.lat])
 				c.vel *= 1.0 - 0.012 * clampf(hit / 6.0, 0.0, 1.0)   # only real impacts cost speed; scraping along does not
@@ -625,7 +638,7 @@ func _collide() -> void:
 				if c.vel.length() < 3.0:
 					_wall_time[c] = float(_wall_time.get(c, 0.0)) + FIXED
 					if float(_wall_time[c]) > 0.35:
-						c.vel += -wn * 3.0 * FIXED
+						c.vel += push * 3.0 * FIXED
 						c.yaw_rate *= 0.9
 				else:
 					_wall_time[c] = 0.0

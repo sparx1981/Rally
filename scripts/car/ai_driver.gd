@@ -50,11 +50,13 @@ func update(dt: float, others: Array, t: float) -> void:
 	if not is_nan(lane):
 		want = lane
 	var taking_joker := false
+	var s_rel_j := 0.0
 	if not tr.joker.is_empty() and not car.joker_taken and car.laps_total > 0:
 		if joker_lap == 0:
 			joker_lap = 1 + (car.driver_name.hash() & 0xffff) % maxi(car.laps_total, 1)
 		var is_lap := (car.lap + 1 == joker_lap or car.lap + 1 >= car.laps_total) and _jk_abort_lap != car.lap
 		var s_rel := wrapf(car.s - float(tr.joker.s0), -tr.length * 0.5, tr.length * 0.5)
+		s_rel_j = s_rel
 		if is_lap and s_rel > -90.0 and s_rel < float(tr.joker.s1) - float(tr.joker.s0):
 			taking_joker = true
 			var band := tr.joker_band(car.s + look)
@@ -87,6 +89,13 @@ func update(dt: float, others: Array, t: float) -> void:
 		# The lane is longer and looser: spread the circuit's Joker time delta evenly over its length.
 		var lane_len := maxf(float(tr.joker.s1) - float(tr.joker.s0), 40.0)
 		vt = 1.0 / (1.0 / maxf(vt, 4.0) + float(tr.rx_info.get("pace", 0.0)) / lane_len)
+	if taking_joker and s_rel_j > -40.0:
+		# An inside lane through a bend has a much tighter radius than the centre line the speed profile was made
+		# for, so slow for it (never below 55 % of the profile speed).
+		var kj := float(tr.curv[tr.index_at(car.s + 8.0)])
+		var lane_lat := clampf(_jk_lat, -30.0, 30.0)
+		var inside := maxf(0.0, -signf(kj) * signf(lane_lat))   # curvature is negative for left turns
+		vt *= sqrt(clampf(1.0 - inside * absf(kj) * absf(lane_lat), 0.3, 1.0))
 	if tr.rx and car.lap < 5:
 		var patch_now := tr.patch_at(car.s + 3.0, car.lat)
 		if patch_now.get('rx', false) and patch_now['kind'] != 'tarmac':

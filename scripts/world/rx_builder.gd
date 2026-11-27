@@ -285,13 +285,16 @@ static func _build_joker(track: Track, jk: Dictionary) -> void:
 		var d1 := s1 - track.dist[i]
 		var hw: float = track.widths[i] * 0.5
 		max_hw = maxf(max_hw, hw)
-		var ramp := smoothstep(0.55 * blend, 1.5 * blend, d0) * smoothstep(0.55 * blend, 1.5 * blend, d1)
+		var ramp := smoothstep(0.7 * blend, 1.9 * blend, d0) * smoothstep(0.7 * blend, 1.9 * blend, d1)
 		gap[i] = ISLAND_GAP * ramp
-		var excursion := float(jk.out) * 0.5 * pow(sin(PI * u), 1.3)
+		# The lateral offset also grows in over the blend, so the lane's centre line leaves the road at a gentle
+		# angle (about 8 degrees) that a car at speed can follow.
+		var grow := smoothstep(0.2 * blend, 1.8 * blend, d0) * smoothstep(0.2 * blend, 1.8 * blend, d1)
+		var excursion := float(jk.out) * 0.5 * pow(sin(PI * u), 1.3) * grow
 		var inner_edge := hw + gap[i] + excursion
 		lo[i] = inner_edge
-		var enter := maxf(smoothstep(0.0, blend, d0), 0.12)
-		var leave := 0.25 + 0.75 * smoothstep(0.0, blend, d1)
+		var enter := maxf(smoothstep(0.0, 1.3 * blend, d0), 0.12)
+		var leave := 0.25 + 0.75 * smoothstep(0.0, 1.3 * blend, d1)
 		hi[i] = inner_edge + lane_w * enter * leave
 	track.joker = {"s0": s0, "s1": s1, "side": side, "w": lane_w, "i0": i0, "i1": i1, "lo": lo, "hi": hi, "gap": gap,
 		"surf": str(jk.surf), "max_hw": max_hw, "blend": blend}
@@ -373,10 +376,19 @@ static func _build_barriers(track: Track, rx: Dictionary) -> void:
 		track.barriers.append(_bar(a, b, side, "tyre", "lane_out"))
 		# Island: a foam and tyre divider along the road edge and along the lane's inner edge, from the
 		# nose to the merge, leaving the entry and exit open.
-		var blend: float = float(jk.blend)
-		var isl0: float = float(jk.s0) + blend * 0.9
-		var isl1: float = float(jk.s1) - blend * 0.9
-		if isl1 > isl0:
+		# The island's two walls (road side and lane side) only stand where the island is wide enough for them to
+		# clear each other; before that the road simply widens into the lane.
+		var isl0 := -1.0
+		var isl1 := -1.0
+		for i in range(int(jk.i0), int(jk.i1) + 1):
+			var lo_i: float = jk.lo[i]
+			if is_nan(lo_i):
+				continue
+			if lo_i - track.widths[i] * 0.5 >= 1.9:
+				if isl0 < 0.0:
+					isl0 = track.dist[i]
+				isl1 = track.dist[i]
+		if isl1 > isl0 and isl0 >= 0.0:
 			track.barriers.append(_bar(isl0, isl1, side, "island", "road"))
 			track.barriers.append(_bar(isl0, isl1, side, "island", "lane_in"))
 	track.index_barriers()

@@ -1821,6 +1821,10 @@ func _run_rxcheck(list: Array) -> void:
 						worst_f = kk * far_edge
 						where_f = tr.dist[ji]
 			print("RXFOLD %s lane %.0f-%.0f (%.0f m) fold_samples=%d worst=%.2f at s=%.0f" % [Catalog.stages()[si].id, float(tr.joker.s0), float(tr.joker.s1), float(tr.joker.s1) - float(tr.joker.s0), folds, worst_f, where_f])
+		if not tr.joker.is_empty() and OS.get_cmdline_user_args().has("--rxband"):
+			for sb in range(int(float(tr.joker.s0)) - 10, int(float(tr.joker.s1)) + 10, 8):
+				var bd := tr.joker_band(float(sb))
+				print("RXBAND %s s=%d hw=%.1f band=(%.1f,%.1f) on_road(lat=-8.2)=%s" % [Catalog.stages()[si].id, sb, tr.road_half_width(float(sb)), bd.x, bd.y, str(tr.on_road_at(float(sb), -8.2 * float(tr.joker.side) * -1.0))])
 		print("RXCORNERS %s len=%.0f joker=%s corners=%s" % [Catalog.stages()[si].id, tr.length, str([float(tr.joker.get("s0", 0.0)), float(tr.joker.get("s1", 0.0))]), cl])
 		var gl := ""
 		var sg := 0.0
