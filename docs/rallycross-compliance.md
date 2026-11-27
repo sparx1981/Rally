@@ -115,3 +115,12 @@ All 12 circuits complete 3 laps. A human player is not affected by the AI's lane
 - Wall contact: no per-step speed drain, no bounce or spin from leaning contacts, and a car pinned against a wall is eased away so it can always drive off.
 - Lap gates tolerate the road margin, so a bridge deck can no longer hide a lap crossing.
 - Loose-surface drag and lap-1 wetness reduced again; Fjord's steepest climb softened from 24% to about 15%.
+
+## Third polish pass
+
+- Paddock awning was placed at the world origin (floating over the start line on several circuits); now in its own frame on posts.
+- Apex bollards stand on the road at their own station; trackside props stand on the conformed ground.
+- Joker lane opens as a wedge instead of a squared-off mouth; each lane has one breakable hay-bale chicane (adds roughly 1-2 s).
+- Joker status tag on the HUD ("JOKER: TO DO / NEEDED NOW / DONE").
+- Every scenery piece is rejected if it would stand on any road section or Joker lane; buildings keep a 2.5 m extra gap.
+- Forest dirt grip raised and drag trimmed (standing start to 80 km/h about 3.0-3.4 s, was 4.0 s).
