@@ -579,6 +579,61 @@ func near_road(p: Vector2, r: float, margin := 1.5) -> bool:
 	return false
 
 
+## Where the two hay chicanes of a Joker lane stand: the straightest stretch near 40 % and 62 % of the lane, so
+## the bales sit on a clean line instead of in the middle of a bend.
+var _jstations: Array = []
+
+
+func joker_chicane_stations() -> Array:
+	if not _jstations.is_empty() or joker.is_empty():
+		return _jstations
+	var s0 := float(joker.s0)
+	var span := float(joker.s1) - s0
+	for centre in [0.40, 0.62]:
+		var best_s := s0 + span * float(centre)
+		var best_k := 1e9
+		var u := float(centre) - 0.12
+		while u <= float(centre) + 0.12:
+			var sc := s0 + span * u
+			var k := 0.0
+			for off in range(-3, 4):
+				k += absf(float(curv[index_at(sc + off * 5.0)]))
+			if k < best_k and absf(sc - s0) > 20.0 and absf(float(joker.s1) - sc) > 20.0:
+				best_k = k
+				best_s = sc
+			u += 0.01
+		_jstations.append(best_s)
+	if _jstations.size() == 2 and absf(float(_jstations[1]) - float(_jstations[0])) < 30.0:
+		_jstations[1] = minf(float(_jstations[0]) + 40.0, float(joker.s1) - 25.0)
+	return _jstations
+
+
+## The gaps in each Joker-lane hay chicane: [{s, lat}] (the same layout the scenery builds the bales from).
+var _jgaps: Array = []
+var _jgaps_built := false
+
+
+func joker_gaps() -> Array:
+	if _jgaps_built:
+		return _jgaps
+	_jgaps_built = true
+	if joker.is_empty():
+		return _jgaps
+	var stations := joker_chicane_stations()
+	var dirs := [1.0, -1.0]
+	for n in stations.size():
+		var j := index_at(float(stations[n]))
+		var band := joker_band(dist[j])
+		if is_nan(band.x):
+			continue
+		var half_w := absf(band.y - band.x) * 0.5
+		var dir: float = dirs[n]
+		var from_edge := band.x if dir > 0.0 else band.y
+		var to_lat := from_edge + dir * (half_w * 2.0 - 3.6)
+		_jgaps.append({"s": dist[j], "lat": to_lat + dir * 1.8})
+	return _jgaps
+
+
 func heading_at(i: int) -> float:
 	return atan2(tang[i].x, tang[i].y)
 

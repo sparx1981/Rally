@@ -1853,6 +1853,10 @@ func _run_rxcheck(list: Array) -> void:
 					var q: Vector2 = tr.pts[il] + tr.nrm[il] * float(latv)
 					line += " %d:%.1f(%.1f)" % [latv, tr.terrain.height(q), tr.surface_height(q, sl, float(latv))]
 				print(line)
+		if OS.get_cmdline_user_args().has("--rxgaps"):
+			for g in tr.joker_gaps():
+				var jb := tr.joker_band(float(g.s))
+				print("RXGAP %s s=%.0f gap_lat=%.1f band=(%.1f,%.1f)" % [Catalog.stages()[si].id, float(g.s), float(g.lat), jb.x, jb.y])
 		print("RXCORNERS %s len=%.0f joker=%s corners=%s" % [Catalog.stages()[si].id, tr.length, str([float(tr.joker.get("s0", 0.0)), float(tr.joker.get("s1", 0.0))]), cl])
 		var gl := ""
 		var sg := 0.0

@@ -266,10 +266,11 @@ func _place_hazard_props(rng: RandomNumberGenerator) -> void:
 				_add(kind, 0, pos, track.heading_at(j) + rng.randf_range(-0.3, 0.3), track.dist[j], rng, true)
 	# Rallycross Joker lane: one hay-bale chicane, bales staggered from alternate sides, to cost real time.
 	if track.rx and not track.joker.is_empty():
-		var jk: Dictionary = track.joker
-		var span := float(jk.s1) - float(jk.s0)
-		for pair in [[0.40, 1.0], [0.62, -1.0]]:
-			var sj := float(jk.s0) + span * float(pair[0])
+		var stations := track.joker_chicane_stations()
+		var dirs := [1.0, -1.0]
+		for n in stations.size():
+			var pair := [0.0, dirs[n]]
+			var sj := float(stations[n])
 			var j := track.index_at(sj)
 			var band := track.joker_band(track.dist[j])
 			if is_nan(band.x):

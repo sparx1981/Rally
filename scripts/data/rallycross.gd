@@ -94,7 +94,7 @@ static func circuits() -> Array:
 			"elev": [[0, 30], [0.05, 29.5], [0.21, 12], [0.45, 6], [0.56, 9], [0.68, 17], [0.84, 25], [0.94, 29], [1, 30]],
 			"surf": [[0.14, 0.62, "clay"]],
 			"bank": [[0.28, 0.42, 0.12]],
-			"joker": {"f0": 0.209, "f1": 0.451, "side": "outer", "surf": "clay", "w": 10.0, "out": 6.0, "delta": 2.1},
+			"joker": {"f0": 0.220, "f1": 0.415, "side": "outer", "surf": "clay", "w": 10.0, "out": 4.0, "delta": 2.1},
 			"jumps": [], "barrier": [[0, 1, "tyre"]], "kerbs": [[0.97, 1.0]]},
 		{"id": "funnel", "name": "Funnel Ring", "kit": "A", "racers": 5, "length": 990.0, "weather": "dry_noon",
 			"desc": "A start funnel into a tight hairpin, then under and over the same low overpass.",

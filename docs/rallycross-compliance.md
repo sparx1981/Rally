@@ -135,3 +135,14 @@ All 12 circuits complete 3 laps. A human player is not affected by the AI's lane
 - Cockpit and HUD speeds share one scale.
 - Terrain claim allows for sample spread on bends, so no ground shows through lanes on hairpins.
 - Benchmark: all 12 AI cars take the Joker; measured cost +1.3 to +4.5 s.
+
+## Fifth polish pass
+
+- Semi-transparent smoke and dust; 3D rumble strips (raised domed blocks with end faces).
+- Jumps about 1.9x higher with a shorter, steeper take-off ramp and a higher launch limit on circuits (flights about 13-15 m).
+- Car ground height eases from road height to terrain over 3 m past the edge (no sinking or bouncing when a wheel clips the edge).
+- Bank ramps roll in over a longer distance; Funnel Ring's banked hairpin softened.
+- Two-tier ground fit: a lower road's shoulder no longer overrules a higher road's own edge.
+- Joker hay chicanes stand on the straightest stretch of the lane and the AI threads the gap.
+- 12 new look-alike cars (see `docs/car-audit.md`).
+- Known: Joker lanes now cost +1 to +11 s for the AI (Bauxite is the highest), above the spec range, by design.

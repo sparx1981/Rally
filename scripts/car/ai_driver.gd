@@ -68,6 +68,11 @@ func update(dt: float, others: Array, t: float) -> void:
 			# Drift across gradually through the open funnel, not in one jump.
 			var edge := float(tr.joker.side) * tr.road_half_width(car.s) * 0.8
 			want = lerpf(lerpf(0.0, edge, smoothstep(-90.0, -40.0, s_rel)), lane_mid, smoothstep(-12.0, maxf(20.0, 0.25 * (float(tr.joker.s1) - float(tr.joker.s0))), s_rel))
+			# Through the chicane's gap, not into its bales.
+			for g in tr.joker_gaps():
+				var ahead := float(g.s) - car.s
+				if ahead > -5.0 and ahead < 34.0:
+					want = lerpf(want, float(g.lat), smoothstep(34.0, 14.0, ahead))
 			_jk_lat = want
 	if stop_at_s > 0.0 and car.s > stop_at_s - 45.0:
 		want = park_lat   # swing into the parking bay
@@ -96,6 +101,11 @@ func update(dt: float, others: Array, t: float) -> void:
 		var lane_lat := clampf(_jk_lat, -30.0, 30.0)
 		var inside := maxf(0.0, -signf(kj) * signf(lane_lat))   # curvature is negative for left turns
 		vt *= sqrt(clampf(1.0 - inside * absf(kj) * absf(lane_lat), 0.3, 1.0))
+	if taking_joker:
+		for g in tr.joker_gaps():
+			var ahead_g := float(g.s) - car.s
+			if ahead_g > -4.0 and ahead_g < 26.0:
+				vt = minf(vt, 17.0)   # slow enough to thread the gap
 	if tr.rx and car.lap < 5:
 		var patch_now := tr.patch_at(car.s + 3.0, car.lat)
 		if patch_now.get('rx', false) and patch_now['kind'] != 'tarmac':
