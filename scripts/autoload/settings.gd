@@ -53,6 +53,11 @@ func set_value(key: String, value: Variant) -> void:
 	changed.emit(key)
 
 
+## Visual-effects tier from the quality preset: 0 low, 1 medium, 2 high. Heavy extras check this.
+func fx_level() -> int:
+	return {"low": 0, "medium": 1, "high": 2}.get(str(data.get("preset", "medium")), 1)
+
+
 func apply_preset(name: String) -> void:
 	if not PRESETS.has(name):
 		return

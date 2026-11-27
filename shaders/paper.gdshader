@@ -10,6 +10,8 @@ uniform sampler2D fibre : hint_default_white, filter_linear_mipmap, repeat_enabl
 uniform float fibre_amount = 0.09;
 uniform float fibre_scale = 0.55;
 uniform float glow = 0.0;
+uniform vec3 rim_color : source_color = vec3(1.0, 0.85, 0.65);
+uniform float rim = 0.0;   // 1 on the car material only
 uniform vec3 glow_color : source_color = vec3(1.0, 0.77, 0.35);
 // Car glass (recognised by its printed colour) mirrors the sky, with a faint glint of the lights at night.
 uniform vec3 glass_horizon : source_color = vec3(0.86, 0.75, 0.6);
@@ -38,6 +40,10 @@ void fragment() {
 	SPECULAR = 0.0;
 	float g = 1.0 - COLOR.a;
 	EMISSION = c * glow_color * g * (0.35 + glow);
+	if (rim > 0.0) {
+		float fr = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 3.0);
+		EMISSION += rim_color * fr * rim * 0.5;
+	}
 	float pane = (1.0 - smoothstep(0.012, 0.035, distance(COLOR.rgb, GLASS_KEY))) * step(0.5, COLOR.a);
 	if (pane > 0.0) {
 		vec3 refl = (INV_VIEW_MATRIX * vec4(reflect(-VIEW, NORMAL), 0.0)).xyz;

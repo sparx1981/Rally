@@ -10,7 +10,7 @@ static var _cone_tex: GradientTexture2D
 
 
 static func enabled() -> bool:
-	return bool(Settings.g("light_halos"))
+	return bool(Settings.g("light_halos")) and Settings.fx_level() >= 1
 
 
 static func _radial() -> GradientTexture2D:

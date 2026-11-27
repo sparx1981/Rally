@@ -82,7 +82,7 @@ func setup(stage_i: int, mode_v: int, entrants: Array, attract_v := false, tod :
 		var cdef: Dictionary = Catalog.cars()[int(e["car"])]
 		if bool(e["player"]) and not attract:
 			cdef = Catalog.livery(cdef, Game.livery)
-		car.setup(cdef, i + 1, stage, stage.paper_mat)
+		car.setup(cdef, i + 1, stage, stage.car_material())
 		var row := i / 2
 		var gap := 12.5 if tr.circuit else 8.0
 		var lane := 2.7 if tr.circuit else 2.2
@@ -710,6 +710,8 @@ func _collide() -> void:
 					print("  WALLHIT v %.1f -> %.1f vn=%.2f pen=%.2f ext=%.2f wall=%.2f lat=%.2f" % [v_before, c.vel.length(), hit, pen, ext, wall, c.lat])
 				c.vel *= 1.0 - 0.012 * clampf(hit / 6.0, 0.0, 1.0)   # only real impacts cost speed; scraping along does not
 				_on_impact(c, hit, cp)
+				if hit > 1.5 and str(bar.kind) in ["armco", "jersey", "fence"]:
+					c.spark(Vector3(cp.x, c.y + 0.35, cp.y), Vector3(-push.x, 0.0, -push.y))
 				if str(bar.kind) == "tyre" and stage.rx_props and hit > 4.0 and float(_tyre_cool.get(c, 0.0)) <= 0.0:
 					_tyre_cool[c] = 0.5
 					stage.rx_props.knock_tyres(cp, push, hit, c.y)

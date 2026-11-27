@@ -18,6 +18,7 @@ uniform vec2 wind = vec2(0.012, 0.005);
 uniform float t = 0.0;
 uniform float cover = 0.54;
 uniform float storm = 0.0;
+uniform int layers = 3;
 uniform float night_amount = 0.0;
 uniform float glow_amount = 0.0;
 uniform bool peaks;
@@ -108,19 +109,24 @@ void sky() {
 	float cloudiness = 0.0;
 	float body;
 
+	if (layers >= 3) {
 	vec2 uvh = dir.xz / (0.52 + height) * vec2(0.34, 0.5) + offset * 1.7 + wind * t * 0.55;
 	vec4 hi = cloud_layer(uvh, mix(0.64, 0.40, storm), 0.05, ldir, shade, mid, lit, lamp, align, 1.2, body);
 	col = mix(col, mix(hi.rgb, horizon.rgb, haze * 0.45), hi.a * fade * 0.55);
 	cloudiness = max(cloudiness, body * 0.4);
+	}
 
 	vec2 uvm = dir.xz / (0.38 + height) * 0.73 + offset + wind * t;
 	vec4 mc = cloud_layer(uvm, cover, 0.03, ldir, shade, mid, lit, lamp, align, 1.5, body);
 	col = mix(col, mix(mc.rgb, horizon.rgb, haze * 0.35), mc.a * fade * 0.92);
 	cloudiness = max(cloudiness, body);
 
+	if (layers >= 2) {
 	vec2 uvl = dir.xz / (0.24 + height) * 1.05 + offset * 0.6 + wind * t * 1.7 + vec2(0.37, 0.11);
 	vec4 lo = cloud_layer(uvl, mix(0.69, 0.36, storm), 0.035, ldir, shade, mid, lit, lamp, align, 1.3, body);
 	col = mix(col, mix(lo.rgb, horizon.rgb, haze * 0.3), lo.a * fade * mix(0.9, 0.97, storm));
+	cloudiness = max(cloudiness, body);
+	}
 	cloudiness = max(cloudiness, body);
 
 	// Distant rain curtains hanging under a storm deck.
@@ -139,6 +145,7 @@ void sky() {
 	vec3 bloom = light_ink.rgb * bloom_s * day * (1.0 - 0.75 * storm) + moon_ink.rgb * bloom_m * night;
 	col += bloom * mix(1.0, 0.5, cloudiness);
 
+	if (layers >= 2) {
 	// Light shafts fan out from the lamp, strongest where cloud breaks up.
 	vec3 L = normalize(mix(sun, moon, night));
 	float ld = max(dot(dir, L), 0.0);
@@ -152,6 +159,7 @@ void sky() {
 	float vis = (0.25 + 0.75 * cloudiness) * (1.0 - storm * 0.6) * smoothstep(-0.12, 0.05, L.y);
 	float strength = mix(0.30 + 0.5 * glow_amount, 0.20, night);
 	col += lamp * ray * pow(ld, 3.0) * vis * strength * fade;
+	}
 
 	COLOR = col;
 

@@ -225,3 +225,11 @@ All 12 circuits complete 3 laps. A human player is not affected by the AI's lane
 
 - Joker explainer rebuilt on a real in-game overhead image of Chalk Valley's Joker lane with animated gold lane, flowing chevrons, a moving car and the on-screen tag; same five steps and 15 s penalty message.
 - Sponsor arches: black tyre-band arches with yellow trim and the sponsor name span the road three times per stage, on straight clear stretches (circuits and rally stages). A drivable humpback bridge was not built.
+
+## Nineteenth pass
+
+- Quality tiers (Settings.fx_level: Low/Medium/High): sky layers 1/2/3 and light shafts, glow sprites, banks, markers, arches, motes, car rim light and distance haze need Medium+; wet-road reflections, surface relief, ruts and radial speed blur need High.
+- Camera: sits lower and further back as speed rises, and rolls slightly into corners.
+- Radial speed blur at the screen edges (High only).
+- Low sun: softer, longer, stronger shadows. Cars get a thin sky-tinted rim light. Distance haze, thicker at dawn.
+- Gravel spray is richer; sparks fly when a car scrapes Armco, concrete or fence. Exhaust flames not done.

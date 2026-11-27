@@ -25,6 +25,7 @@ var _look := Vector3.ZERO
 var _shake := 0.0
 var _speed_fov := 0.0
 var _speed_t := 0.0
+var _roll := 0.0
 var _init_done := false
 var _last_view := -1
 
@@ -117,8 +118,8 @@ func follow(dt: float) -> void:
 	_yaw = lerp_angle(_yaw, car_yaw, clampf(dt * 2.6, 0.0, 1.0))
 	var fw := Vector3(sin(_yaw), 0, cos(_yaw))
 	var car_p := target.position
-	var pitch := deg_to_rad(float(v["pitch"]))
-	var d: float = v["dist"]
+	var pitch := deg_to_rad(float(v["pitch"]) - _speed_fov * 3.0)
+	var d: float = float(v["dist"]) * (1.0 + 0.14 * _speed_fov)
 	var lead: float = float(v["lead"]) + clampf(target.v_long, 0.0, 35.0) * 0.1
 	var look := car_p + fw * lead
 	var want := look - fw * d * cos(pitch) + Vector3.UP * d * sin(pitch)
@@ -130,6 +131,7 @@ func follow(dt: float) -> void:
 	_look = _look.lerp(look, clampf(dt * 8.0, 0.0, 1.0))
 	global_position = _pos + sh * 0.25
 	look_at(_look + sh * 0.12, Vector3.UP)
+	_apply_roll(dt)
 
 
 ## Forza Horizon style: low and close behind the car, looking past it down the road. Trails the
@@ -147,8 +149,8 @@ func _follow_low(dt: float, v: Dictionary, sh: Vector3) -> void:
 	var fw := Vector3(sin(_yaw), 0, cos(_yaw))
 	var car_p := target.position
 	var spd := clampf(target.v_long, 0.0, 40.0)
-	var d: float = float(v["dist"])
-	var hgt := 2.75 + spd * 0.008
+	var d: float = float(v["dist"]) * (1.0 + 0.2 * _speed_fov)
+	var hgt := 2.75 + spd * 0.008 - 0.35 * _speed_fov
 	var want := car_p - fw * d + Vector3.UP * hgt
 	# Keep clear of the ground behind the car (crests, banks, the far side of a dip).
 	var gp := Vector2(want.x, want.z)
@@ -170,3 +172,15 @@ func _follow_low(dt: float, v: Dictionary, sh: Vector3) -> void:
 	fov = float(v["fov"]) + _speed_fov * 7.0
 	global_position = _pos + sh * 0.08
 	look_at(_look + sh * 0.05, Vector3.UP)
+	_apply_roll(dt)
+
+
+## A small lean into corners: the view rolls against the car's sideways motion, scaled by speed.
+func _apply_roll(dt: float) -> void:
+	var want := 0.0
+	if bool(Settings.g("speed_fx")) and target != null:
+		var lateral: float = target.vel.dot(target.right_axis())
+		var yaw_rate: float = target.yaw_rate
+		want = clampf(-yaw_rate * 0.018 - lateral * 0.0016, -0.07, 0.07) * clampf(target.speed() / 25.0, 0.0, 1.0)
+	_roll = lerpf(_roll, want, clampf(dt * 4.0, 0.0, 1.0))
+	rotate_object_local(Vector3.FORWARD, _roll)

@@ -79,6 +79,7 @@ var helicopter: Helicopter
 var debug_board: Array = []
 var arch_stations: Array = []
 var _crowd: Array = []   # [node, base, phase, is_stand]: spectators that cheer when the action is near
+var _car_mat: ShaderMaterial
 var _reflect_t := 0.0
 var _lamp_level := 0.0
 var _head_cache := PackedVector3Array()
@@ -165,9 +166,11 @@ func build(stage_def: Dictionary, time_of_day := -1) -> void:
 	_make_switchback_tunnel()
 	_make_hazards()
 	_make_barriers()
-	_make_edge_banks()
-	_make_sponsor_arches()
-	_make_markers()
+	if Settings.fx_level() >= 1:
+		_make_edge_banks()
+		_make_sponsor_arches()
+	if Settings.fx_level() >= 1:
+		_make_markers()
 	if track.rx:
 		rx_props = RxProps.new()
 		rx_props.name = "RallycrossProps"
@@ -207,6 +210,7 @@ func apply_settings() -> void:
 	key_light.shadow_enabled = sh > 0
 	key_light.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL if sh <= 1 else DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
 	key_light.directional_shadow_max_distance = 60.0 if sh <= 1 else 90.0
+	apply_haze()
 	if _particles:
 		_particles.amount = maxi(16, int(_particles.get_meta("base_amount") * float(Settings.g("particles"))))
 	if leaf_litter:
@@ -270,6 +274,7 @@ func _make_lights() -> void:
 	var sky_mat := ShaderMaterial.new()
 	sky_mat.shader = preload("res://shaders/sky.gdshader")
 	_sky_mat = sky_mat
+	sky_mat.set_shader_parameter("layers", Settings.fx_level() + 1)
 	var stormy := kind() == "rain"
 	sky_mat.set_shader_parameter("cover", 0.34 if stormy else 0.54)
 	sky_mat.set_shader_parameter("storm", 1.0 if stormy else 0.0)
@@ -318,7 +323,7 @@ func street_light_at(p: Vector2) -> float:
 
 ## Rain at dusk or night: feed the nearest lamp heads to the road so they mirror in the wet surface.
 func _update_wet_reflections(focus: Vector3) -> void:
-	if kind() != "rain" or _lamp_level < 0.3 or not LightHalo.enabled():
+	if kind() != "rain" or _lamp_level < 0.3 or Settings.fx_level() < 2:
 		road_mat.set_shader_parameter("refl", 0.0)
 		return
 	if _head_cache.is_empty():
@@ -404,6 +409,7 @@ func _apply_lighting(phase: float) -> void:
 	var zen: Color = warm[1].lerp(cool[1], mix_amount)
 	var mid_col := horizon.lerp(zen, 0.45).lerp(Color("#d98a92"), glow * 0.55 * (0.35 if stormy else 1.0))
 	sky_mat.set_shader_parameter("mid_ink", mid_col)
+	paper_mat.set_shader_parameter("rim_color", horizon.lerp(Color.WHITE, 0.35))
 	paper_mat.set_shader_parameter("glass_horizon", horizon)
 	paper_mat.set_shader_parameter("glass_zenith", zen)
 	paper_mat.set_shader_parameter("glass_night", darkness)
@@ -421,6 +427,10 @@ func _apply_lighting(phase: float) -> void:
 	key_light.basis = Basis.looking_at(-sun, Vector3.UP if absf(sun.y) < 0.99 else Vector3.FORWARD)
 	key_light.light_color = wx.key
 	key_light.light_energy = float(wx.key_e) * 0.6
+	# Low sun: longer, softer, stronger shadows.
+	var low_sun := 1.0 - smoothstep(10.0, 40.0, altitude)
+	key_light.shadow_blur = lerpf(1.6, 3.4, low_sun) if Settings.fx_level() >= 1 else 1.6
+	key_light.directional_shadow_max_distance = lerpf(70.0, 120.0, low_sun) if Settings.fx_level() >= 1 else 70.0
 	fill_light.light_color = wx.fill
 	fill_light.light_energy = float(wx.fill_e) * 1.7
 	for material in [paper_mat, ground_mat, road_mat]:
@@ -431,6 +441,7 @@ func _apply_lighting(phase: float) -> void:
 	_lamp_level = smoothstep(0.45, 1.26, phase)
 	if scenery:
 		scenery.lamp_level = _lamp_level
+	_sync_car_mat()
 	if rx_props:
 		rx_props.set_lamp_level(_lamp_level)
 
@@ -795,7 +806,7 @@ func set_lap_wear(lap: int) -> void:
 ## Cheap relief for loose sectors (no per-pixel work): loose berms along both shoulders, scattered stones and,
 ## on mud, dark puddles. It is all plain geometry in the one paper material.
 func _surface_relief(s0: float, s1: float, col: Color, kind: String) -> void:
-	if kind in ["tarmac", "ford"]:
+	if kind in ["tarmac", "ford"] or Settings.fx_level() < 2:
 		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = int(s0 * 7.0) + kind.hash()
@@ -2043,7 +2054,7 @@ func _make_ambient() -> void:
 	var snowy_loc: bool = str(def.get("loc_id", "")) in ["alpine", "lakes", "taiga"]
 	var raining: bool = kind() == "rain"
 	var snowing: bool = kind() == "snow"
-	if raining or snowing or not weather_fx:
+	if raining or snowing or not weather_fx or Settings.fx_level() < 1:
 		return
 	var p := CPUParticles3D.new()
 	p.local_coords = false
@@ -2245,6 +2256,39 @@ func _ground_bg() -> Color:
 	return g if tod < 2 else g.darkened(0.85)
 
 
+## Distance haze: far hills fade toward the sky colour; at dawn a thicker low mist lies over the valleys.
+## The paper material for cars: identical to the stage's, with a thin rim of sky-tinted light on panel edges.
+func car_material() -> ShaderMaterial:
+	if _car_mat == null:
+		_car_mat = paper_mat.duplicate() as ShaderMaterial
+	_sync_car_mat()
+	return _car_mat
+
+
+func _sync_car_mat() -> void:
+	if _car_mat == null:
+		return
+	for u in paper_mat.shader.get_shader_uniform_list():
+		var nm: String = u["name"]
+		_car_mat.set_shader_parameter(nm, paper_mat.get_shader_parameter(nm))
+	_car_mat.set_shader_parameter("rim", 1.0 if Settings.fx_level() >= 1 else 0.0)
+
+
+func apply_haze() -> void:
+	if _bonnet:
+		return
+	var lvl := Settings.fx_level()
+	env.fog_enabled = lvl >= 1
+	var dawn := 0.0
+	if _lighting_mode == Catalog.SUNRISE:
+		dawn = clampf(1.0 - _light_progress * 1.6, 0.0, 1.0)
+	elif tod == 1 and _lighting_mode != Catalog.SUNSET:
+		dawn = 0.3
+	env.fog_density = 0.0018 + 0.0035 * dawn
+	env.fog_sky_affect = 0.0
+	env.fog_aerial_perspective = 0.0
+
+
 func set_bonnet(on: bool) -> void:
 	if on == _bonnet:
 		return
@@ -2252,6 +2296,8 @@ func set_bonnet(on: bool) -> void:
 	env.fog_enabled = on
 	env.fog_density = 0.008 if tod < 2 else 0.005
 	env.fog_sky_affect = 0.16
+	if not on:
+		apply_haze()
 
 
 func update(dt: float, focus: Vector3, radius: float, player_s: float, cam: Camera3D) -> void:

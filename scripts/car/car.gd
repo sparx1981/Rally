@@ -321,15 +321,17 @@ func _make_wheel_debris() -> void:
 		var p := CPUParticles3D.new()
 		p.local_coords = false
 		p.mesh = mesh
-		p.amount = maxi(3, int(9.0 * float(Settings.g("particles"))))
-		p.lifetime = 0.55
+		p.amount = maxi(3, int((9.0 + 5.0 * Settings.fx_level()) * float(Settings.g("particles"))))
+		p.lifetime = 0.7
 		p.explosiveness = 0.0
 		p.randomness = 0.6
 		p.direction = Vector3(0.0, 0.75, -1.0)
 		p.spread = 26.0
-		p.initial_velocity_min = 1.8
-		p.initial_velocity_max = 4.2
-		p.gravity = Vector3(0, -9.0, 0)
+		p.initial_velocity_min = 2.4
+		p.initial_velocity_max = 6.0
+		p.gravity = Vector3(0, -14.0, 0)
+		p.damping_min = 0.4
+		p.damping_max = 1.2
 		p.scale_amount_min = 0.5
 		p.scale_amount_max = 1.5
 		p.angular_velocity_min = -300.0
@@ -372,8 +374,46 @@ func _update_wheel_debris() -> void:
 
 
 ## Mud and wet-ground splatter along the lower flanks: grows while the car drives through muck, never washes off.
+var _sparks: CPUParticles3D
+var _spark_t := 0.0
 var dirt := 0.0
 var _dirt_nodes: Array = []
+
+
+## Sparks thrown when the bodywork scrapes a wall or barrier.
+func spark(at_world: Vector3, outward: Vector3) -> void:
+	if _body == null or Settings.fx_level() < 1:
+		return
+	if _sparks == null:
+		_sparks = CPUParticles3D.new()
+		_sparks.local_coords = false
+		var q := QuadMesh.new()
+		q.size = Vector2(0.07, 0.07)
+		var m := StandardMaterial3D.new()
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+		m.albedo_color = Color(1.0, 0.85, 0.4)
+		m.emission_enabled = true
+		m.emission = Color(1.0, 0.7, 0.2)
+		m.emission_energy_multiplier = 2.5
+		q.material = m
+		_sparks.mesh = q
+		_sparks.amount = 22
+		_sparks.lifetime = 0.45
+		_sparks.explosiveness = 0.35
+		_sparks.spread = 40.0
+		_sparks.initial_velocity_min = 3.0
+		_sparks.initial_velocity_max = 8.0
+		_sparks.gravity = Vector3(0, -12.0, 0)
+		_sparks.scale_amount_min = 0.4
+		_sparks.scale_amount_max = 1.2
+		_sparks.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_sparks.emitting = false
+		add_child(_sparks)
+	_sparks.global_position = at_world
+	_sparks.direction = (outward + Vector3.UP * 0.7).normalized()
+	_sparks.emitting = true
+	_spark_t = 0.18
 
 
 func _make_dirt() -> void:
@@ -398,6 +438,10 @@ func _make_dirt() -> void:
 
 
 func _update_dirt(delta: float) -> void:
+	if _sparks != null and _spark_t > 0.0:
+		_spark_t -= delta
+		if _spark_t <= 0.0:
+			_sparks.emitting = false
 	var mucky := patch_kind == "mud" or in_puddle or in_water or (stage.kind() == "rain" and (patch_kind in ["", "gravel"]) and (not stage.track.rx or on_road == false))
 	if mucky and speed() > 3.0 and not airborne:
 		dirt = minf(1.0, dirt + delta * 0.012 * clampf(speed() / 14.0, 0.0, 2.0))

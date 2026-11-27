@@ -620,6 +620,21 @@ class CarPreview:
 			holder.rotation.y = t * 0.6
 
 
+var _blur := 0.0
+
+
+## Mild radial speed blur (High quality only): the screen edges smear a little as the car gets quick.
+func _process(delta: float) -> void:
+	if post == null or post.material == null:
+		return
+	var want := 0.0
+	if Settings.fx_level() >= 2 and bool(Settings.g("speed_fx")) and race != null and not race.attract and race.player != null \
+			and race._intro_t < 0.0 and race.state == Race.State.RACING:
+		want = clampf((race.player.speed() - 18.0) / 30.0, 0.0, 1.0)
+	_blur = lerpf(_blur, want, clampf(delta * 3.0, 0.0, 1.0))
+	(post.material as ShaderMaterial).set_shader_parameter("speed_blur", _blur)
+
+
 # --- stage / series select --------------------------------------------------------------------------
 
 func _weather_style(kind: String) -> StyleBoxFlat:

@@ -19,6 +19,7 @@ uniform vec3 shadow_tint : source_color = vec3(0.23, 0.13, 0.05);
 uniform float vignette = 0.08;
 uniform vec3 vig_color : source_color = vec3(0.23, 0.13, 0.05);
 uniform float grain = 0.01;
+uniform float speed_blur = 0.0;   // 0..1: mild radial blur toward the screen edges (High only)
 uniform float bloom = 0.0;          // glow around bright areas (used for the loading art)
 uniform float bloom_px = 14.0;
 uniform float bloom_cut = 0.72;
@@ -51,6 +52,16 @@ void fragment() {
 			}
 			col = acc / wsum;
 		}
+	}
+	if (speed_blur > 0.01) {
+		vec2 dv = uv - vec2(0.5);
+		float edge = smoothstep(0.22, 0.75, length(dv * vec2(1.0, 1.15)));
+		vec3 acc2 = col;
+		for (int k = 1; k <= 4; k++) {
+			float kk = float(k) * 0.011 * speed_blur * edge;
+			acc2 += texture(screen, uv - dv * kk).rgb;
+		}
+		col = mix(col, acc2 / 5.0, clamp(edge * speed_blur * 1.2, 0.0, 1.0));
 	}
 	if (bloom > 0.0) {
 		vec3 glow = vec3(0.0);
