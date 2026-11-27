@@ -46,7 +46,7 @@ var _circuit_progress := {}
 var _lap_log := {}       # car -> race time at each completed lap
 var _joker_state := {}   # car -> {run, prev}
 var _joker_hint_t := 0.0
-const JOKER_PENALTY := 10.0   # seconds added for finishing without taking the Joker
+const JOKER_PENALTY := 15.0   # seconds added for finishing without taking the Joker (the lane itself costs about 2-10 s)
 var _hud_layer: CanvasLayer
 var _clock := 0.0
 var _entrants: Array = []

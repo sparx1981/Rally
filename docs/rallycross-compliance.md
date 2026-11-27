@@ -215,3 +215,8 @@ All 12 circuits complete 3 laps. A human player is not affected by the AI's lane
 - Speed: reflector posts every ~20 m near the road edge on rally stages; the camera widens its view with speed and trembles slightly (Settings > "Speed effects").
 - Ambient: dust/pollen motes (flurries on snowy stages), waving flags around circuits, cheering crowds near the action.
 - Presentation: a 6 s skippable intro flyover round the start, and a slow orbit of the car after the finish.
+
+## Seventeenth pass
+
+- First visit to Circuits shows an animated Joker explainer (what it is, take it once, it costs time, 15 s penalty if skipped). Replay from Settings.
+- Joker penalty raised from 10 s to 15 s. The measured AI Joker cost is about 2-10 s (worst: Breton), so skipping always costs more than taking it.

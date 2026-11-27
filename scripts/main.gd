@@ -680,7 +680,10 @@ func _event_type() -> void:
 		var circuits: bool = d.circuits
 		card.pressed.connect(func():
 			Sfx.click()
-			_stage_carousel(circuits))
+			if circuits and not bool(Settings.g("joker_intro_seen")):
+				_joker_intro(func(): _stage_carousel(true))
+			else:
+				_stage_carousel(circuits))
 		row.add_child(card)
 		cards.append(card)
 	var spacer := Control.new()
@@ -691,6 +694,16 @@ func _event_type() -> void:
 	await get_tree().process_frame
 	for i in cards.size():
 		MenuCards.pop_in(cards[i], 0.05 + i * 0.1)
+
+
+## First visit to Circuits: the animated Joker explainer, then on to the circuit carousel.
+func _joker_intro(done: Callable) -> void:
+	var intro := JokerIntro.new()
+	menu.add_child(intro)
+	intro.finished.connect(func():
+		Settings.set_value("joker_intro_seen", true)
+		intro.queue_free()
+		done.call())
 
 
 ## A sliding carousel of locations (or circuits) with previews, best times and page dots.
@@ -1185,6 +1198,7 @@ func _settings() -> void:
 			list.add_child(_choice("Paper fibre & grain detail", ["Off", "On"], 1 if Settings.g("paper_detail") else 0, func(i): Settings.set_value("paper_detail", i == 1)))
 			list.add_child(_choice("Frame rate cap", ["30 fps", "60 fps"], 1 if int(Settings.g("fps")) == 60 else 0, func(i): Settings.set_value("fps", 60 if i == 1 else 30)))
 			list.add_child(_choice("Show FPS counter", ["Off", "On"], 1 if Settings.g("show_fps") else 0, func(i): Settings.set_value("show_fps", i == 1)))
+			list.add_child(_button("Replay the Joker explainer", func(): _joker_intro(func(): _settings()), 360))
 			list.add_child(_choice("Speed effects (wider view, shake)", ["Off", "On"], 1 if Settings.g("speed_fx") else 0, func(i): Settings.set_value("speed_fx", i == 1)))
 			list.add_child(_choice("Debug panel (for bug reports)", ["Off", "On"], 1 if Settings.g("debug_hud") else 0, func(i): Settings.set_value("debug_hud", i == 1)))
 			list.add_child(_choice("Light glow (night)", ["Off", "On"], 1 if Settings.g("light_halos") else 0, func(i): Settings.set_value("light_halos", i == 1)))
@@ -1774,6 +1788,7 @@ func _run_shot() -> void:
 			"events": _event_type()
 			"carousel": _stage_carousel(false, int(_shot.get("stage", 0)))
 			"circuits": _stage_carousel(true)
+			"jokerintro": _joker_intro(func(): _event_type())
 			"series": _series_select()
 			"details": _stage_details(int(_shot.get("stage", 0)))
 			"settings": _settings()
