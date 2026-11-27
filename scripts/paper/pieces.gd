@@ -59,6 +59,39 @@ static func _crown(b: PaperKit.Builder, r: float, y: float, col: Color, col2: Co
 	b.card(PaperKit.blob(r * 0.6, -r * 0.15, r * 0.12, 5, 0.14, seed_v + 1, 18), lay * Transform3D(Basis(), Vector3(0, 0, 0.04)), col2, {"thick": 0.02, "edge": 0.03, "lip": 0.0})
 
 
+## A very cheap stand-in used beyond the near range: two crossed flat cards with the piece's outline and main
+## colours (a pine is about 5,700 triangles close up and about 40 here). Returns null for pieces with no far form.
+static func far_mesh(kind: String, pal: Dictionary, info: Dictionary) -> Mesh:
+	if not kind in ["pine", "pine_snow", "tree", "birch", "bush"]:
+		return null
+	var b := PaperKit.Builder.new(5)
+	var h: float = float(info.get("h", 5.0))
+	var r: float = float(info.get("r", 1.0))
+	var snow := kind == "pine_snow"
+	for k in 2:
+		var xf := _y(k * PI * 0.5)
+		match kind:
+			"pine", "pine_snow":
+				var w := h * 0.5
+				b.card(PaperKit.rect(w * 0.15, h * 0.3), xf, pal["trunk"], {"thick": 0.06, "edge": 0.0, "lip": 0.0})
+				var cone := PackedVector2Array([Vector2(-w * 0.5, h * 0.2), Vector2(w * 0.5, h * 0.2), Vector2(w * 0.3, h * 0.55), Vector2(w * 0.38, h * 0.55),
+					Vector2(w * 0.16, h * 0.82), Vector2(0, h)])
+				var cone_l := PackedVector2Array([Vector2(0, h)])
+				for q in range(cone.size() - 2, -1, -1):
+					cone_l.append(Vector2(-cone[q].x, cone[q].y))
+				var full := PackedVector2Array()
+				full.append_array(cone)
+				for q in range(cone_l.size() - 2, 0, -1):
+					full.append(cone_l[q])
+				b.card(full, xf, pal["f_dark"] if not snow else pal["f_mid"], {"thick": 0.06, "edge": 0.0, "lip": 0.0})
+			"tree", "birch":
+				b.card(PaperKit.rect(r * 0.16, h * 0.55), xf, pal["trunk"], {"thick": 0.06, "edge": 0.0, "lip": 0.0})
+				b.card(PaperKit.circle(r * 0.95, 0.0, h * 0.72, 9), xf, pal["f_mid"], {"thick": 0.06, "edge": 0.0, "lip": 0.0})
+			"bush":
+				b.card(PaperKit.circle(r * 0.9, 0.0, r * 0.55, 8), xf, pal["f_dark"], {"thick": 0.05, "edge": 0.0, "lip": 0.0})
+	return b.mesh()
+
+
 static func _out(b: PaperKit.Builder, r: float, solid: bool, h: float, size: float) -> Dictionary:
 	var out := {"mesh": b.mesh(), "r": r, "solid": solid, "h": h, "size": size}
 	if not _win_log.is_empty():

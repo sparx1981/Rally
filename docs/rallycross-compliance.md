@@ -233,3 +233,11 @@ All 12 circuits complete 3 laps. A human player is not affected by the AI's lane
 - Radial speed blur at the screen edges (High only).
 - Low sun: softer, longer, stronger shadows. Cars get a thin sky-tinted rim light. Distance haze, thicker at dawn.
 - Gravel spray is richer; sparks fly when a car scrapes Armco, concrete or fence. Exhaust flames not done.
+
+## Twentieth pass
+
+- Level of detail: pines, trees, birches and bushes switch to a two-card far form beyond about 24-42 m (a pine was about 5,700 triangles close up). Forest stage triangles: 1.0M to about 0.4M on High, 0.74M to about 0.09M on Medium (desktop render).
+- Dynamic resolution (Settings > Automatic resolution) lowers the render scale when frames run long and raises it with headroom, never above the player's chosen scale.
+- First-launch self-check (fresh installs only): hidden benchmark behind the title picks High, Medium or Low.
+- Effects: car-tinted dust; stones that land and bounce; heat shimmer (dry day, High); rain beads on the lens in bonnet/cockpit views and a wetter rim on cars in rain; lightning and thunder on storm stages; flags that react to passing cars; crowds jump after jumps/splashes; night photographers with flashes; lit sponsor boards, car underglow and a bigger start-light haze at night; skid marks last longer; cinematic three-shot camera after the finish.
+- Not done: a true rewind replay, exhaust heat haze, dynamic drying of water trails.

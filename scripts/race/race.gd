@@ -37,6 +37,7 @@ var _count := 3.5
 var _intro_t := -1.0          # intro flyover clock (seconds); -1 = none
 const INTRO_LEN := 10.0
 var _orbit_t := 0.0
+var _rain_lens: RainLens
 var _last_count := 4
 var _done_t := 0.0
 var _reset_cd := 0.0
@@ -210,6 +211,9 @@ func _make_hud() -> void:
 	add_child(_hud_layer)
 	hud = Hud.new()
 	_hud_layer.add_child(hud)
+	_rain_lens = RainLens.new()
+	_rain_lens.visible = false
+	_hud_layer.add_child(_rain_lens)
 	touch = TouchControls.new()
 	_hud_layer.add_child(touch)
 	touch.visible = touch.should_show()
@@ -342,6 +346,8 @@ func _process(delta: float) -> void:
 		camera.follow(dt)
 	var vi := camera.view_index()
 	stage.set_bonnet(ChaseCamera.is_ground_level(vi))
+	if _rain_lens:
+		_rain_lens.visible = stage.kind() == "rain" and ChaseCamera.is_mounted(vi) and _intro_t < 0.0
 	if vi != _last_view:
 		_last_view = vi
 		player.cockpit(vi == ChaseCamera.COCKPIT)
@@ -394,12 +400,25 @@ func _intro_camera(dt: float) -> void:
 func _finish_camera(dt: float) -> void:
 	_orbit_t += dt
 	var base := player.global_position
-	var ang := player.h + PI + 0.5 + _orbit_t * 0.45
-	var radius := 8.5
-	var pos := base + Vector3(sin(ang) * radius, 3.2 + sin(_orbit_t * 0.6) * 0.5, cos(ang) * radius)
+	var shot := int(_orbit_t / 4.0) % 3
+	var u := fposmod(_orbit_t, 4.0) / 4.0
+	var fwd := Vector3(sin(player.h), 0.0, cos(player.h))
+	var pos: Vector3
+	var aim := base + Vector3(0, 0.9, 0)
+	match shot:
+		0:   # slow orbit
+			var ang := player.h + PI + 0.5 + _orbit_t * 0.45
+			pos = base + Vector3(sin(ang) * 8.5, 3.2 + sin(_orbit_t * 0.6) * 0.5, cos(ang) * 8.5)
+			camera.fov = 52.0
+		1:   # low front three-quarter, creeping in
+			var right := Vector3(fwd.z, 0.0, -fwd.x)
+			pos = base + fwd * lerpf(9.0, 6.0, u) + right * 3.0 + Vector3(0, 0.9, 0)
+			camera.fov = 40.0
+		_:   # high behind, drifting up
+			pos = base - fwd * 12.0 + Vector3(0, lerpf(5.0, 11.0, u), 0)
+			camera.fov = 58.0
 	camera.global_position = pos
-	camera.look_at(base + Vector3(0, 0.9, 0), Vector3.UP)
-	camera.fov = 52.0
+	camera.look_at(aim, Vector3.UP)
 
 
 func _update_state(dt: float) -> void:
@@ -894,6 +913,7 @@ func _feedback(dt: float) -> void:
 		if f["type"] in ["jump", "splash"] and absf(p.s - float(f["s"]) - 6.0) < 1.5 and sp > 8.0 and not _cheered.has(f["s"]):
 			_cheered[f["s"]] = true
 			Sfx.cheer()
+			stage.cheer_crowd()
 	# Puddles: a splash, a jolt and a little drag.
 	var in_p := false
 	for pd in stage.scenery.puddles:

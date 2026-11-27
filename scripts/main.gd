@@ -46,9 +46,12 @@ func _ready() -> void:
 	_parse_args()
 	if _shot.has("introreal"):
 		Game.no_save = false
+	governor = PerfGovernor.new()
+	add_child(governor)
 	if _shot.is_empty():
 		await _start_attract(randi() % Catalog.stages().size(), true)
 		_title()
+		governor.run_self_check()
 	else:
 		_run_shot()
 
@@ -620,6 +623,7 @@ class CarPreview:
 			holder.rotation.y = t * 0.6
 
 
+var governor: PerfGovernor
 var _blur := 0.0
 
 
@@ -633,6 +637,10 @@ func _process(delta: float) -> void:
 		want = clampf((race.player.speed() - 18.0) / 30.0, 0.0, 1.0)
 	_blur = lerpf(_blur, want, clampf(delta * 3.0, 0.0, 1.0))
 	(post.material as ShaderMaterial).set_shader_parameter("speed_blur", _blur)
+	var hot := 0.0
+	if Settings.fx_level() >= 2 and race != null and race.stage != null and race.stage.kind() == "dry" and race.stage.tod == 0:
+		hot = 1.0
+	(post.material as ShaderMaterial).set_shader_parameter("shimmer", hot)
 
 
 # --- stage / series select --------------------------------------------------------------------------
@@ -1214,6 +1222,7 @@ func _settings() -> void:
 			list.add_child(_choice("Frame rate cap", ["30 fps", "60 fps"], 1 if int(Settings.g("fps")) == 60 else 0, func(i): Settings.set_value("fps", 60 if i == 1 else 30)))
 			list.add_child(_choice("Show FPS counter", ["Off", "On"], 1 if Settings.g("show_fps") else 0, func(i): Settings.set_value("show_fps", i == 1)))
 			list.add_child(_button("Replay the Joker explainer", func(): _joker_intro(func(): _settings()), 360))
+			list.add_child(_choice("Automatic resolution", ["Off", "On (keeps the frame rate steady)"], 1 if Settings.g("dynamic_res") else 0, func(i): Settings.set_value("dynamic_res", i == 1)))
 			list.add_child(_choice("Speed effects (wider view, shake)", ["Off", "On"], 1 if Settings.g("speed_fx") else 0, func(i): Settings.set_value("speed_fx", i == 1)))
 			list.add_child(_choice("Debug panel (for bug reports)", ["Off", "On"], 1 if Settings.g("debug_hud") else 0, func(i): Settings.set_value("debug_hud", i == 1)))
 			list.add_child(_choice("Light glow (night)", ["Off", "On"], 1 if Settings.g("light_halos") else 0, func(i): Settings.set_value("light_halos", i == 1)))
@@ -1913,6 +1922,23 @@ func _run_shot() -> void:
 				race._intro_t = float(ia.substr(10)) * Race.INTRO_LEN
 				race._intro_camera(0.0)
 				await get_tree().process_frame
+	if OS.get_cmdline_user_args().has("--lodstats") and race and race.stage.scenery:
+		var cnt := {}
+		for pl in race.stage.scenery.placements:
+			var kk := "%s|%d" % [pl["kind"], pl["var"]]
+			cnt[kk] = int(cnt.get(kk, 0)) + 1
+		var total := 0
+		for kk in cnt.keys():
+			var parts: PackedStringArray = str(kk).split("|")
+			var info: Dictionary = race.stage.scenery.lib[parts[0]][int(parts[1])]
+			var m: Mesh = info["mesh"]
+			var tris := 0
+			for sidx in m.get_surface_count():
+				var arr := m.surface_get_arrays(sidx)
+				tris += (arr[Mesh.ARRAY_INDEX].size() if arr[Mesh.ARRAY_INDEX] != null else arr[Mesh.ARRAY_VERTEX].size()) / 3
+			total += tris * int(cnt[kk])
+			print("LOD ", kk, " count=", cnt[kk], " tris_each=", tris, " total=", tris * int(cnt[kk]))
+		print("LOD total_placed_tris=", total)
 	if OS.get_cmdline_user_args().has("--perf") and race:
 		await get_tree().create_timer(1.0).timeout
 		await RenderingServer.frame_post_draw

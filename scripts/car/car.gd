@@ -359,6 +359,71 @@ func _loose_color() -> Color:
 	return Color(stage.def.pal.road).darkened(0.12)
 
 
+## Stones kicked up by the driven wheels fly, land on the road and bounce a couple of times before settling.
+func _update_stones(delta: float) -> void:
+	if Settings.fx_level() < 1 or stage == null:
+		return
+	if _stones.is_empty():
+		_stone_mesh = BoxMesh.new()
+		_stone_mesh.size = Vector3(0.09, 0.06, 0.09)
+		var sm := StandardMaterial3D.new()
+		sm.roughness = 1.0
+		sm.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+		sm.albedo_color = Color(stage.def.pal.road).darkened(0.25)
+		_stone_mesh.material = sm
+		for i in 10:
+			var n := MeshInstance3D.new()
+			n.mesh = _stone_mesh
+			n.visible = false
+			n.top_level = true
+			n.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			add_child(n)
+			_stones.append({"node": n, "vel": Vector3.ZERO, "life": 0.0})
+	var col := _loose_color()
+	var loose := col.a > 0.0 and absf(v_long) > 6.0 and not airborne and not frozen and not in_water and (throttle > 0.4 or slip > 0.3)
+	_stone_t -= delta
+	if loose and _stone_t <= 0.0:
+		_stone_t = randf_range(0.08, 0.2)
+		for st: Dictionary in _stones:
+			if st.life <= 0.0:
+				var n: MeshInstance3D = st.node
+				var side := -1.0 if randf() < 0.5 else 1.0
+				n.global_position = global_position + right_axis3() * side * (half_wid * 0.85) - fwd3() * (half_len * 0.75) + Vector3(0, 0.15, 0)
+				n.visible = true
+				st.life = 1.6
+				st.vel = Vector3(vel.x, 0.0, vel.y) * 0.55 - fwd3() * randf_range(1.0, 3.0) + Vector3(randf_range(-2.0, 2.0), randf_range(2.5, 5.0), randf_range(-2.0, 2.0))
+				break
+	for st: Dictionary in _stones:
+		if st.life <= 0.0:
+			continue
+		st.life -= delta
+		var n: MeshInstance3D = st.node
+		var v: Vector3 = st.vel
+		v.y -= 22.0 * delta
+		n.global_position += v * delta
+		n.rotate_x(6.0 * delta)
+		var gp := Vector2(n.global_position.x, n.global_position.z)
+		var gh: float = stage.track.surface_height(gp, s, lat) + 0.04
+		if n.global_position.y < gh and v.y < 0.0:
+			n.global_position.y = gh
+			v.y = -v.y * 0.42
+			v.x *= 0.7
+			v.z *= 0.7
+			if absf(v.y) < 0.8:
+				v = Vector3.ZERO
+		st.vel = v
+		if st.life <= 0.0:
+			n.visible = false
+
+
+func fwd3() -> Vector3:
+	return Vector3(sin(h), 0.0, cos(h))
+
+
+func right_axis3() -> Vector3:
+	return Vector3(cos(h), 0.0, -sin(h))
+
+
 func _update_wheel_debris() -> void:
 	if _debris.is_empty():
 		return
@@ -374,6 +439,9 @@ func _update_wheel_debris() -> void:
 
 
 ## Mud and wet-ground splatter along the lower flanks: grows while the car drives through muck, never washes off.
+var _stones: Array = []        # pooled thrown stones: {node, vel, bounces, live}
+var _stone_mesh: BoxMesh
+var _stone_t := 0.0
 var _sparks: CPUParticles3D
 var _spark_t := 0.0
 var dirt := 0.0
@@ -468,6 +536,7 @@ func _make_dust() -> void:
 		k = "spray"
 	else:
 		col = Color(pal["road"]).lightened(0.5)
+	col = col.lerp(Color(stats["body"]), 0.16)   # tyre smoke and dust pick up a hint of the car's colour
 	_dust = Puffs.make(k, col, leak)
 	_dust.set_meta("full_min",_dust.scale_amount_min)
 	_dust.set_meta("full_max",_dust.scale_amount_max)
@@ -544,6 +613,14 @@ func enable_lights(shadows: bool, night := false) -> void:
 			tl.position = Vector3(sx * half_wid * 0.72, lamp.y, -half_len - 0.12)
 			_body.add_child(tl)
 			_halos.append(tl)
+	if night and Settings.fx_level() >= 1:
+		var under := OmniLight3D.new()
+		under.light_color = Color(stats["accent"]).lightened(0.2) if stats.has("accent") else Color("#ffb070")
+		under.light_energy = 1.1
+		under.omni_range = 3.2
+		under.position = Vector3(0, 0.12, 0)
+		_body.add_child(under)
+		_lights.append(under)
 	# Light from street and track lamps falls on the car as it passes beneath them.
 	_street_light = OmniLight3D.new()
 	_street_light.light_color = Color("#ffd9a0")
@@ -1166,6 +1243,7 @@ func _sync_visual(delta: float) -> void:
 			wnode.rotation.y = -steer * 0.45
 		wnode.get_child(0).rotation.x = _spin
 	_update_wheel_debris()
+	_update_stones(delta)
 	# Dust / spray / snow from the wheels.
 	if _dust:
 		var spd := absf(v_long)

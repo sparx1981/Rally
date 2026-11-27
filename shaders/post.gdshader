@@ -19,6 +19,7 @@ uniform vec3 shadow_tint : source_color = vec3(0.23, 0.13, 0.05);
 uniform float vignette = 0.08;
 uniform vec3 vig_color : source_color = vec3(0.23, 0.13, 0.05);
 uniform float grain = 0.01;
+uniform float shimmer = 0.0;       // heat haze over hot ground (dry daytime, High only)
 uniform float speed_blur = 0.0;   // 0..1: mild radial blur toward the screen edges (High only)
 uniform float bloom = 0.0;          // glow around bright areas (used for the loading art)
 uniform float bloom_px = 14.0;
@@ -30,7 +31,12 @@ float hash(vec2 p) {
 
 void fragment() {
 	vec2 uv = SCREEN_UV;
-	vec3 col = texture(screen, uv).rgb;
+	vec2 suv = uv;
+	if (shimmer > 0.0) {
+		float hb = smoothstep(0.38, 0.5, uv.y) * (1.0 - smoothstep(0.5, 0.68, uv.y));
+		suv.x += sin(uv.y * 90.0 + TIME * 3.0) * 0.0016 * shimmer * hb + sin(uv.y * 41.0 - TIME * 2.0 + uv.x * 6.0) * 0.001 * shimmer * hb;
+	}
+	vec3 col = texture(screen, suv).rgb;
 	if (taps > 0) {
 		float sy = uv.y - focus_y;
 		float a = clamp((abs(sy) - band * 0.5) / ramp, 0.0, 1.0);

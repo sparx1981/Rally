@@ -18,6 +18,8 @@ var lamp_heads := PackedVector3Array()   # the lamp heads themselves (for wet-ro
 var _lit_nodes: Array = []   # lamp glow nodes that switch on at dusk
 var tyres: Array = []         # tyres knocked off a wall: {node, pos, y, vel, axis, spin, rest}
 var _tyre_meshes := {}
+var _focus := Vector3.ZERO
+var _photographers: Array = []
 var cones: Array = []         # knockable apex cones: {node, pos, y, hit, vel, axis, spin, rest}
 var _cone_mesh: ArrayMesh
 var _celebrate_t := 0.0
@@ -44,6 +46,8 @@ func build(t: Track, d: Dictionary, mat: Material, is_dark: bool) -> void:
 	_braking_boards_and_booths(b)
 	_tyre_chicanes(b)
 	_flags()
+	if night:
+		_photographers_at_start()
 	if not t.joker.is_empty():
 		_joker_signage(b)
 	_floodlights(b)
@@ -220,6 +224,24 @@ func _spawn_firework(at: Vector3) -> void:
 	p.emitting = true
 	get_tree().create_timer(3.5).timeout.connect(p.queue_free)
 	Sfx.play("thud", -12.0, 2.4)
+
+
+func set_focus(f: Vector3) -> void:
+	_focus = f
+
+
+## Night: photographers beside the start straight whose camera flashes pop now and then.
+func _photographers_at_start() -> void:
+	if not LightHalo.enabled():
+		return
+	for k in 7:
+		var s := 14.0 + float(k) * 11.0
+		var pt := _at(s, 1.0 if k % 2 == 0 else -1.0, 2.4)
+		var flash := LightHalo.make(Color("#fff6e0"), 2.6, 1.0)
+		add_child(flash)
+		flash.global_position = Vector3(pt.p.x, pt.y + 1.4, pt.p.y)
+		flash.visible = false
+		_photographers.append([flash, pt.p, randf_range(0.4, 1.2), randf() * 3.0])
 
 
 ## Waving flags on poles around the start line and the paddock.
@@ -435,6 +457,9 @@ func _process(delta: float) -> void:
 					c.vel = v
 					c.spin *= 0.6
 	var t := Time.get_ticks_msec() * 0.001
+	for ph in _photographers:
+		var on: bool = fmod(t * float(ph[2]) + float(ph[3]), 3.0) < 0.12
+		(ph[0] as Node3D).visible = on
 	for a in _anim:
 		var n: Node3D = a.node
 		if not is_instance_valid(n):
@@ -447,8 +472,10 @@ func _process(delta: float) -> void:
 			"rotor":
 				n.rotation.y += delta * 40.0
 			"flag":
-				n.rotation.z = sin(t * 5.0 + a.phase) * 0.12
-				n.scale.x = 1.0 + 0.1 * sin(t * 9.0 + a.phase)
+				# Cars passing stir the flags: wave harder and faster within 22 m.
+				var near := 1.0 - clampf(n.global_position.distance_to(_focus) / 22.0, 0.0, 1.0)
+				n.rotation.z = sin(t * (5.0 + 5.0 * near) + a.phase) * (0.12 + 0.4 * near)
+				n.scale.x = 1.0 + (0.1 + 0.25 * near) * sin(t * 9.0 + a.phase)
 
 
 # --- helpers ---------------------------------------------------------------------------------------
@@ -587,7 +614,7 @@ func _start_gantry(b: PaperKit.Builder) -> void:
 		mi.transform = xf * Transform3D(Basis(Vector3.RIGHT, -PI * 0.5), Vector3(lx, 5.95, -0.2 - 0.16))
 		add_child(mi)
 		if LightHalo.enabled():
-			var sh := LightHalo.make(Color("#ff3a24"), 2.2, 0.9)
+			var sh := LightHalo.make(Color("#ff3a24"), 3.8 if night else 2.2, 0.9)
 			sh.visible = false
 			add_child(sh)
 			sh.global_position = xf * Vector3(lx, 5.95, -0.55)

@@ -3,7 +3,7 @@ extends MultiMeshInstance3D
 ## Tyre marks: short dark strips laid behind the rear wheels on hard cornering, sliding and heavy
 ## braking. A fixed ring of instances, so old marks are recycled and the cost never grows.
 
-const MAX_MARKS := 900
+const MAX_MARKS := 1500   # marks last across several laps before being recycled
 const SEG := 0.7
 
 const WET_RUN := 16.0

@@ -74,7 +74,11 @@ func _build_library() -> void:
 		if k in ["banner", "board", "flag"]:
 			nv = 6
 		for i in nv:
-			vars.append(Pieces.make(k, pal, seed_base * 31 + hash(k) % 1000 + i * 101, i, stage_def["loc_id"]))
+			var made: Dictionary = Pieces.make(k, pal, seed_base * 31 + hash(k) % 1000 + i * 101, i, stage_def["loc_id"])
+			var far_m: Mesh = Pieces.far_mesh(k, pal, made)
+			if far_m != null:
+				made["far"] = far_m
+			vars.append(made)
 		lib[k] = vars
 	lib["gate_fence"] = [Pieces.gate_fence(pal)]
 	lib["_chev_l"] = [{"mesh": Pieces.chevron(-1.0), "r": 1.3, "solid": true, "h": 2.0, "size": 0.4}]
@@ -700,6 +704,11 @@ func _stream(center: Vector2, all_now := false) -> void:
 			_free_chunk(cid)
 
 
+## Distance beyond which pieces with a far form switch to it (full-detail pieces are always used close to the camera).
+func lod_distance() -> float:
+	return clampf(draw_distance * 0.3, 24.0, 42.0)
+
+
 func _build_chunk(cid: int) -> void:
 	var node := Node3D.new()
 	_content.add_child(node)
@@ -717,6 +726,17 @@ func _build_chunk(cid: int) -> void:
 			mi.material_override = material
 			mi.rotation.y = float(pl["yaw"]) - float(pl["out_yaw"])
 			mi.visibility_range_end = draw_distance
+			var far_info: Dictionary = lib[pl["kind"]][pl["var"]]
+			if far_info.has("far"):
+				mi.visibility_range_end = lod_distance()
+				var fmi := MeshInstance3D.new()
+				fmi.mesh = far_info["far"]
+				fmi.material_override = material
+				fmi.rotation.y = mi.rotation.y
+				fmi.visibility_range_begin = lod_distance()
+				fmi.visibility_range_end = draw_distance
+				fmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				pivot.add_child(fmi)
 			pivot.add_child(mi)
 			_make_labels(mi, lib[pl["kind"]][pl["var"]], pl.get("text", ""))
 			pivot.rotation.x = PI * 0.5
@@ -763,6 +783,23 @@ func _build_chunk(cid: int) -> void:
 			mmi.material_override = material
 			mmi.position = center
 			mmi.visibility_range_end = draw_distance + CHUNK * 0.5
+			var group_info: Dictionary = lib[placements[arr[0]]["kind"]][placements[arr[0]]["var"]]
+			if group_info.has("far"):
+				mmi.visibility_range_end = lod_distance()
+				var fmm := MultiMesh.new()
+				fmm.transform_format = MultiMesh.TRANSFORM_3D
+				fmm.mesh = group_info["far"]
+				fmm.instance_count = arr.size()
+				for fk in arr.size():
+					fmm.set_instance_transform(fk, mm.get_instance_transform(fk))
+				var fmi2 := MultiMeshInstance3D.new()
+				fmi2.multimesh = fmm
+				fmi2.material_override = material
+				fmi2.position = center
+				fmi2.visibility_range_begin = lod_distance()
+				fmi2.visibility_range_end = draw_distance + CHUNK * 0.5
+				fmi2.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				node.add_child(fmi2)
 			node.add_child(mmi)
 	_chunk_fx[cid] = _make_fx(members, node)
 

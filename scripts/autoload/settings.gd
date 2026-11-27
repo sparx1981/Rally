@@ -19,7 +19,7 @@ var data := {
 	"render_scale": 0.8, "shadows": 1, "tilt_shift": 1, "density": 0.7, "draw_distance": 110.0, "msaa": 1,
 	"particles": 0.7, "paper_detail": true,
 	"popups": true,            # pop-up / unfolding scenery animation (test toggle)
-	"fps": 60, "show_fps": false, "debug_hud": false, "speed_fx": true, "joker_intro_seen": false, "light_halos": true,
+	"fps": 60, "show_fps": false, "debug_hud": false, "speed_fx": true, "dynamic_res": true, "benchmarked": false, "joker_intro_seen": false, "light_halos": true,
 	"ai_difficulty": 1, "opponents": 5, "camera": 0, "units": 0,
 	"progressive_trigger": false, "controller_trigger_mode": 0, "cockpit_fov": 58.0,
 	"touch_mode": 0, "tilt_sens": 1.0, "tilt_invert": false, "touch_controls": 0,
@@ -54,6 +54,9 @@ func set_value(key: String, value: Variant) -> void:
 
 
 ## Visual-effects tier from the quality preset: 0 low, 1 medium, 2 high. Heavy extras check this.
+var fresh_install := false
+
+
 func fx_level() -> int:
 	return {"low": 0, "medium": 1, "high": 2}.get(str(data.get("preset", "medium")), 1)
 
@@ -139,7 +142,10 @@ func save_settings() -> void:
 func load_settings() -> void:
 	var cf := ConfigFile.new()
 	if cf.load(PATH) != OK:
+		fresh_install = true
 		return
+	if cf.has_section_key("settings", "benchmarked") == false:
+		data["benchmarked"] = true   # existing players keep their chosen preset
 	for k in data.keys():
 		if cf.has_section_key("settings", k):
 			data[k] = cf.get_value("settings", k)

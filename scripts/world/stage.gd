@@ -78,6 +78,7 @@ var _sky_mat: ShaderMaterial
 var helicopter: Helicopter
 var debug_board: Array = []
 var arch_stations: Array = []
+var _crowd_boost := 0.0
 var _crowd: Array = []   # [node, base, phase, is_stand]: spectators that cheer when the action is near
 var _car_mat: ShaderMaterial
 var _reflect_t := 0.0
@@ -1363,7 +1364,7 @@ func _sponsor_board(b: PaperKit.Builder, centre: Vector3, toward: Vector2, sp: A
 	var width := clampf(Pieces.text_width(sp[0], 64) + 0.5, 2.2, 3.6)
 	var basis := Basis(right, Vector3.UP, n3)
 	var xf := Transform3D(basis, centre)
-	b.card(PaperKit.rrect(width, height, 0.04, 0, -height * 0.5), xf, Color(sp[1]), {"thick": 0.04, "edge": 0.03, "lip": 0.0})
+	b.card(PaperKit.rrect(width, height, 0.04, 0, -height * 0.5), xf, Color(sp[1]), {"thick": 0.04, "edge": 0.03, "lip": 0.0, "glow": tod > 0})
 	var label := Label3D.new()
 	label.text = String(sp[0])
 	label.font_size = 64
@@ -2271,7 +2272,47 @@ func _sync_car_mat() -> void:
 	for u in paper_mat.shader.get_shader_uniform_list():
 		var nm: String = u["name"]
 		_car_mat.set_shader_parameter(nm, paper_mat.get_shader_parameter(nm))
-	_car_mat.set_shader_parameter("rim", 1.0 if Settings.fx_level() >= 1 else 0.0)
+	_car_mat.set_shader_parameter("rim", (1.9 if kind() == "rain" else 1.0) if Settings.fx_level() >= 1 else 0.0)
+
+
+## Crowds near the action jump and wave for a couple of seconds (jumps, splashes).
+var _storm_next := 9.0
+var _flash := 0.0
+var _thunder_in := -1.0
+var _base_key := 0.0
+
+
+## Storm stages: now and then a flash lights the sky and the scene, and thunder rolls in a little later.
+func _update_storm(dt: float) -> void:
+	if kind() != "rain" or key_light == null or Settings.fx_level() < 1:
+		return
+	_storm_next -= dt
+	if _storm_next <= 0.0 and _flash <= 0.0:
+		_storm_next = randf_range(9.0, 24.0)
+		_flash = 1.0
+		_thunder_in = randf_range(0.8, 3.2)
+		_base_key = key_light.light_energy
+	if _thunder_in >= 0.0:
+		_thunder_in -= dt
+		if _thunder_in < 0.0:
+			Sfx.play("thud", -3.0, 0.42)
+	if _flash > 0.0:
+		_flash = maxf(0.0, _flash - dt * 3.2)
+		# Two quick pulses.
+		var pulse := _flash * (0.6 + 0.4 * sin(_flash * 22.0))
+		if _sky_mat:
+			_sky_mat.set_shader_parameter("flash", pulse)
+		key_light.light_energy = maxf(_base_key, 0.0) + pulse * 1.6
+		env.ambient_light_energy = float(wx.amb_e) * 0.95 + pulse * 0.6
+		if _flash <= 0.0:
+			if _sky_mat:
+				_sky_mat.set_shader_parameter("flash", 0.0)
+			key_light.light_energy = _base_key
+			env.ambient_light_energy = float(wx.amb_e) * 0.95
+
+
+func cheer_crowd() -> void:
+	_crowd_boost = 2.2
 
 
 func apply_haze() -> void:
@@ -2306,14 +2347,19 @@ func update(dt: float, focus: Vector3, radius: float, player_s: float, cam: Came
 		_sky_mat.set_shader_parameter("t", _time)
 	if helicopter:
 		helicopter.update(dt, player_s)
+	_crowd_boost = maxf(0.0, _crowd_boost - dt)
+	_update_storm(dt)
+	if rx_props:
+		rx_props.set_focus(focus)
 	for c: Array in _crowd:
 		var cn: Node3D = c[0]
 		var near := cn.global_position.distance_to(focus) < 70.0
-		var cheer := absf(sin(_time * 7.0 + float(c[2]))) * (1.0 if near else 0.0)
+		var boost := 1.0 + 3.5 * clampf(_crowd_boost, 0.0, 1.0)
+		var cheer := absf(sin(_time * 7.0 * (1.0 + 0.5 * clampf(_crowd_boost, 0.0, 1.0)) + float(c[2]))) * (1.0 if near else 0.0)
 		if bool(c[3]):
-			cn.scale.y = 1.0 + 0.012 * cheer
+			cn.scale.y = 1.0 + 0.012 * cheer * boost
 		else:
-			cn.position.y = float(c[1]) + 0.07 * cheer
+			cn.position.y = float(c[1]) + 0.07 * cheer * boost
 	_reflect_t -= dt
 	if _reflect_t <= 0.0:
 		_reflect_t = 0.25
