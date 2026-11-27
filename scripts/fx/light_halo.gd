@@ -85,7 +85,7 @@ static func street(color: Color, drop: float, radius: float, strength := 1.0) ->
 	cone.material_override = _material(_cone_tex, color, strength * 0.14, false)
 	cone.position = Vector3(0, -drop * 0.5, 0)
 	cone.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	root.add_child(cone)
+	# (The cone is left out: a visible wedge reads as a solid when it is close to the camera.)
 	var pool := MeshInstance3D.new()
 	var pm := PlaneMesh.new()
 	pm.size = Vector2(radius * 2.2, radius * 2.2)

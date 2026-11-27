@@ -576,10 +576,14 @@ func _track_lights(b: PaperKit.Builder) -> void:
 		var i: int = pt.i
 		# Mast, arm over the road and a lamp head.
 		b.box(Vector3(0, 4.5, 0), Vector3(0.22, 9.0, 0.22), xf, Color("#6a6e75"))
-		var toward := -side
+		# The arm must reach over the road: work out which local side faces the road centre.
+		var inward := -Vector2(pt.n.x, pt.n.y) * side
+		var toward := signf(xf.basis.x.dot(Vector3(inward.x, 0.0, inward.y)))
+		if toward == 0.0:
+			toward = 1.0
 		b.box(Vector3(0, 9.0, 0), Vector3(0.18, 0.18, 0.18), xf, Color("#6a6e75"))
-		var head := Vector3(toward * 1.7, 9.0, 0)
-		b.box(Vector3(toward * 0.85, 9.0, 0), Vector3(1.7, 0.14, 0.14), Transform3D(xf.basis, xf.origin), Color("#6a6e75"))
+		var head := Vector3(toward * 3.4, 9.0, 0)
+		b.box(Vector3(toward * 1.7, 9.0, 0), Vector3(3.4, 0.14, 0.14), xf, Color("#6a6e75"))
 		b.box(head, Vector3(0.9, 0.18, 0.5), xf, Color("#fff2c4"), Color(-1, 0, 0), true)
 		solids.append([pt.p, 0.4])
 		if LightHalo.enabled():
@@ -603,7 +607,8 @@ func _track_lights(b: PaperKit.Builder) -> void:
 		pool.material_override = pm
 		pool.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(pool)
-		pool.position = Vector3(c.x, track.road_h_i(i) + 0.3, c.y)
+		var under: Vector2 = pt.p + inward * 3.4
+		pool.position = Vector3(under.x, track.road_h_i(i) + 0.3, under.y)
 		pool.rotation.y = atan2(track.tang[i].x, track.tang[i].y) + PI * 0.5
 
 
