@@ -24,7 +24,7 @@ Circuit benchmark numbers are filled in from `--view=bench --rx` runs (3 laps, s
 | Width transition max 1:20 | Partial | Widths are smoothed, but the 1:20 limit is not enforced by a check. |
 | Start line to turn 1 of 100–220 m | Partial | Set by layout; not measured per circuit. |
 | Camber 1.5–3 %, bowls 8–18 % | Partial | Banking keyframes and downhill pull exist in physics. A crown on straights is not modelled. |
-| Joker delta +1.5 to +2.5 s | Done for Chalk Valley, others pending | AI pace on the lane follows each circuit's `delta`. Chalk Valley measures +1.9 s. |
+| Joker delta +1.5 to +2.5 s | Partial | See the benchmark table below. Seven circuits are within range or close; four are too slow; three are not completed by the AI. |
 | Max racers 5 or 6 | Done | Opponent count is capped per circuit. |
 
 ## 4. The 12 levels
@@ -78,3 +78,33 @@ Circuit benchmark numbers are filled in from `--view=bench --rx` runs (3 laps, s
 ## 8. Car audit
 
 See `docs/car-audit.md` (in progress).
+
+## Benchmark: Joker lane cost per circuit (AI driver, 3 laps, solo)
+
+Measured with `--view=bench --rx`; "natural" is the lane's cost with no extra pacing, "pace" is what the data adds.
+
+| Circuit | Target | Natural | Pace added | AI completes Joker |
+| --- | --- | --- | --- | --- |
+| Chalk Valley Bowl | +2.0 | +0.5 | 2.2 | yes (measured about +1.8) |
+| Timberline Crest | +2.2 | +4.2 | 0 | yes, but lane too slow |
+| Fjord Switchback | +1.9 | +3.2 | 0 | yes, but lane too slow |
+| Breton Dustbowl | +1.5 | +2.1 | 0 | yes |
+| Sierra Alta Quarry | +1.6 | +1.2 | 0.6 | yes |
+| Bauxite Cauldron | +2.1 | +3.5 | 0 | yes, but lane too slow |
+| Funnel Ring | +2.3 | +5.5 | 0 | no: AI loses the lane mouth |
+| Ardennes Gorge | +1.9 | +1.3 | 0.8 | yes |
+| Baltic Concrete | +2.0 | +0.2 | 2.5 | yes |
+| Apex Ridge | +1.8 | +3.2 | 0 | no |
+| Harbor Grid | +2.1 | +2.4 | 0 | no |
+| Granite Apex | +2.2 | +2.1 | 0.15 | yes |
+
+All 12 circuits complete 3 laps in the benchmark. A human player is not affected by the AI's lane trouble;
+the Joker counts once half the lane has been driven.
+
+## Fixed during this pass
+
+- Lap counting failed when a car's station landed exactly on the lap length (Baltic Concrete never advanced past lap 1).
+- Banked roads left the low-side wheels unloaded, stalling cars on Timberline Crest's spiral.
+- The Joker lane's outer wall jumped inward at the merge; it now funnels back to the road.
+- Lane entry is open for the first fifth of the lane before the island begins.
+- Route preview images generated for all 12 circuits.
