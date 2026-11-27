@@ -201,7 +201,8 @@ at paper-craft fidelity (box arches, folded planes); exact curvature is not atte
 
 ## Not done
 
-- Roof racks, bull bars and exact grille shapes.
+- Exact grille shapes from reference artwork (shapes are now per style: oval, kidney, shield, mesh, bars, slim, none).
+- Roof racks: Drover 60 / Badger 4x4 (full rack, spare wheel, kit), Otter Estate (rails), Beetle (light rack). Bull bars: Drover 60, Badger 4x4, Mule truck.
 - Per-car liveries drawn from the reference artwork (deliberately avoided).
 - A pixel-level check from front, side and rear camera angles for every car; the checks above are silhouette and
   proportion checks by parameter, plus a lineup render.

@@ -1082,6 +1082,8 @@ func _settings() -> void:
 			list.add_child(_choice("Paper fibre & grain detail", ["Off", "On"], 1 if Settings.g("paper_detail") else 0, func(i): Settings.set_value("paper_detail", i == 1)))
 			list.add_child(_choice("Frame rate cap", ["30 fps", "60 fps"], 1 if int(Settings.g("fps")) == 60 else 0, func(i): Settings.set_value("fps", 60 if i == 1 else 30)))
 			list.add_child(_choice("Show FPS counter", ["Off", "On"], 1 if Settings.g("show_fps") else 0, func(i): Settings.set_value("show_fps", i == 1)))
+			list.add_child(_choice("Debug panel (for bug reports)", ["Off", "On"], 1 if Settings.g("debug_hud") else 0, func(i): Settings.set_value("debug_hud", i == 1)))
+			list.add_child(_note("Shows car, track, sector, surface and speed in the corner of the race screen. Include it in screenshots when reporting a problem."))
 			list.add_child(_note("Density and draw distance apply from the next stage you load."))
 		1:
 			list.add_child(_choice("On-screen controls", ["Auto (hide with controller)", "Always show", "Off"], int(Settings.g("touch_controls")), func(i): Settings.set_value("touch_controls", i)))
@@ -1356,6 +1358,8 @@ func _parse_args() -> void:
 			_shot["view"] = a.substr(7)
 		elif a.begins_with("--preset="):
 			Settings.apply_preset(a.substr(9))
+		elif a == "--debughud":
+			Settings.data["debug_hud"] = true
 		elif a.begins_with("--popups="):
 			Settings.data["popups"] = a.substr(9) == "1"
 		elif a.begins_with("--camera="):

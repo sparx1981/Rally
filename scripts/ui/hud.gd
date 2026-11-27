@@ -12,6 +12,8 @@ var speed_tag: PanelContainer
 var joker_tag: PanelContainer
 var pos_tag: PanelContainer
 var fps_label: Label
+var debug_panel: PanelContainer
+var debug_label: Label
 var center_card: PanelContainer
 var reset_button := Button.new()
 var hint_tag: PanelContainer
@@ -107,6 +109,22 @@ func _ready() -> void:
 	reset_button.offset_bottom = 34
 	reset_button.hide()
 	reset_button.pressed.connect(func(): reset_requested.emit())
+	debug_panel = PanelContainer.new()
+	var dbg_box := StyleBoxFlat.new()
+	dbg_box.bg_color = Color(0.05, 0.05, 0.08, 0.72)
+	dbg_box.set_content_margin_all(8)
+	dbg_box.set_corner_radius_all(4)
+	debug_panel.add_theme_stylebox_override("panel", dbg_box)
+	debug_panel.visible = false
+	debug_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(debug_panel)
+	debug_panel.offset_left = 12
+	debug_panel.offset_top = 172
+	debug_label = Label.new()
+	debug_label.add_theme_font_size_override("font_size", 14)
+	debug_label.add_theme_color_override("font_color", Color("#e8ffd8"))
+	debug_label.add_theme_constant_override("line_spacing", 0)
+	debug_panel.add_child(debug_label)
 	fps_label = Label.new()
 	fps_label.position = Vector2(24, 140)
 	fps_label.add_theme_font_size_override("font_size", 18)
@@ -209,6 +227,12 @@ func show_hint(text: String) -> void:
 	hint_tag.offset_right = w.x * 0.5
 	hint_tag.offset_top = -w.y * 0.5
 	hint_tag.offset_bottom = w.y * 0.5
+
+
+func set_debug(text: String) -> void:
+	debug_panel.visible = text != ""
+	if text != "":
+		debug_label.text = text
 
 
 func _process(delta: float) -> void:

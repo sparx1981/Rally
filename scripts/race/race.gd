@@ -834,7 +834,44 @@ func _positions() -> Array:
 	return arr
 
 
+## Bug-report panel (Settings > Graphics > Debug panel): everything needed to place a screenshot.
+func _debug_text() -> String:
+	var tr := stage.track
+	var st: Dictionary = Catalog.stages()[stage_index]
+	var span := tr.length if tr.rx else (tr.finish_s - tr.start_s)
+	var along := fposmod(player.s - tr.start_s, tr.length) if tr.rx else clampf(player.s - tr.start_s, 0.0, span)
+	var frac := clampf(along / maxf(span, 1.0), 0.0, 0.9999)
+	var sector := int(frac * 3.0) + 1
+	var sector_m := along - (sector - 1) * span / 3.0
+	var chapter := ""
+	if not tr.chapters.is_empty():
+		chapter = "  chapter %d" % (mini(int(frac * tr.chapters.size()), tr.chapters.size() - 1) + 1)
+	var lat_state := "on road"
+	if not player.on_road:
+		lat_state = "OFF ROAD"
+	var lane := ""
+	if tr.rx and not tr.joker.is_empty():
+		lane = "  joker %s" % ("DONE" if player.joker_taken else "todo")
+	var weather := "%s / %s" % [kind_label(), ["Day", "Dusk", "Night"][clampi(stage.tod, 0, 2)]]
+	var lines := PackedStringArray([
+		"CAR   %s (#%d) %s  %s" % [player.stats.get("name", "?"), player.number, player.stats.get("style", "?"), player.stats.get("class", "")],
+		"TRACK %s  [%s, stage %d, seed %d]" % [Catalog.stage_title(stage_index), st.get("loc_id", "?"), stage_index, int(st.get("seed", 0))],
+		"SECT  %d/3  (%.0f m into sector)  %.0f / %.0f m  %.0f%%%s%s" % [sector, sector_m, along, span, frac * 100.0, chapter, lane],
+		"LAP   %d  station s=%.1f  idx=%d  lat=%.2f" % [player.lap + 1, player.s, player.track_i, player.lat],
+		"SURF  %s  grip=%.2f  %s%s%s" % [player.patch_kind if player.patch_kind != "" else "base", player.surface, lat_state, "  PUDDLE" if player.in_puddle else "", "  WATER" if player.in_water else ""],
+		"POS   x=%.1f z=%.1f  y=%.2f  vy=%.1f  %s" % [player.pos.x, player.pos.y, player.y, player.vy, "AIR %.1fs" % player.air_time if player.airborne else "grounded"],
+		"MOVE  %.0f km/h  gear %d  rpm %d  slip %.2f  thr %.2f brk %.2f st %.2f" % [player.speed() * 3.6, player.gear, int(player.rpm), player.slip, player.throttle, player.brake, player.steer],
+		"WORLD %s  mode %d  state %d  t=%.1fs  %d fps" % [weather, int(mode), int(state), race_time, Engine.get_frames_per_second()],
+	])
+	return "\n".join(lines)
+
+
+func kind_label() -> String:
+	return String(stage.kind()).capitalize()
+
+
 func _update_hud() -> void:
+	hud.set_debug(_debug_text() if bool(Settings.g("debug_hud")) else "")
 	hud.set_time(race_time if state != State.DONE else player.finish_time)
 	hud.set_speed(player.speed(), player.gear)
 	hud.pace.set_note(stage.track.next_note(player.s, 70.0), player.s)

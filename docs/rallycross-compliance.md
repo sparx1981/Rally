@@ -146,3 +146,9 @@ All 12 circuits complete 3 laps. A human player is not affected by the AI's lane
 - Joker hay chicanes stand on the straightest stretch of the lane and the AI threads the gap.
 - 12 new look-alike cars (see `docs/car-audit.md`).
 - Known: Joker lanes now cost +1 to +11 s for the AI (Bauxite is the highest), above the spec range, by design.
+
+## Sixth pass: sky, car fittings, debug panel
+
+- New papercraft sky: three drifting cloud decks, stepped paper tones, silver-lined edges, light shafts from sun and moon, sunset glow band, paper moon, twinkling stars, and a dark layered storm deck with rain curtains.
+- Grille shapes per style, roof racks and bull bars on utility bodies.
+- Settings > Graphics > Debug panel: car, track, sector, lap, surface, position, speed and world state on the race screen.
