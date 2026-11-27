@@ -105,3 +105,13 @@ All 12 circuits complete 3 laps. A human player is not affected by the AI's lane
 - Large props (containers, campervans, paddock, tower, bleachers, floodlights, arch columns) are solid and kept clear of every road and lane; mining relics became stone block piles.
 - Wall contact no longer bleeds all speed when a car leans on Armco.
 - Remaining: gaps of 1-3 m between road and ground at a few embankment starts, and two stray scenery pieces on Timberline's lane side.
+
+## Second polish pass
+
+- Crossing decks follow the road's height and banking (no step at the ends) and sit on concrete piers.
+- Start gantry rebuilt as a braced steel truss with footings; the duplicate checkered arch is no longer drawn on circuits.
+- The last sample on a closed circuit had a reversed direction, which made the closing wall piece cross the whole road at the lap line. Fixed for every circuit.
+- The Joker lane's outer wall now begins at its true position instead of jumping sideways at the entrance.
+- Wall contact: no per-step speed drain, no bounce or spin from leaning contacts, and a car pinned against a wall is eased away so it can always drive off.
+- Lap gates tolerate the road margin, so a bridge deck can no longer hide a lap crossing.
+- Loose-surface drag and lap-1 wetness reduced again; Fjord's steepest climb softened from 24% to about 15%.

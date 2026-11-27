@@ -1479,6 +1479,9 @@ func _run_bench() -> void:
 					if prev_s < b and ps >= b and ps - prev_s < 30.0 and sec.has(lp):
 						sec[lp][1] = race._race_time_for_bench()
 					prev_s = ps
+				if frames % 30 == 0 and OS.get_cmdline_user_args().has("--rxstuck") and race.player.lap >= 1 and absf(race.player.v_long) < 1.5 and race.player.s > 20.0:
+					var ps: Car = race.player
+					print("RXSTUCK t=%ds lap=%d s=%.0f lat=%.1f v=%.1f y=%.2f airborne=%s on_road=%s steer=%.2f thr=%.2f brk=%.2f walls=%s" % [frames / 30, ps.lap, ps.s, ps.lat, ps.v_long, ps.y, str(ps.airborne), str(ps.on_road), ps.steer, ps.throttle, ps.brake, race.stage.track.barriers_at(ps.s, signf(ps.lat)).map(func(b): return "%s:%.1f" % [b.kind, race.stage.track.barrier_wall(b, ps.s)])])
 				if frames % 8 == 0 and OS.get_cmdline_user_args().has("--rxtrace") and Catalog.stages()[si].has("rx") and race.player.s > _arg_float("--rxlo=", 1250.0) and race.player.s < _arg_float("--rxhi=", 1480.0):
 					var pl: Car = race.player
 					print("RXPROGRESS t=%ds lap=%d gate=%d s=%.0f lat=%.1f v=%.1f joker=%s on_road=%s steer=%.2f thr=%.2f brk=%.2f gear=%d rpm=%.0f wl=%s wg=%s y=%.2f air=%s slip=%.2f acc=%.2f surf=%.2f grade=%.3f patch=%s h=%.2f tang=%.2f walls=%s hw=%.1f" % [frames / 30, pl.lap, int(race._circuit_progress[pl].gate), pl.s, pl.lat, pl.v_long, pl.joker_taken, pl.on_road, pl.steer, pl.throttle, pl.brake, pl.gear, pl.rpm, pl.wheel_load, pl.wheel_grip, pl.y, pl.airborne, pl.slip, pl.longitudinal_accel, pl.surface, race.stage.track.grade_along(pl.pos, pl.s, pl.lat, pl.fwd()), pl.patch_kind, pl.h, race.stage.track.heading_at(pl.track_i), race.stage.track.barriers_at(pl.s, signf(pl.lat)).map(func(b): return "%s:%.1f" % [b.kind, race.stage.track.barrier_wall(b, pl.s)]), race.stage.track.road_half_width(pl.s)])

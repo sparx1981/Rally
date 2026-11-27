@@ -425,7 +425,9 @@ func _update_circuit(car: Car) -> void:
 	var previous: float = progress.previous
 	progress.previous = car.s
 	var advance := fposmod(car.s - previous, tr.length)
-	if not car.on_road or advance <= 0.0 or advance > 8.0 or car.vel.dot(tr.tang[car.track_i]) <= 0.0:
+	# Count a gate when the car is on, or just beside, the road (a bridge deck or kerb must not hide the crossing).
+	var beside := absf(car.lat) <= tr.road_extent(car.s) + 5.0
+	if not (car.on_road or beside) or advance <= 0.0 or advance > 8.0 or car.vel.dot(tr.tang[car.track_i]) <= 0.0:
 		return
 	var checkpoint := float(progress.gate) * tr.length * 0.25
 	var to_gate := fposmod(checkpoint - fposmod(previous, tr.length), tr.length)
