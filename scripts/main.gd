@@ -1800,6 +1800,34 @@ func _run_rxcheck(list: Array) -> void:
 				if q0.distance_to(q1) > 6.0:
 					print("RXWALL %s bar kind=%s ref=%s side=%.0f s0=%.1f s1=%.1f seg at k=%.1f..%.1f len=%.1f wall0=%.1f wall1=%.1f idx=%d,%d" % [Catalog.stages()[si].id, bar["kind"], bar.get("ref", ""), float(bar["side"]), float(bar["s0"]), float(bar["s1"]), kk, k2, q0.distance_to(q1), tr.barrier_wall(bar, kk), tr.barrier_wall(bar, k2), tr.index_at(kk), tr.index_at(k2)])
 				kk = k2
+		var cl := ""
+		for cn in tr.corners:
+			cl += " [%.0f-%.0f sev%d %s]" % [float(cn.s0), float(cn.s1), int(cn.sev), "L" if float(cn.dir) < 0.0 else "R"]
+		if not tr.joker.is_empty():
+			var folds := 0
+			var worst_f := 0.0
+			var where_f := 0.0
+			var jside: float = float(tr.joker.side)
+			for ji in range(int(tr.joker.i0), int(tr.joker.i1) + 1):
+				var band_f := tr.joker_band(tr.dist[ji])
+				if is_nan(band_f.x):
+					continue
+				var far_edge := maxf(absf(band_f.x), absf(band_f.y))
+				var ti: float = tr.tang[ji].x * tr.tang[mini(ji + 1, tr.pts.size() - 1)].y - tr.tang[ji].y * tr.tang[mini(ji + 1, tr.pts.size() - 1)].x
+				var kk := absf(float(tr.curv[ji]))
+				if ti * jside > 0.0 and kk * far_edge > 0.8:
+					folds += 1
+					if kk * far_edge > worst_f:
+						worst_f = kk * far_edge
+						where_f = tr.dist[ji]
+			print("RXFOLD %s lane %.0f-%.0f (%.0f m) fold_samples=%d worst=%.2f at s=%.0f" % [Catalog.stages()[si].id, float(tr.joker.s0), float(tr.joker.s1), float(tr.joker.s1) - float(tr.joker.s0), folds, worst_f, where_f])
+		print("RXCORNERS %s len=%.0f joker=%s corners=%s" % [Catalog.stages()[si].id, tr.length, str([float(tr.joker.get("s0", 0.0)), float(tr.joker.get("s1", 0.0))]), cl])
+		var gl := ""
+		var sg := 0.0
+		while sg < tr.length:
+			gl += " %.0f:%.1f" % [sg, 100.0 * (tr.road_h(sg + 8.0) - tr.road_h(sg - 8.0)) / 16.0]
+			sg += 40.0
+		print("RXGRADE %s grade%% every 40m:%s" % [Catalog.stages()[si].id, gl])
 		print("RXSEAMN %s nrm0=%s nrmN=%s tang0=%s tangN=%s n=%d" % [Catalog.stages()[si].id, str(tr.nrm[0]), str(tr.nrm[nlast]), str(tr.tang[0]), str(tr.tang[nlast]), tr.pts.size()])
 		print("RXSEAMGAP %s gap=%.2f start_s=%.1f finish_s=%.1f len=%.1f" % [Catalog.stages()[si].id, tr.pts[nlast].distance_to(tr.pts[0]), tr.start_s, tr.finish_s, tr.length])
 		print("RXSEAM %s elev[0]=%.2f elev[last]=%.2f road_h(0)=%.2f road_h(L-1)=%.2f road_h(L-10)=%.2f road_h(10)=%.2f heights0=%.2f heightsN=%.2f bank0=%.3f bankN=%.3f" % [Catalog.stages()[si].id, tr.elev[0], tr.elev[nlast], tr.road_h(0.0), tr.road_h(tr.length - 1.0), tr.road_h(tr.length - 10.0), tr.road_h(10.0), tr.heights[0], tr.heights[nlast], tr.bank_slope(0), tr.bank_slope(nlast)])
@@ -1895,7 +1923,11 @@ func _run_rxwall(list: Array) -> void:
 			await get_tree().process_frame
 		var tested := 0
 		var passed := 0
-		var s0 := 30.0
+		var s0 := _arg_float("--rxwall_s=", 30.0)
+		var one_only := false
+		for a in OS.get_cmdline_user_args():
+			if a.begins_with("--rxwall_s="):
+				one_only = true
 		while s0 < tr.length - 30.0:
 			for side in [-1.0, 1.0]:
 				var bars := tr.barriers_at(s0, side)
@@ -1905,12 +1937,12 @@ func _run_rxwall(list: Array) -> void:
 				for bar in bars:
 					wall = maxf(wall, tr.barrier_wall(bar, s0))
 				# Start inside the road on that side, aimed at the wall at 45 degrees.
-				var start_lat: float = side * maxf(tr.road_half_width(s0) - 2.0, 1.0)
+				var start_lat: float = float(side) * maxf(tr.road_half_width(s0) - 2.0, 1.0)
 				c.place_at(s0, start_lat)
 				var i := tr.index_at(s0)
 				var tang := tr.tang[i]
 				var nrm := tr.nrm[i]
-				var dir := (tang + nrm * side).normalized()
+				var dir: Vector2 = (tang + nrm * float(side)).normalized()
 				c.h = atan2(dir.x, dir.y)
 				c.vel = dir * 14.0
 				c.throttle = 1.0
@@ -1918,6 +1950,8 @@ func _run_rxwall(list: Array) -> void:
 				var worst := 0.0
 				for f in 150:
 					await get_tree().physics_frame
+					if one_only and f % 5 == 0:
+						print("  WTRACE side=%.0f f=%d s=%.0f lat=%.2f v=%.1f y=%.2f air=%s wall=%s" % [side, f, c.s, c.lat, c.vel.length(), c.y, str(c.airborne), str(tr.barriers_at(c.s, signf(c.lat)).map(func(b): return "%s/%s:%.1f" % [b.kind, b.get("ref", ""), tr.barrier_wall(b, c.s)]))])
 					var bars2 := tr.barriers_at(c.s, signf(c.lat))
 					var w2 := 0.0
 					for bar in bars2:
@@ -1928,5 +1962,7 @@ func _run_rxwall(list: Array) -> void:
 				if worst > 0.0:
 					passed += 1
 					print("RXWALLPASS %s s=%.0f side=%.0f wall=%.1f beyond=%.1f barriers=%s" % [Catalog.stages()[si].id, s0, side, wall, worst, str(bars.map(func(b): return "%s/%s" % [b.kind, b.get("ref", "")]))])
+			if one_only:
+				break
 			s0 += 25.0
 		print("RXWALLSUM %s tested=%d passed_through=%d" % [Catalog.stages()[si].id, tested, passed])

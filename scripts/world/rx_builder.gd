@@ -168,6 +168,8 @@ static func build(track: Track, def: Dictionary) -> void:
 		_build_joker(track, joker)
 	for jump: Dictionary in rx.get("jumps", []):
 		_add_jump(track, jump)
+	for splash: Dictionary in rx.get("splash", []):
+		_add_splash(track, float(splash.f) * track.length)
 	if rx.has("tunnel"):
 		var span: Array = rx.tunnel
 		var mid := (float(span[0]) + float(span[1])) * 0.5 * length
@@ -273,27 +275,43 @@ static func _build_joker(track: Track, jk: Dictionary) -> void:
 	hi.fill(NAN)
 	gap.fill(0.0)
 	var max_hw := 0.0
+	# Entry and exit blends are measured in metres (30 % of the lane, 36-80 m), so a long lane opens and closes
+	# as gradually as a short one: it grows from a point at the road edge, the island appears after it, and
+	# the whole thing folds back into the road at the other end.
+	var blend := clampf((s1 - s0) * 0.3, 36.0, 80.0)
 	for i in range(i0, i1 + 1):
 		var u := clampf((track.dist[i] - s0) / (s1 - s0), 0.0, 1.0)
+		var d0 := track.dist[i] - s0
+		var d1 := s1 - track.dist[i]
 		var hw: float = track.widths[i] * 0.5
 		max_hw = maxf(max_hw, hw)
-		var ramp := smoothstep(0.22, 0.50, u) * (1.0 - smoothstep(0.55, 0.85, u))
+		var ramp := smoothstep(0.55 * blend, 1.5 * blend, d0) * smoothstep(0.55 * blend, 1.5 * blend, d1)
 		gap[i] = ISLAND_GAP * ramp
 		var excursion := float(jk.out) * 0.5 * pow(sin(PI * u), 1.3)
 		var inner_edge := hw + gap[i] + excursion
 		lo[i] = inner_edge
-		# The outer wall funnels back towards the road over the last fifth, so a car still in the lane
-		# is guided onto the track instead of meeting a wall that jumps in at the merge.
-		# The lane opens as a wedge from the road edge (no squared-off mouth) and funnels back at the exit.
-		hi[i] = inner_edge + lane_w * maxf(smoothstep(0.0, 0.22, u), 0.12) * (1.0 - 0.75 * smoothstep(0.6, 0.97, u))
+		var enter := maxf(smoothstep(0.0, blend, d0), 0.12)
+		var leave := 0.25 + 0.75 * smoothstep(0.0, blend, d1)
+		hi[i] = inner_edge + lane_w * enter * leave
 	track.joker = {"s0": s0, "s1": s1, "side": side, "w": lane_w, "i0": i0, "i1": i1, "lo": lo, "hi": hi, "gap": gap,
-		"surf": str(jk.surf), "max_hw": max_hw}
+		"surf": str(jk.surf), "max_hw": max_hw, "blend": blend}
 	var lat0 := max_hw + 0.3 if side > 0.0 else -99.0
 	var lat1 := 99.0 if side > 0.0 else -(max_hw + 0.3)
 	_add_patch(track, s0, s1, lat0, lat1, str(jk.surf))
 	# The lane is graded and packed, so it costs the Joker's time delta without being a mud bath:
 	# half way between its loose surface and tarmac.
 	track.patches[-1]["grip"] = lerpf(float(track.patches[-1]["grip"]), 1.15, 0.35)
+
+
+## A shallow water crossing: the road dips a little and water runs over it (a splash for the pace notes).
+static func _add_splash(track: Track, station: float) -> void:
+	var ci := track.index_at(station)
+	track.flatten_at(station, 12.0, 20.0)
+	for i in range(track.index_at(station - 15.0), track.index_at(station + 15.0) + 1):
+		track.elev[i] -= 0.95 * (1.0 - smoothstep(0.0, 15.0, absf(track.dist[i] - station)))
+	track.features.append({"type": "splash", "i": ci, "s": station, "s0": station - 3.5, "s1": station + 3.5,
+		"water_y": track.road_h(station) + Stage.ROAD_Y + 0.20})
+	track.notes.append({"s0": station - 3.5, "s1": station + 3.5, "kind": "splash", "dir": 0.0, "sev": 0, "hairpin": false})
 
 
 static func _add_jump(track: Track, jump: Dictionary) -> void:
@@ -355,9 +373,12 @@ static func _build_barriers(track: Track, rx: Dictionary) -> void:
 		track.barriers.append(_bar(a, b, side, "tyre", "lane_out"))
 		# Island: a foam and tyre divider along the road edge and along the lane's inner edge, from the
 		# nose to the merge, leaving the entry and exit open.
-		var span: float = float(jk.s1) - float(jk.s0)
-		track.barriers.append(_bar(float(jk.s0) + span * 0.38, float(jk.s1) - span * 0.38, side, "island", "road"))
-		track.barriers.append(_bar(float(jk.s0) + span * 0.38, float(jk.s1) - span * 0.38, side, "island", "lane_in"))
+		var blend: float = float(jk.blend)
+		var isl0: float = float(jk.s0) + blend * 0.9
+		var isl1: float = float(jk.s1) - blend * 0.9
+		if isl1 > isl0:
+			track.barriers.append(_bar(isl0, isl1, side, "island", "road"))
+			track.barriers.append(_bar(isl0, isl1, side, "island", "lane_in"))
 	track.index_barriers()
 
 
