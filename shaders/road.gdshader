@@ -3,8 +3,6 @@
 shader_type spatial;
 render_mode diffuse_lambert, specular_disabled;
 
-#include "res://shaders/surface.gdshaderinc"
-
 uniform vec3 leak : source_color = vec3(0.627, 0.376, 0.172);
 uniform float wrap = 0.3;
 uniform vec3 road : source_color = vec3(0.79, 0.67, 0.49);
@@ -14,18 +12,14 @@ uniform sampler2D noise : hint_default_white, filter_linear_mipmap, repeat_enabl
 uniform sampler2D fibre : hint_default_white, filter_linear_mipmap, repeat_enable;
 uniform float fibre_amount = 0.09;
 uniform float wet = 0.0;
-uniform int surface_kind = 2;
-uniform float detail = 1.0;
 uniform vec3 lamp_pts[8];
 uniform int lamp_n = 0;
 uniform float refl = 0.0;
 
 varying vec3 wpos;
-varying float vdist;
 
 void vertex() {
 	wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-	vdist = -(MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).z;
 }
 
 void fragment() {
@@ -51,14 +45,6 @@ void fragment() {
 			float f = texture(fibre, wpos.xz * 0.5).r * 0.6 + texture(fibre, wpos.xz * 1.83 + vec2(0.37, 0.11)).r * 0.4;
 			c *= 1.0 + (f - 0.5) * fibre_amount * 2.0;
 		}
-	}
-	if (COLOR.r >= 0.5 && detail > 0.0) {
-		vec2 tilt;
-		vec3 rich = surf_detail(surface_kind, wpos, vdist, c, wet, tilt);
-		c = mix(c, rich, detail);
-		vec3 nw = (INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz;
-		nw = normalize(nw + vec3(tilt.x, 0.0, tilt.y) * detail);
-		NORMAL = normalize((VIEW_MATRIX * vec4(nw, 0.0)).xyz);
 	}
 	ALBEDO = c;
 	ROUGHNESS = 1.0;

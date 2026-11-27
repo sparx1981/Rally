@@ -196,3 +196,8 @@ All 12 circuits complete 3 laps. A human player is not affected by the AI's lane
 
 - Night lights in the sunset/sunrise journey: track lamps, floodlight glow and window glow now follow the fading light (they only existed for fixed dusk/night before), headlights are brighter at night, and wet-road reflections follow the same level.
 - Tyre walls: a hard hit (over about 4 m/s into the wall) knocks one to three tyres off. They tumble onto the road, settle, and are kicked on by passing cars (at most 18 loose tyres).
+
+## Fourteenth pass
+
+- The procedural per-pixel ground shader (pebbles, cracks, ripples) was removed: it cost too much on phones (45 fps on a Galaxy S26 Ultra at High). Roads and sectors use the original paper material again.
+- Surface character now comes from plain geometry (no per-pixel cost): loose berms along the shoulders of gravel, dirt, sand and mud sectors, scattered stones and clods, dark mud puddles, and on tarmac repair patches and cracks.

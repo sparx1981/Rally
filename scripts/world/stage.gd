@@ -250,9 +250,6 @@ func _make_materials() -> void:
 	road_mat.set_shader_parameter("rut", pal["rut"])
 	road_mat.set_shader_parameter("edge_col", Color(pal["road"]).lerp(Color(0.24, 0.15, 0.09), 0.7))
 	road_mat.set_shader_parameter("wet", 1.0 if wx["kind"] == "rain" else 0.0)
-	var road_kind: int = 0 if track.rx else int({"alpine": 7, "lakes": 7, "taiga": 7, "harbour": 2, "canyon": 2, "gorge": 2, "meadow": 1, "cliffs": 1}.get(str(def.get("loc_id", "")), 4))
-	road_mat.set_shader_parameter("surface_kind", road_kind)
-	road_mat.set_shader_parameter("detail", (0.85 if road_kind != 7 else 0.6) if bool(Settings.g("paper_detail")) else 0.0)
 
 
 func _make_lights() -> void:
@@ -544,25 +541,6 @@ func _quad_idx(idx: PackedInt32Array, v: PackedVector3Array, a: int, b: int, c: 
 
 
 ## Rallycross surface sectors (chalk, clay, granite ...) laid over the tarmac, the Joker lane and kerbs.
-const SURFACE_KINDS := {"tarmac": 0, "chalk": 1, "fine_gravel": 1, "granite": 2, "coarse_gravel": 2, "industrial": 2, "sand": 3,
-	"clay": 4, "forest_dirt": 4, "mud": 5, "ford": 2, "gravel": 1, "ice": 6, "deep snow": 7}
-var _surface_mats := {}
-
-
-## One shared surface material per kind of ground (procedural pebbles, clods, ripples, cracks, puddles).
-func _surface_material(kind_name: String) -> ShaderMaterial:
-	var k: int = SURFACE_KINDS.get(kind_name, 2)
-	if not _surface_mats.has(k):
-		var m := ShaderMaterial.new()
-		m.shader = preload("res://shaders/surface.gdshader")
-		m.set_shader_parameter("kind", k)
-		m.set_shader_parameter("leak", wx["leak"])
-		m.set_shader_parameter("wet", 1.0 if kind() == "rain" else 0.0)
-		m.set_shader_parameter("strength", 1.0 if bool(Settings.g("paper_detail")) else 0.0)
-		_surface_mats[k] = m
-	return _surface_mats[k]
-
-
 func _make_rx_surfaces() -> void:
 	for pt in track.patches:
 		if not pt.get("rx", false) or pt.kind == "tarmac":
@@ -570,8 +548,10 @@ func _make_rx_surfaces() -> void:
 		if pt.lat0 > 0.0 or pt.lat1 < 0.0:
 			continue   # the Joker lane surface is drawn with the lane
 		_surface_strip(float(pt.s0), float(pt.s1), Color(Rallycross.SURFACES[pt.kind].color), str(pt.kind))
+		_surface_relief(float(pt.s0), float(pt.s1), Color(Rallycross.SURFACES[pt.kind].color), str(pt.kind))
 	if not track.joker.is_empty():
 		_make_joker_lane()
+	_tarmac_wear()
 	_make_kerbs()
 
 
@@ -606,10 +586,121 @@ func _surface_strip(s0: float, s1: float, col: Color, kind: String) -> void:
 				b.quad(a0, a1, b1, b0, Vector3.UP, cols[q])
 		var mi := MeshInstance3D.new()
 		mi.mesh = b.mesh()
-		mi.material_override = _surface_material(kind)
+		mi.material_override = paper_mat
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(mi)
 		i = j
+
+
+## Cheap relief for loose sectors (no per-pixel work): loose berms along both shoulders, scattered stones and,
+## on mud, dark puddles. It is all plain geometry in the one paper material.
+func _surface_relief(s0: float, s1: float, col: Color, kind: String) -> void:
+	if kind in ["tarmac", "ford"]:
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(s0 * 7.0) + kind.hash()
+	var b := PaperKit.Builder.new(int(s0) + 3)
+	var i0 := track.index_at(s0)
+	var i1 := track.index_at(s1)
+	var light := PaperKit.lin(col.lightened(0.16), 1.0)
+	var dark := PaperKit.lin(col.darkened(0.22), 1.0)
+	var hmax: float = float({"sand": 0.045, "mud": 0.06, "chalk": 0.07, "fine_gravel": 0.07}.get(kind, 0.09))
+	for k in range(i0, i1):
+		var d0 := minf(track.dist[k] - s0, s1 - track.dist[k])
+		var d1 := minf(track.dist[k + 1] - s0, s1 - track.dist[k + 1])
+		var f0 := clampf(d0 / 8.0, 0.0, 1.0)
+		var f1 := clampf(d1 / 8.0, 0.0, 1.0)
+		var hw0 := track.road_half_width(track.dist[k]) - 0.15
+		var hw1 := track.road_half_width(track.dist[k + 1]) - 0.15
+		# A berm that wanders a little in height, so it reads as heaped loose material.
+		var w0 := 0.7 + 0.5 * absf(sin(track.dist[k] * 0.37 + s0))
+		var w1 := 0.7 + 0.5 * absf(sin(track.dist[k + 1] * 0.37 + s0))
+		for side: float in [-1.0, 1.0]:
+			var a0 := _road_point(k, side * hw0 * 0.78, 0.045)
+			var a1 := _road_point(k + 1, side * hw1 * 0.78, 0.045)
+			var c0 := _road_point(k, side * hw0 * 0.88, 0.045 + hmax * f0 * w0)
+			var c1 := _road_point(k + 1, side * hw1 * 0.88, 0.045 + hmax * f1 * w1)
+			var e0 := _road_point(k, side * hw0 * 0.99, 0.045)
+			var e1 := _road_point(k + 1, side * hw1 * 0.99, 0.045)
+			b.quad(a0, a1, c1, c0, Vector3.UP, light)
+			b.quad(c0, c1, e1, e0, Vector3.UP, dark)
+	# Stones and clods, gathering toward the shoulders where tyres throw them.
+	var s := s0 + 3.0
+	while s < s1 - 3.0:
+		var i := track.index_at(s)
+		var hw := track.road_half_width(s) - 0.3
+		for q in 4:
+			var side := -1.0 if rng.randf() < 0.5 else 1.0
+			var lat := side * hw * lerpf(0.15, 0.97, pow(rng.randf(), 0.55))
+			var size := rng.randf_range(0.09, 0.26)
+			var pos := _road_point(i, lat, 0.045 + size * 0.3)
+			var tone := col.darkened(rng.randf_range(-0.1, 0.35))
+			b.box(Vector3.ZERO, Vector3(size * rng.randf_range(0.8, 1.5), size * 0.6, size * rng.randf_range(0.8, 1.4)),
+				Transform3D(Basis(Vector3.UP, rng.randf() * TAU), pos), tone)
+		s += 2.6
+	if kind == "mud":
+		var sp := s0 + 6.0
+		while sp < s1 - 8.0:
+			var im := track.index_at(sp)
+			var lat_m := rng.randf_range(-0.6, 0.6) * (track.road_half_width(sp) - 1.0)
+			var len_m := rng.randf_range(3.0, 7.0)
+			var wid := rng.randf_range(1.0, 2.4)
+			var pud := PaperKit.lin(col.darkened(0.38), 1.0)
+			var p00 := _road_point(im, lat_m - wid * 0.5, 0.05)
+			var p01 := _road_point(im, lat_m + wid * 0.5, 0.05)
+			var im2 := track.index_at(sp + len_m)
+			var p10 := _road_point(im2, lat_m - wid * 0.5, 0.05)
+			var p11 := _road_point(im2, lat_m + wid * 0.5, 0.05)
+			b.quad(p00, p10, p11, p01, Vector3.UP, pud)
+			sp += rng.randf_range(10.0, 22.0)
+	var mi := MeshInstance3D.new()
+	mi.mesh = b.mesh()
+	mi.material_override = paper_mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi)
+
+
+## Tarmac wear: darker repair patches and thin cracks scattered round the lap (geometry only).
+func _tarmac_wear() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(def.seed) * 13 + 5
+	var b := PaperKit.Builder.new(41)
+	var patch_col := PaperKit.lin(Color(Rallycross.SURFACES["tarmac"].color).darkened(0.16), 1.0)
+	var crack_col := PaperKit.lin(Color(Rallycross.SURFACES["tarmac"].color).darkened(0.38), 1.0)
+	var s := 24.0
+	while s < track.length - 24.0:
+		var pt: Dictionary = track.patch_at(s, 0.0)
+		var tarmac_here: bool = pt.is_empty() or str(pt.get("kind", "tarmac")) == "tarmac"
+		if tarmac_here and not track.on_stacked_span(s):
+			var i := track.index_at(s)
+			var hw := track.road_half_width(s) - 1.0
+			if rng.randf() < 0.45:
+				var lat := rng.randf_range(-0.7, 0.7) * hw
+				var len_p := rng.randf_range(2.5, 6.0)
+				var wid := rng.randf_range(1.6, 3.4)
+				var i2 := track.index_at(s + len_p)
+				b.quad(_road_point(i, lat - wid * 0.5, 0.036), _road_point(i2, lat - wid * 0.5, 0.036),
+					_road_point(i2, lat + wid * 0.5, 0.036), _road_point(i, lat + wid * 0.5, 0.036), Vector3.UP, patch_col)
+			if rng.randf() < 0.5:
+				# A crack: a short zig-zag of thin strips.
+				var lat_c := rng.randf_range(-0.8, 0.8) * hw
+				var step_c := rng.randf_range(0.5, 1.1)
+				var cur := lat_c
+				var ss := s
+				for seg in 5:
+					var nxt := cur + rng.randf_range(-0.6, 0.6)
+					var ia := track.index_at(ss)
+					var ib := track.index_at(ss + step_c)
+					b.quad(_road_point(ia, cur - 0.02, 0.037), _road_point(ib, nxt - 0.02, 0.037),
+						_road_point(ib, nxt + 0.02, 0.037), _road_point(ia, cur + 0.02, 0.037), Vector3.UP, crack_col)
+					cur = nxt
+					ss += step_c
+		s += rng.randf_range(12.0, 30.0)
+	var mi := MeshInstance3D.new()
+	mi.mesh = b.mesh()
+	mi.material_override = paper_mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi)
 
 
 ## World point at a lateral offset from the centre line, following altitude and banking.
@@ -651,7 +742,7 @@ func _make_joker_lane() -> void:
 			b.quad(t0, t1, low1, low0, Vector3(outward.x, 0, outward.y), side_col)
 	var mi := MeshInstance3D.new()
 	mi.mesh = b.mesh()
-	mi.material_override = _surface_material(str(jk.surf))
+	mi.material_override = paper_mat
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
 
@@ -886,7 +977,7 @@ func _make_hazards() -> void:
 			prev = line
 		var mi := MeshInstance3D.new()
 		mi.mesh = b.mesh()
-		mi.material_override = _surface_material(str(pt["kind"]))
+		mi.material_override = paper_mat
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(mi)
 
