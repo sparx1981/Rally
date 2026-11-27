@@ -74,6 +74,7 @@ var _lighting_mode := 0
 var _light_presets: Array[Dictionary] = []
 var _light_progress := 0.0
 var headlight_level := 0.0
+var _sky_mat: ShaderMaterial
 
 
 func build(stage_def: Dictionary, time_of_day := -1) -> void:
@@ -252,7 +253,13 @@ func _make_lights() -> void:
 	add_child(we)
 	var sky_mat := ShaderMaterial.new()
 	sky_mat.shader = preload("res://shaders/sky.gdshader")
-	sky_mat.set_shader_parameter("cover", 0.44 if kind() == "rain" else 0.54)
+	_sky_mat = sky_mat
+	var stormy := kind() == "rain"
+	sky_mat.set_shader_parameter("cover", 0.34 if stormy else 0.54)
+	sky_mat.set_shader_parameter("storm", 1.0 if stormy else 0.0)
+	var wind_dir := float(def.seed % 360) * PI / 180.0
+	var wind_speed := 0.030 if stormy else 0.013
+	sky_mat.set_shader_parameter("wind", Vector2(cos(wind_dir), sin(wind_dir)) * wind_speed)
 	sky_mat.set_shader_parameter("peaks", def.loc_id in ["gorge", "alpine", "canyon"])
 	sky_mat.set_shader_parameter("snowcaps", def.loc_id == "alpine")
 	sky_mat.set_shader_parameter("offset", Vector2(float(def.seed % 197) / 197.0, float(def.loc) * 0.08))
@@ -297,14 +304,17 @@ func advance_lighting(station: float) -> bool:
 
 
 func _sky_colors(index: int) -> Array[Color]:
+	var stormy := kind() == "rain"
 	if index == 2:
-		return [Color("#34394e"), Color("#0e152b"), Color("#42475d")]
+		return [Color("#2c3a66"), Color("#070c24"), Color("#3a4468")]
 	if index == 1:
-		return [Color("#e9ac88"), Color("#796f99"), Color("#a98189")]
+		if stormy:
+			return [Color("#c9967c"), Color("#5a5878"), Color("#7e7886")]
+		return [Color("#f3a46c"), Color("#5f5c94"), Color("#b98a98")]
 	match kind():
-		"rain": return [Color("#cedacb"), Color("#748797"), Color("#a5acaa")]
+		"rain": return [Color("#aab6b6"), Color("#566878"), Color("#7e8b92")]
 		"snow": return [Color("#e3e7ed"), Color("#8499b8"), Color("#f4f1ea")]
-	return [Color("#f1dfc3"), Color("#719abc"), Color("#fff2d8")]
+	return [Color("#f1dfc3"), Color("#5f93bf"), Color("#fff2d8")]
 
 
 func _apply_lighting(phase: float) -> void:
@@ -328,7 +338,15 @@ func _apply_lighting(phase: float) -> void:
 	sky_mat.set_shader_parameter("horizon", horizon)
 	sky_mat.set_shader_parameter("zenith", warm[1].lerp(cool[1], mix_amount))
 	sky_mat.set_shader_parameter("cloud_ink", warm[2].lerp(cool[2], mix_amount))
-	sky_mat.set_shader_parameter("light_dir", _sky_direction(lerpf(altitude, -6.0, darkness), azimuth))
+	var glow := sin(clampf(phase, 0.0, 2.0) * PI * 0.5)
+	var stormy := kind() == "rain"
+	var zen: Color = warm[1].lerp(cool[1], mix_amount)
+	var mid_col := horizon.lerp(zen, 0.45).lerp(Color("#d98a92"), glow * 0.55 * (0.35 if stormy else 1.0))
+	sky_mat.set_shader_parameter("mid_ink", mid_col)
+	sky_mat.set_shader_parameter("glow_amount", glow)
+	sky_mat.set_shader_parameter("glow_ink", Color("#ffcf9a").lerp(Color("#ff6a38"), glow))
+	sky_mat.set_shader_parameter("moon_ink", Color("#d4e0ff"))
+	sky_mat.set_shader_parameter("light_dir", _sky_direction(lerpf(altitude - 10.0 * glow, -6.0, darkness), azimuth))
 	sky_mat.set_shader_parameter("moon_dir", _sky_direction(_light_presets[2].elev, azimuth))
 	sky_mat.set_shader_parameter("light_ink", Color("#fff2d1").lerp(Color("#ffa660"), smoothstep(0.0, 1.0, phase)))
 	sky_mat.set_shader_parameter("night_amount", darkness)
@@ -1672,6 +1690,8 @@ func set_bonnet(on: bool) -> void:
 
 func update(dt: float, focus: Vector3, radius: float, player_s: float, cam: Camera3D) -> void:
 	_time += dt
+	if _sky_mat:
+		_sky_mat.set_shader_parameter("t", _time)
 	if scenery:
 		scenery.update(Vector2(focus.x, focus.z), radius, dt)
 	if leaf_litter:

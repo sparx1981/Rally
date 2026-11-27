@@ -1376,6 +1376,12 @@ func _parse_args() -> void:
 			_shot["oz"] = float(a.substr(5))
 		elif a.begins_with("--overhead="):
 			_shot["overhead"] = float(a.substr(11))
+		elif a.begins_with("--skyyaw="):
+			_shot["skyyaw"] = float(a.substr(9))
+		elif a.begins_with("--skypitch="):
+			_shot["skypitch"] = float(a.substr(11))
+		elif a.begins_with("--skyt="):
+			_shot["skyt"] = float(a.substr(7))
 		elif a.begins_with("--at="):
 			_shot["at"] = float(a.substr(5))
 		elif a.begins_with("--lat="):
@@ -1414,6 +1420,33 @@ func _lineup() -> void:
 	mat.shader = preload("res://shaders/paper.gdshader")
 	mat.set_shader_parameter("fibre", Stage.fibre_tex())
 	var cars := Catalog.cars()
+	var pick := ""
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--cars="):
+			pick = a.substr(7)
+	if pick != "":
+		var want := pick.split(",")
+		var sel: Array = []
+		for c in cars:
+			if want.has(str(c.get("style", ""))):
+				sel.append(c)
+		var cx := 0.0
+		for i in sel.size():
+			var m2 := CarModel.build(sel[i], i + 1, mat)
+			var r2: Node3D = m2["root"]
+			r2.position = Vector3(i * 4.2 - (sel.size() - 1) * 2.1, 0, 0)
+			r2.rotation.y = 0.6
+			w.add_child(r2)
+			cx += 1.0
+		var cam2 := Camera3D.new()
+		cam2.fov = 38
+		w.add_child(cam2)
+		var span := maxf(4.0, sel.size() * 4.2)
+		cam2.position = Vector3(0, 2.6, span * 0.62 + 4.0)
+		cam2.look_at(Vector3(0, 0.8, 0))
+		cam2.current = true
+		post.visible = false
+		return
 	for i in cars.size():
 		var m := CarModel.build(cars[i], i + 1, mat)
 		var r: Node3D = m["root"]
@@ -1649,6 +1682,19 @@ func _run_shot() -> void:
 		oc.position = pp + Vector3(hgt * float(_shot.get("ox", 0.35)), hgt, hgt * float(_shot.get("oz", 0.35)))
 		oc.look_at(pp)
 		oc.current = true
+		await get_tree().process_frame
+	if _shot.has("skyyaw") and race:
+		# Debug: look at the sky from the player's position (yaw 0 = along +Z, degrees).
+		var sc := Camera3D.new()
+		sc.fov = 75
+		race.add_child(sc)
+		sc.global_position = race.player.global_position + Vector3(0, 3.0, 0)
+		var yaw := deg_to_rad(float(_shot["skyyaw"]))
+		var pit := deg_to_rad(float(_shot.get("skypitch", 20.0)))
+		sc.look_at(sc.global_position + Vector3(sin(yaw) * cos(pit), sin(pit), cos(yaw) * cos(pit)))
+		sc.current = true
+		if _shot.has("skyt") and race.stage:
+			race.stage.update(float(_shot["skyt"]), race.player.global_position, 100.0, race.player.s, null)
 		await get_tree().process_frame
 	if _shot.has("nohud") and race:
 		race.set_overlay_visible(false)

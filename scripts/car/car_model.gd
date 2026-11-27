@@ -72,6 +72,17 @@ const DASHBOARDS := {
 const SPONSOR_COLS := [Color("#c8553d"), Color("#3f6fa8"), Color("#e8b04a"), Color("#2f8a8a"), Color("#2b2b2b")]
 
 
+## Front grille shape per style (default "slats"), plus roof racks and bull bars on utility bodies.
+const GRILLES := {
+	"classic": "oval", "capri": "oval", "cossie": "oval", "escort": "slim", "groupb_rwd": "slim",
+	"quattro": "shield", "integrale": "shield", "t16": "shield", "celica": "shield", "groups": "shield",
+	"e36": "kidney", "m1": "kidney", "gtv6": "kidney", "berlinette": "slim", "pikes": "oval",
+	"gt4": "mesh", "impreza": "mesh", "evo": "mesh", "wrc": "mesh", "rally2": "mesh", "rally1": "mesh", "r5": "mesh", "sixr4": "mesh",
+	"suv": "bars", "patrol": "bars", "truck": "bars", "estate": "slats", "beetle": "none", "stratos": "none",
+}
+const RACKS := {"patrol": "full", "suv": "full", "estate": "rails", "beetle": "light"}
+const BULLS := {"patrol": "hoop", "suv": "hoop", "truck": "hoop"}
+
 ## Style table with the derived values other code uses (cab_h, cab_l, cab_z).
 static func shape(style: String) -> Dictionary:
 	var P: Dictionary = STYLES.get(style, STYLES["evo"]).duplicate()
@@ -317,9 +328,7 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 				b.box(Vector3(0, -0.065 + slat * 0.029, 0.025), Vector3(W * (0.43 + 0.025 * mini(slat, 4 - slat)), 0.008, 0.012),
 					grille, Color("#c0bbb0"))
 		else:
-			b.box(Vector3.ZERO, Vector3(W * 0.30, 0.105, 0.022), grille, ink)
-			for slat in 3:
-				b.box(Vector3(0, (slat - 1) * 0.030, 0.015), Vector3(W * 0.28, 0.009, 0.009), grille, Color("#78746d"))
+			_grille(b, String(GRILLES.get(style, "slats")), grille, W, ink)
 		for sx: float in [-0.18, 0.18]:
 			b.card(PaperKit.circle(0.024, W * sx, 0, 6), grille, Color("#a8a298"), {"thick": 0.025, "edge": 0.0, "lip": 0.0})
 		if style == "rally1":
@@ -355,6 +364,10 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 			b.box(Vector3(0, y0 + 0.08, -L * 0.5 - 0.07), bumper, I, Color("#d8d4cc"))
 		else:
 			b.slab(Vector3(-W * 0.5, y0 + 0.04, L * 0.5 + 0.16), Vector3(W * 0.5, y0 + 0.04, L * 0.5 + 0.16), Vector3(W * 0.5, y0 + 0.04, L * 0.5 - 0.1), Vector3(-W * 0.5, y0 + 0.04, L * 0.5 - 0.1), 0.04, ink)
+		if BULLS.has(style):
+			_bull_bar(b, W, y0, L, float(P["nose"]), ink)
+		if RACKS.has(style):
+			_roof_rack(b, String(RACKS[style]), P, top_y + cab_h, cw)
 		# Bonnet details: a centre stripe, a scoop, louvres.
 		var bon_mid := (L * 0.5 + bon_end) * 0.5
 		var lay := Basis(Vector3.RIGHT, -PI * 0.5)
@@ -525,6 +538,94 @@ static func build(car: Dictionary, number: int, mat: Material) -> Dictionary:
 		head = Vector3(0.0, y0 + 1.0, 0.0)
 	return {"root": root, "body": body, "wheels": wheels, "length": L, "width": W, "wheel_r": wr, "head": head,
 		"lamp": Vector3(0, y0 + float(P["nose"]) * 0.7, L * 0.5 + 0.1), "exhaust": Vector3(-W * 0.29, y0 + 0.03, -L * 0.5 - 0.12), "style": style, "beam_mounts": beams, "rear_lenses": rear_lenses}
+
+
+static func _grille(b: PaperKit.Builder, kind: String, g: Transform3D, W: float, ink: Color) -> void:
+	var chrome := Color("#c9c4b9")
+	var dim := Color("#78746d")
+	match kind:
+		"oval":
+			b.card(PaperKit.circle(0.13, 0, 0, 14), g, chrome, {"thick": 0.024})
+			b.card(PaperKit.circle(0.10, 0, 0, 14), g.translated_local(Vector3.BACK * 0.014), ink, {"thick": 0.008, "edge": 0.0, "lip": 0.0})
+			for k in 5:
+				b.box(Vector3(0, (k - 2) * 0.034, 0.024), Vector3(0.17, 0.008, 0.008), g, dim)
+		"kidney":
+			for sx: float in [-1.0, 1.0]:
+				var kc := g.translated_local(Vector3(sx * 0.075, 0, 0))
+				b.card(PaperKit.rrect(0.12, 0.17, 0.05, 0, 0), kc, chrome, {"thick": 0.024})
+				b.card(PaperKit.rrect(0.095, 0.145, 0.04, 0, 0), kc.translated_local(Vector3.BACK * 0.014), ink, {"thick": 0.008, "edge": 0.0, "lip": 0.0})
+				for k in 3:
+					b.box(Vector3((k - 1) * 0.03, 0, 0.022), Vector3(0.007, 0.13, 0.007), kc, dim)
+		"shield":
+			var shield := PackedVector2Array([Vector2(-0.19, 0.07), Vector2(0.19, 0.07), Vector2(0.15, -0.09), Vector2(-0.15, -0.09)])
+			b.card(shield, g, chrome, {"thick": 0.024})
+			var inner := PackedVector2Array([Vector2(-0.165, 0.055), Vector2(0.165, 0.055), Vector2(0.13, -0.075), Vector2(-0.13, -0.075)])
+			b.card(inner, g.translated_local(Vector3.BACK * 0.014), ink, {"thick": 0.008, "edge": 0.0, "lip": 0.0})
+			for k in 4:
+				b.box(Vector3(0, 0.035 - k * 0.032, 0.022), Vector3(0.27 - k * 0.02, 0.008, 0.008), g, dim)
+		"mesh":
+			b.card(PaperKit.rrect(W * 0.46, 0.15, 0.03, 0, -0.02), g, ink, {"thick": 0.02})
+			for k in 4:
+				b.box(Vector3(0, -0.07 + k * 0.034, 0.016), Vector3(W * 0.42, 0.006, 0.006), g, dim)
+			for k in 7:
+				b.box(Vector3((k - 3) * W * 0.062, -0.02, 0.016), Vector3(0.006, 0.12, 0.006), g, dim)
+		"bars":
+			b.card(PaperKit.rrect(W * 0.46, 0.20, 0.025, 0, 0), g, chrome, {"thick": 0.03})
+			b.card(PaperKit.rrect(W * 0.42, 0.16, 0.02, 0, 0), g.translated_local(Vector3.BACK * 0.018), ink, {"thick": 0.008, "edge": 0.0, "lip": 0.0})
+			for k in 5:
+				b.box(Vector3(0, (k - 2) * 0.034, 0.026), Vector3(W * 0.42, 0.012, 0.01), g, chrome)
+		"slim":
+			b.box(Vector3.ZERO, Vector3(W * 0.40, 0.06, 0.02), g, ink)
+			b.box(Vector3(0, 0, 0.014), Vector3(W * 0.38, 0.012, 0.008), g, chrome)
+		"none":
+			b.box(Vector3(0, -0.05, 0), Vector3(W * 0.16, 0.035, 0.016), g, ink)
+		_:
+			b.box(Vector3.ZERO, Vector3(W * 0.30, 0.105, 0.022), g, ink)
+			for slat in 3:
+				b.box(Vector3(0, (slat - 1) * 0.030, 0.015), Vector3(W * 0.28, 0.009, 0.009), g, dim)
+
+
+static func _bull_bar(b: PaperKit.Builder, W: float, y0: float, L: float, nose: float, _ink: Color) -> void:
+	var tube := Color("#2a2a2c")
+	var I := Transform3D()
+	var z := L * 0.5 + 0.20
+	var top := y0 + nose + 0.20
+	var low := y0 + 0.10
+	var hw := W * 0.30
+	for sx: float in [-1.0, 1.0]:
+		b.box(Vector3(sx * hw, (low + top) * 0.5, z), Vector3(0.05, top - low, 0.05), I, tube)
+		b.box(Vector3(sx * hw, top, z - 0.075), Vector3(0.05, 0.05, 0.16), I, tube)
+		b.box(Vector3(sx * hw, low, z - 0.06), Vector3(0.05, 0.05, 0.14), I, tube)
+	b.box(Vector3(0, top, z), Vector3(hw * 2.0 + 0.05, 0.05, 0.05), I, tube)
+	b.box(Vector3(0, low, z), Vector3(hw * 2.0 + 0.05, 0.05, 0.05), I, tube)
+	b.box(Vector3(0, (top + low) * 0.5, z), Vector3(0.04, top - low, 0.04), I, tube)
+	b.box(Vector3(0, y0 + 0.04, z - 0.04), Vector3(W * 0.62, 0.05, 0.10), I, Color("#8c877d"))
+
+
+static func _roof_rack(b: PaperKit.Builder, kind: String, P: Dictionary, roof_y: float, cw: float) -> void:
+	var tube := Color("#2a2a2c")
+	var I := Transform3D()
+	var z1: float = float(P["cab_f"]) - float(P["rake"]) - 0.12
+	var z0: float = float(P["cab_r"]) + float(P["back"]) + 0.12
+	var hw := cw * (0.40 if kind != "light" else 0.34)
+	var h := 0.075 if kind == "full" else 0.05
+	var zc := (z0 + z1) * 0.5
+	var zl := z1 - z0
+	for sx: float in [-1.0, 1.0]:
+		b.box(Vector3(sx * hw, roof_y + h, zc), Vector3(0.035, 0.035, zl), I, tube)
+		for pz: float in [z0 + 0.05, zc, z1 - 0.05]:
+			b.box(Vector3(sx * hw, roof_y + h * 0.5, pz), Vector3(0.03, h, 0.03), I, tube)
+	var bars := 4 if kind == "full" else 3
+	for k in bars:
+		var bz := lerpf(z0 + 0.05, z1 - 0.05, float(k) / float(bars - 1))
+		b.box(Vector3(0, roof_y + h, bz), Vector3(hw * 2.0, 0.03, 0.03), I, tube)
+	if kind == "full":
+		for k in 5:
+			b.box(Vector3((k - 2) * hw * 0.4, roof_y + h, zc), Vector3(0.02, 0.02, zl), I, tube)
+		var lay := Transform3D(Basis(Vector3.RIGHT, -PI * 0.5), Vector3(0, roof_y + h + 0.03, z0 + zl * 0.28))
+		b.card(PaperKit.circle(0.30, 0, 0, 14), lay, Color("#262424"), {"thick": 0.20, "lip": 0.0})
+		b.card(PaperKit.circle(0.17, 0, 0, 12), lay.translated_local(Vector3(0, 0, 0.102)), Color("#9a948a"), {"thick": 0.004, "edge": 0.0, "lip": 0.0})
+		b.box(Vector3(0, roof_y + h + 0.08, z1 - 0.28), Vector3(hw * 1.2, 0.15, 0.28), I, Color("#7a6c52"))
 
 
 static func _cabin_outline(profile: Dictionary, sill: float) -> PackedVector2Array:
