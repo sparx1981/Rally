@@ -88,7 +88,7 @@ var _head_cache := PackedVector3Array()
 
 
 func build(stage_def: Dictionary, time_of_day := -1) -> void:
-	def = stage_def
+	def = Catalog.with_season(stage_def, int(Settings.g("season")))
 	_lighting_mode = int(def.get("tod", 0)) if time_of_day < 0 else time_of_day
 	tod = 2 if _lighting_mode == Catalog.SUNRISE else (0 if _lighting_mode == Catalog.SUNSET else clampi(_lighting_mode, 0, 2))
 	_light_presets = [Catalog.lighting(def.weather, 0), Catalog.lighting(def.weather, 1), Catalog.lighting(def.weather, 2)]
@@ -158,6 +158,8 @@ func build(stage_def: Dictionary, time_of_day := -1) -> void:
 	_make_gantries()
 	if track.rx:
 		_make_rx_surfaces()
+	scenery.sway_material = variant_material(true, 0.0)
+	scenery.big_material = variant_material(false, 0.5)
 	scenery.setup(track, def, paper_mat, float(Settings.g("density")), float(Settings.g("draw_distance")), bool(Settings.g("popups")))
 	_make_puddles()
 	if track.circuit:
@@ -2333,6 +2335,32 @@ func car_material() -> ShaderMaterial:
 	return _car_mat
 
 
+## Cached copies of the paper material with plant sway and/or a darkened edge switched on.
+var _variants := {}
+
+
+func variant_material(swaying: bool, edge: float) -> ShaderMaterial:
+	var key := "%s|%.2f" % [swaying, edge]
+	if not _variants.has(key):
+		var m := paper_mat.duplicate() as ShaderMaterial
+		_variants[key] = m
+	var vm: ShaderMaterial = _variants[key]
+	for u in paper_mat.shader.get_shader_uniform_list():
+		var nm: String = u["name"]
+		vm.set_shader_parameter(nm, paper_mat.get_shader_parameter(nm))
+	var windy := 1.0 + (1.2 if kind() == "rain" else 0.0)
+	vm.set_shader_parameter("sway", windy if swaying and Settings.fx_level() >= 1 else 0.0)
+	vm.set_shader_parameter("edge_dark", edge if Settings.fx_level() >= 1 else 0.0)
+	return vm
+
+
+func _sync_variants() -> void:
+	for key in _variants.keys():
+		var parts: PackedStringArray = str(key).split("|")
+		variant_material(parts[0] == "true", float(parts[1]))
+	_sync_car_mat()
+
+
 func _sync_car_mat() -> void:
 	if _car_mat == null:
 		return
@@ -2340,6 +2368,7 @@ func _sync_car_mat() -> void:
 		var nm: String = u["name"]
 		_car_mat.set_shader_parameter(nm, paper_mat.get_shader_parameter(nm))
 	_car_mat.set_shader_parameter("rim", (1.9 if kind() == "rain" else 1.0) if Settings.fx_level() >= 1 else 0.0)
+	_car_mat.set_shader_parameter("edge_dark", 0.55 if Settings.fx_level() >= 1 else 0.0)
 
 
 ## Crowds near the action jump and wave for a couple of seconds (jumps, splashes).

@@ -62,7 +62,7 @@ static func _crown(b: PaperKit.Builder, r: float, y: float, col: Color, col2: Co
 ## A very cheap stand-in used beyond the near range: two crossed flat cards with the piece's outline and main
 ## colours (a pine is about 5,700 triangles close up and about 40 here). Returns null for pieces with no far form.
 static func far_mesh(kind: String, pal: Dictionary, info: Dictionary) -> Mesh:
-	if not kind in ["pine", "pine_snow", "tree", "birch", "bush"]:
+	if not kind in ["pine", "pine_snow", "tree", "birch", "bush", "rock", "logs", "house", "barn", "cabin"]:
 		return null
 	var b := PaperKit.Builder.new(5)
 	var h: float = float(info.get("h", 5.0))
@@ -89,6 +89,18 @@ static func far_mesh(kind: String, pal: Dictionary, info: Dictionary) -> Mesh:
 				b.card(PaperKit.circle(r * 0.95, 0.0, h * 0.72, 9), xf, pal["f_mid"], {"thick": 0.06, "edge": 0.0, "lip": 0.0})
 			"bush":
 				b.card(PaperKit.circle(r * 0.9, 0.0, r * 0.55, 8), xf, pal["f_dark"], {"thick": 0.05, "edge": 0.0, "lip": 0.0})
+			"rock":
+				if k == 0:
+					b.box(Vector3(0, h * 0.5, 0), Vector3(r * 1.7, h, r * 1.5), Transform3D(Basis(Vector3.UP, 0.4), Vector3.ZERO), pal.get("stone", Color("#8c867c")))
+			"logs":
+				if k == 0:
+					b.box(Vector3(0, h * 0.5, 0), Vector3(r * 1.8, maxf(h, 0.5), r * 1.0), Transform3D(), pal["trunk"])
+			"house", "barn", "cabin":
+				if k == 0:
+					var wall := Color("#d9c9a8") if kind == "house" else (Color("#a8452e") if kind == "barn" else Color("#8a6040"))
+					var hh := maxf(h * 0.62, 1.8)
+					b.box(Vector3(0, hh * 0.5, 0), Vector3(r * 1.7, hh, r * 1.3), Transform3D(), wall)
+					b.box(Vector3(0, hh + h * 0.12, 0), Vector3(r * 1.9, h * 0.28, r * 1.4), Transform3D(), Color("#7a4a3a"))
 	return b.mesh()
 
 

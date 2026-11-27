@@ -11,6 +11,8 @@ uniform float fibre_amount = 0.09;
 uniform float fibre_scale = 0.55;
 uniform float glow = 0.0;
 uniform vec3 rim_color : source_color = vec3(1.0, 0.85, 0.65);
+uniform float sway = 0.0;         // wind sway for plants (0 = rigid)
+uniform float edge_dark = 0.0;    // darkened silhouette edge for cars and big props
 uniform float rim = 0.0;   // 1 on the car material only
 uniform vec3 glow_color : source_color = vec3(1.0, 0.77, 0.35);
 // Car glass (recognised by its printed colour) mirrors the sky, with a faint glint of the lights at night.
@@ -25,6 +27,15 @@ varying vec3 obj_n;
 void vertex() {
 	obj_pos = VERTEX;
 	obj_n = NORMAL;
+	if (sway > 0.0) {
+		// Bend grows with the square of height, phase comes from where the plant stands.
+		vec3 origin = MODEL_MATRIX[3].xyz;
+		float h = max(VERTEX.y, 0.0);
+		float ph = origin.x * 0.7 + origin.z * 0.9;
+		float gust = sin(TIME * 1.5 + ph) + 0.5 * sin(TIME * 3.1 + ph * 1.7);
+		VERTEX.x += gust * 0.011 * h * h * sway;
+		VERTEX.z += sin(TIME * 1.2 + ph * 1.3) * 0.006 * h * h * sway;
+	}
 }
 
 void fragment() {
@@ -34,6 +45,10 @@ void fragment() {
 		vec2 uv = (an.z > an.x && an.z > an.y) ? obj_pos.xy : ((an.x > an.y) ? obj_pos.zy : obj_pos.xz);
 		float f = texture(fibre, uv * fibre_scale).r * 0.6 + texture(fibre, uv * fibre_scale * 3.73 + vec2(0.37, 0.11)).r * 0.4;
 		c *= 1.0 + (f - 0.5) * fibre_amount * 2.0;
+	}
+	if (edge_dark > 0.0) {
+		float fe = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 4.0);
+		c *= 1.0 - fe * edge_dark;
 	}
 	ALBEDO = c;
 	ROUGHNESS = 1.0;

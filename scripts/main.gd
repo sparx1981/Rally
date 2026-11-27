@@ -1276,6 +1276,7 @@ func _settings() -> void:
 			list.add_child(_choice("Show FPS counter", ["Off", "On"], 1 if Settings.g("show_fps") else 0, func(i): Settings.set_value("show_fps", i == 1)))
 			list.add_child(_button("Replay the Joker explainer", func(): _joker_intro(func(): _settings()), 360))
 			list.add_child(_button("Run benchmark (12 s, current settings)", func(): _benchmark_ui(), 460))
+			list.add_child(_choice("Season (foliage)", ["Stage default", "Green summer", "Autumn"], int(Settings.g("season")), func(i): Settings.set_value("season", i)))
 			list.add_child(_choice("Automatic resolution", ["Off", "On (keeps the frame rate steady)"], 1 if Settings.g("dynamic_res") else 0, func(i): Settings.set_value("dynamic_res", i == 1)))
 			list.add_child(_choice("Speed effects (wider view, shake)", ["Off", "On"], 1 if Settings.g("speed_fx") else 0, func(i): Settings.set_value("speed_fx", i == 1)))
 			list.add_child(_choice("Debug panel (for bug reports)", ["Off", "On"], 1 if Settings.g("debug_hud") else 0, func(i): Settings.set_value("debug_hud", i == 1)))
@@ -1559,6 +1560,8 @@ func _parse_args() -> void:
 			Settings.data["light_halos"] = a.substr(7) == "1"
 		elif a == "--introreal":
 			_shot["introreal"] = true
+		elif a.begins_with("--season="):
+			Settings.data["season"] = int(a.substr(9))
 		elif a.begins_with("--archlight="):
 			Stage.ARCH_STYLE = int(a.substr(12))
 		elif a == "--debughud":

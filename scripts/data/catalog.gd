@@ -138,6 +138,30 @@ static func _pal(d: Dictionary) -> Dictionary:
 	return out
 
 
+## Seasonal variant of a stage: 1 = green summer foliage, 2 = autumn. 0 leaves the stage as designed.
+static func with_season(sdef: Dictionary, season: int) -> Dictionary:
+	if season <= 0 or not sdef.has("pal"):
+		return sdef
+	var out := sdef.duplicate(true)
+	var pal: Dictionary = out["pal"]
+	var leafy: bool = str(sdef.get("loc_id", "")) in ["meadow", "autumn", "pinewood", "moor", "canyon", "harbour", "taiga"]
+	if not leafy:
+		return sdef
+	if season == 2:
+		var map := {"f_dark": Color("#8a4a22"), "f_mid": Color("#c8742e"), "f_light": Color("#e8a64a"), "ground": Color("#d8c08a"), "ground2": Color("#c9ab72"), "ground3": Color("#e6d2a0")}
+		for k in map.keys():
+			if pal.has(k):
+				pal[k] = Color(pal[k]).lerp(map[k], 0.6)
+	else:
+		var gmap := {"f_dark": Color("#2f6a38"), "f_mid": Color("#4a9a4c"), "f_light": Color("#86c46a"), "ground": Color("#b9d08a"), "ground2": Color("#a8c47a"), "ground3": Color("#cfdc9c")}
+		for k in gmap.keys():
+			if pal.has(k):
+				pal[k] = Color(pal[k]).lerp(gmap[k], 0.55)
+	out["pal"] = pal
+	out["leaves"] = season == 2 or bool(sdef.get("leaves", false))
+	return out
+
+
 static func locations() -> Array:
 	if _locations.is_empty():
 		_locations = [

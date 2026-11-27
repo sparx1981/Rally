@@ -18,6 +18,19 @@ var tower_position := Vector2.INF
 var fixed_supports: Array[Vector3] = []
 var stage_def: Dictionary
 var material: Material
+var sway_material: Material      # plants: wind sway
+var big_material: Material       # houses and large props: darkened edge
+const SWAY_KINDS := ["pine", "pine_snow", "tree", "birch", "bush", "tuft", "flowers", "fern", "heather", "bulrush"]
+const BIG_KINDS := ["house", "barn", "cabin", "mesa"]
+
+
+func _mat_for(kind: String) -> Material:
+	if kind in SWAY_KINDS and sway_material != null:
+		return sway_material
+	if kind in BIG_KINDS and big_material != null:
+		return big_material
+	return material
+
 var lib := {}                 # kind -> Array of variant dicts
 var placements: Array = []    # {kind, var, pos(Vector2), yaw, out_yaw, s, delay}
 var obstacles := {}           # Vector2i cell -> Array of [x, z, r (<0 = not solid), placement index, breakable]
@@ -723,7 +736,7 @@ func _build_chunk(cid: int) -> void:
 			pivot.rotation.y = pl["out_yaw"]
 			var mi := MeshInstance3D.new()
 			mi.mesh = _piece_mesh(pl)
-			mi.material_override = material
+			mi.material_override = _mat_for(str(pl["kind"]))
 			mi.rotation.y = float(pl["yaw"]) - float(pl["out_yaw"])
 			mi.visibility_range_end = draw_distance
 			var far_info: Dictionary = lib[pl["kind"]][pl["var"]]
@@ -731,7 +744,7 @@ func _build_chunk(cid: int) -> void:
 				mi.visibility_range_end = lod_distance()
 				var fmi := MeshInstance3D.new()
 				fmi.mesh = far_info["far"]
-				fmi.material_override = material
+				fmi.material_override = _mat_for(str(pl["kind"]))
 				fmi.rotation.y = mi.rotation.y
 				fmi.visibility_range_begin = lod_distance()
 				fmi.visibility_range_end = draw_distance
@@ -780,7 +793,7 @@ func _build_chunk(cid: int) -> void:
 					_make_labels(holder, lib[pl["kind"]][pl["var"]], pl.get("text", ""))
 			var mmi := MultiMeshInstance3D.new()
 			mmi.multimesh = mm
-			mmi.material_override = material
+			mmi.material_override = _mat_for(str(placements[arr[0]]["kind"]))
 			mmi.position = center
 			mmi.visibility_range_end = draw_distance + CHUNK * 0.5
 			var group_info: Dictionary = lib[placements[arr[0]]["kind"]][placements[arr[0]]["var"]]
@@ -789,12 +802,16 @@ func _build_chunk(cid: int) -> void:
 				var fmm := MultiMesh.new()
 				fmm.transform_format = MultiMesh.TRANSFORM_3D
 				fmm.mesh = group_info["far"]
+				fmm.use_colors = true
 				fmm.instance_count = arr.size()
 				for fk in arr.size():
 					fmm.set_instance_transform(fk, mm.get_instance_transform(fk))
+					var tone := 0.86 + 0.28 * float((arr[fk] * 2654435761) % 1000) / 1000.0
+					var warm := float((arr[fk] * 40503) % 1000) / 1000.0 - 0.5
+					fmm.set_instance_color(fk, Color(tone + warm * 0.1, tone, tone - warm * 0.1, 1.0))
 				var fmi2 := MultiMeshInstance3D.new()
 				fmi2.multimesh = fmm
-				fmi2.material_override = material
+				fmi2.material_override = _mat_for(str(placements[arr[0]]["kind"]))
 				fmi2.position = center
 				fmi2.visibility_range_begin = lod_distance()
 				fmi2.visibility_range_end = draw_distance + CHUNK * 0.5
