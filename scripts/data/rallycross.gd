@@ -21,12 +21,12 @@ const SURFACES := {
 	"chalk": {"grip": 0.83, "drag": 0.135, "color": "#ece8dc", "bump": 0.025, "name": "Chalk gravel"},
 	"granite": {"grip": 0.89, "drag": 0.16, "color": "#b8a29a", "bump": 0.045, "name": "Granite gravel"},
 	"clay": {"grip": 1.0, "drag": 0.09, "color": "#b5573b", "bump": 0.03, "name": "Red bauxite clay"},
-	"forest_dirt": {"grip": 0.78, "drag": 0.22, "color": "#7a5a40", "bump": 0.075, "name": "Loose forest dirt"},
+	"forest_dirt": {"grip": 0.93, "drag": 0.12, "color": "#7a5a40", "bump": 0.075, "name": "Loose forest dirt"},
 	"fine_gravel": {"grip": 0.9, "drag": 0.14, "color": "#d6c49c", "bump": 0.02, "name": "Fine gravel"},
 	"sand": {"grip": 0.86, "drag": 0.15, "color": "#e2d09a", "bump": 0.02, "name": "Sand and gravel"},
 	"coarse_gravel": {"grip": 0.9, "drag": 0.17, "color": "#b6a68c", "bump": 0.04, "name": "Coarse gravel"},
 	"industrial": {"grip": 0.95, "drag": 0.12, "color": "#938878", "bump": 0.03, "name": "Dockyard dirt"},
-	"mud": {"grip": 0.5, "drag": 0.43, "color": "#6b4f38", "bump": 0.05, "name": "Watered mud"},
+	"mud": {"grip": 0.62, "drag": 0.3, "color": "#6b4f38", "bump": 0.05, "name": "Watered mud"},
 	"ford": {"grip": 0.7, "drag": 0.6, "color": "#6f9db8", "bump": 0.005, "name": "Water ford"},
 }
 

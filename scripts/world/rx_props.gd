@@ -104,9 +104,8 @@ func _at(s: float, side: float, offset: float) -> Dictionary:
 			if best_c >= need:
 				break
 		p = best_p
-	var y := track.terrain.height(p) if track.terrain else track.elev[i]
-	if offset < 3.0:
-		y = track.elev[i]
+	# The ground now meets the road edge, so trackside props stand on it (a hair above the sunk terrain).
+	var y := (track.terrain.height(p) + 0.1) if track.terrain else track.elev[i]
 	return {"p": p, "y": y, "heading": track.heading_at(i), "i": i, "n": track.nrm[i]}
 
 
@@ -224,7 +223,11 @@ func _paddock(b: PaperKit.Builder) -> void:
 	b.box(Vector3(0, 2.4, 0), Vector3(2.55, 0.5, 13.5), xf, Color("#3f6fa8"))
 	# Awning tent and tyre racks.
 	b.box(Vector3(9.0, 1.3, 0), Vector3(6.0, 2.6, 12.0), xf, Color("#ece6d8"))
-	b.slab(Vector3(5.5, 2.6, -6.5) , Vector3(12.5, 2.6, -6.5), Vector3(12.5, 2.6, 6.5), Vector3(5.5, 2.6, 6.5), 0.1, Color("#3f6fa8"))
+	# Awning roof, in the paddock's own frame (it used to sit at the world origin), held up on four posts.
+	var awn := [Vector3(5.5, 2.6, -6.5), Vector3(12.5, 2.6, -6.5), Vector3(12.5, 2.6, 6.5), Vector3(5.5, 2.6, 6.5)]
+	b.slab(xf * awn[0], xf * awn[1], xf * awn[2], xf * awn[3], 0.1, Color("#3f6fa8"))
+	for corner: Vector3 in awn:
+		b.box(Vector3(corner.x, 1.3, corner.z), Vector3(0.18, 2.6, 0.18), xf, Color("#5a5f66"))
 	for k in 4:
 		b.box(Vector3(-4.0, 0.5 + (k % 2) * 0.9, -4.0 + k * 2.4), Vector3(1.4, 0.8, 1.6), xf, Color("#2b2b2f"))
 
@@ -253,11 +256,14 @@ func _braking_boards_and_booths(b: PaperKit.Builder) -> void:
 					b.box(Vector3(-0.28 + k * 0.28, 1.25, -0.04), Vector3(0.12, 0.42, 0.03), xf, Color("#c8553d"))
 				if dist < 60.0:
 					b.box(Vector3(0, 1.25, -0.04), Vector3(0.3, 0.1, 0.03), xf, Color("#2b2b2e"))
-			# Apex bollards on the inside kerb.
-			var ip: Vector2 = track.pts[i] + track.nrm[i] * inner * (track.road_half_width(float(c.s0)) - 0.5)
-			var bx := Transform3D(Basis(), Vector3(ip.x, track.elev[i] + track.bank_slope(i) * inner * (track.road_half_width(float(c.s0)) - 0.5), ip.y))
+			# Apex bollards on the inside kerb, each standing on the road at its own station.
 			for k in 3:
-				b.box(Vector3(0, 0.4, 0) + Vector3(0, 0, 0), Vector3(0.18, 0.8, 0.18), Transform3D(Basis(), bx.origin + Vector3(track.tang[i].x, 0, track.tang[i].y) * (k - 1) * 5.0), Color("#e8761f") if k % 2 == 0 else PaperKit.CREAM)
+				var sb: float = float(c.apex_s if c.has("apex_s") else track.dist[i]) + (k - 1) * 5.0
+				var ib := track.index_at(sb)
+				var lat_b := inner * (track.road_half_width(sb) - 0.5)
+				var bp: Vector2 = track.pts[ib] + track.nrm[ib] * lat_b
+				var by := track.road_h_i(ib) + track.bank_slope(ib) * lat_b
+				b.box(Vector3(0, 0.4, 0), Vector3(0.18, 0.8, 0.18), Transform3D(Basis(), Vector3(bp.x, by, bp.y)), Color("#e8761f") if k % 2 == 0 else PaperKit.CREAM)
 		# Marshal booth with an LED flag panel at the exit of the bigger corners.
 		if absf(float(c.s1) - float(c.s0)) > 14.0 and booths < 9:
 			var pt := _at(float(c.s1) + 8.0, outer, 4.5)

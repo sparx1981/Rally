@@ -284,7 +284,8 @@ static func _build_joker(track: Track, jk: Dictionary) -> void:
 		lo[i] = inner_edge
 		# The outer wall funnels back towards the road over the last fifth, so a car still in the lane
 		# is guided onto the track instead of meeting a wall that jumps in at the merge.
-		hi[i] = inner_edge + lane_w * (1.0 - 0.75 * smoothstep(0.6, 0.97, u))
+		# The lane opens as a wedge from the road edge (no squared-off mouth) and funnels back at the exit.
+		hi[i] = inner_edge + lane_w * maxf(smoothstep(0.0, 0.22, u), 0.12) * (1.0 - 0.75 * smoothstep(0.6, 0.97, u))
 	track.joker = {"s0": s0, "s1": s1, "side": side, "w": lane_w, "i0": i0, "i1": i1, "lo": lo, "hi": hi, "gap": gap,
 		"surf": str(jk.surf), "max_hw": max_hw}
 	var lat0 := max_hw + 0.3 if side > 0.0 else -99.0

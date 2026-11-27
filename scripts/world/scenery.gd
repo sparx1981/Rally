@@ -264,6 +264,27 @@ func _place_hazard_props(rng: RandomNumberGenerator) -> void:
 			var pos := track.pts[j] + track.nrm[j] * (inside * (w * 0.5 + 0.7 + r * 0.6))
 			if track.clearance(pos) >= w * 0.5 + 0.3:
 				_add(kind, 0, pos, track.heading_at(j) + rng.randf_range(-0.3, 0.3), track.dist[j], rng, true)
+	# Rallycross Joker lane: one hay-bale chicane, bales staggered from alternate sides, to cost real time.
+	if track.rx and not track.joker.is_empty():
+		var jk: Dictionary = track.joker
+		var span := float(jk.s1) - float(jk.s0)
+		for pair in [[0.40, 1.0], [0.62, -1.0]]:
+			var sj := float(jk.s0) + span * float(pair[0])
+			var j := track.index_at(sj)
+			var band := track.joker_band(track.dist[j])
+			if is_nan(band.x):
+				continue
+			var centre := (band.x + band.y) * 0.5
+			var half_w := absf(band.y - band.x) * 0.5
+			# Block from one edge to just past the middle, leaving a gap of about 3.5 m on the other side.
+			var from_edge := band.x if float(pair[1]) > 0.0 else band.y
+			var to_lat := centre + float(pair[1]) * (half_w - 3.5) - float(pair[1]) * half_w + float(pair[1]) * 0.0
+			to_lat = from_edge + float(pair[1]) * (half_w * 2.0 - 3.6)
+			var lat := from_edge + float(pair[1]) * 0.7
+			while (lat - to_lat) * float(pair[1]) < 0.0:
+				var pos := track.pts[j] + track.nrm[j] * lat
+				_add("bale", 0, pos, track.heading_at(j) + PI * 0.5, track.dist[j], rng, true, "", true)
+				lat += float(pair[1]) * 1.5
 	for f in track.features:
 		var sc: float = f["s"]
 		match f["type"]:
@@ -330,8 +351,8 @@ func _overlaps(p: Vector2, r: float) -> bool:
 	return false
 
 
-func _add(kind: String, vi: int, p: Vector2, yaw: float, s: float, rng: RandomNumberGenerator, solid: bool, text := "") -> void:
-	if _in_joker(p, s):
+func _add(kind: String, vi: int, p: Vector2, yaw: float, s: float, rng: RandomNumberGenerator, solid: bool, text := "", force := false) -> void:
+	if _in_joker(p, s) and not force:
 		return
 	if not track.terrain.supports_prop(p,lib[kind][vi]["shore_radius"]):
 		return

@@ -1445,6 +1445,10 @@ func _run_bench() -> void:
 		await _run_rxcheck(list)
 		get_tree().quit()
 		return
+	if OS.get_cmdline_user_args().has("--rxaccel"):
+		await _run_rxaccel(list)
+		get_tree().quit()
+		return
 	if OS.get_cmdline_user_args().has("--rxgrind"):
 		await _run_rxgrind(list)
 		get_tree().quit()
@@ -1840,3 +1844,35 @@ func _run_rxgrind(list: Array) -> void:
 				await get_tree().physics_frame
 			line += " | pinned restart: moved %.1f m, speed %.1f" % [c.s - start, c.vel.length()]
 			print(line)
+
+
+## Standing start, full throttle, straight: time to 50 / 80 / 100 km/h, and speed after 5 s (laps of wet grip included).
+func _run_rxaccel(list: Array) -> void:
+	Game.mode = Game.Mode.TIME_TRIAL
+	for si in list:
+		Game.stage_index = si
+		await _start_race()
+		var tr := race.stage.track
+		var c: Car = race.player
+		race.drivers.erase(c)
+		while race.state != Race.State.RACING:
+			await get_tree().process_frame
+		var s0 := float(_arg_float("--rxaccel_s=", 20.0))
+		c.place_at(s0, 0.0)
+		c.throttle = 1.0
+		c.steer = 0.0
+		var t0 := race._race_time_for_bench()
+		var t := 0.0
+		var marks := {13.9: -1.0, 22.2: -1.0, 27.8: -1.0}
+		var line := "RXACCEL %s patch=%s:" % [Catalog.stages()[si].id, c.patch_kind]
+		for f in 2400:
+			await get_tree().physics_frame
+			t = race._race_time_for_bench() - t0
+			var v := c.vel.length()
+			for m in marks.keys():
+				if marks[m] < 0.0 and v >= m:
+					marks[m] = t
+			if t >= 5.0 and not line.contains("v@5s"):
+				line += " v@5s=%.1f s=%.0f lat=%.1f" % [v, c.s, c.lat]
+		line += " t50=%.1f t80=%.1f t100=%.1f" % [marks[13.9], marks[22.2], marks[27.8]]
+		print(line)

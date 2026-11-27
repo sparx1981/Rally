@@ -499,10 +499,10 @@ func _surface_strip(s0: float, s1: float, col: Color, kind: String) -> void:
 			var stops := [-1.0, -0.42, -0.30, 0.30, 0.42, 1.0]
 			var cols := [cm, gm, cm, gm, cm]
 			for q in 5:
-				var a0 := _road_point(k, stops[q] * hw0, 0.014)
-				var a1 := _road_point(k + 1, stops[q] * hw1, 0.014)
-				var b0 := _road_point(k, stops[q + 1] * hw0, 0.014)
-				var b1 := _road_point(k + 1, stops[q + 1] * hw1, 0.014)
+				var a0 := _road_point(k, stops[q] * hw0, 0.045)
+				var a1 := _road_point(k + 1, stops[q] * hw1, 0.045)
+				var b0 := _road_point(k, stops[q + 1] * hw0, 0.045)
+				var b1 := _road_point(k + 1, stops[q + 1] * hw1, 0.045)
 				b.quad(a0, a1, b1, b0, Vector3.UP, cols[q])
 		var mi := MeshInstance3D.new()
 		mi.mesh = b.mesh()
