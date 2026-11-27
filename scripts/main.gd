@@ -1913,6 +1913,14 @@ func _run_shot() -> void:
 				race._intro_t = float(ia.substr(10)) * Race.INTRO_LEN
 				race._intro_camera(0.0)
 				await get_tree().process_frame
+	if OS.get_cmdline_user_args().has("--perf") and race:
+		await get_tree().create_timer(1.0).timeout
+		await RenderingServer.frame_post_draw
+		print("PERF draw_calls=", RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME),
+			" objects=", RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_OBJECTS_IN_FRAME),
+			" prims=", RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_PRIMITIVES_IN_FRAME),
+			" tex_mem_MB=", RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TEXTURE_MEM_USED) / 1048576,
+			" buf_mem_MB=", RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_BUFFER_MEM_USED) / 1048576)
 	if _shot.has("lightat") and race:
 		var tr2 := race.stage.track
 		race.stage.advance_lighting(lerpf(tr2.start_s, tr2.finish_s, float(_shot["lightat"])))
