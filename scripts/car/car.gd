@@ -279,7 +279,7 @@ func _patch_grip(patch: Dictionary, lateral: float) -> float:
 		return g
 	var hw := track.road_half_width(s)
 	var on_line := absf(lateral) < hw * 0.4
-	var wet := 0.2 * maxf(0.0, 1.0 - (0.18 if on_line else 0.08) * float(lap))   # lap 1 is damp, not mud-slick
+	var wet := 0.12 * maxf(0.0, 1.0 - (0.18 if on_line else 0.08) * float(lap))   # lap 1 is damp, not mud-slick
 	if patch["kind"] != "ford" and patch["kind"] != "mud":
 		g = lerpf(g, float(Rallycross.SURFACES["mud"].grip), wet)
 	if not on_line:

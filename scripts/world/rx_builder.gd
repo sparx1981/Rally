@@ -204,7 +204,7 @@ static func _turn_signs(track: Track) -> PackedFloat32Array:
 static func _add_patch(track: Track, s0: float, s1: float, lat0: float, lat1: float, kind: String) -> void:
 	var surface: Dictionary = Rallycross.SURFACES[kind]
 	track.patches.append({"s0": s0, "s1": s1, "lat0": lat0, "lat1": lat1, "kind": kind, "grip": float(surface.grip),
-		"drag": float(surface.drag) * 0.5, "rx": true})   # graded and packed: half the free-gravel drag
+		"drag": float(surface.drag) * 0.3, "rx": true})   # graded and packed: half the free-gravel drag
 
 
 ## First place the line crosses itself: the second pass becomes the upper deck.
@@ -337,8 +337,8 @@ static func _build_barriers(track: Track, rx: Dictionary) -> void:
 			var s1 := float(style[1]) * length
 			var kind := str(style[2])
 			if not jk.is_empty() and float(jk.side) == side:
-				var j0: float = float(jk.s0) - 4.0
-				var j1: float = float(jk.s1) + 4.0
+				var j0: float = float(jk.s0)
+				var j1: float = float(jk.s1)
 				if s1 > j0 and s0 < j1:
 					if s0 < j0:
 						track.barriers.append(_bar(s0, j0, side, kind, "road"))
@@ -348,8 +348,8 @@ static func _build_barriers(track: Track, rx: Dictionary) -> void:
 			track.barriers.append(_bar(s0, s1, side, kind, "road"))
 	if not jk.is_empty():
 		var side: float = jk.side
-		var a: float = jk.s0 - 4.0
-		var b: float = jk.s1 + 4.0
+		var a: float = jk.s0
+		var b: float = jk.s1
 		# Wall on the lane's outer edge for the whole lane.
 		track.barriers.append(_bar(a, b, side, "tyre", "lane_out"))
 		# Island: a foam and tyre divider along the road edge and along the lane's inner edge, from the

@@ -526,15 +526,17 @@ func _apply_contact(c: Car, n: Vector2, cp: Vector2, other_vel: Vector2, other: 
 	var denom := 1.0 + ca * ca / INERTIA
 	if other:
 		denom += 1.0 + cb * cb / INERTIA
-	var j := minf(-(1.0 + RESTITUTION) * vn / denom, MAX_IMPULSE)
+	# Leaning on something must not bounce: restitution and spin only for real hits.
+	var bounce := RESTITUTION if -vn > 2.5 else 0.0
+	var j := minf(-(1.0 + bounce) * vn / denom, MAX_IMPULSE)
 	var pre_a := c.vel.length()
 	var pre_b := other.vel.length() if other else 0.0
 	c.vel += n * j
-	c.yaw_rate = clampf(c.yaw_rate + clampf(j * ca / INERTIA * 0.6, -MAX_YAW_KICK, MAX_YAW_KICK), -2.5, 2.5)
+	c.yaw_rate = clampf(c.yaw_rate + clampf(j * ca / INERTIA * 0.6, -MAX_YAW_KICK, MAX_YAW_KICK) * clampf(-vn / 2.0, 0.0, 1.0), -2.5, 2.5)
 	# Tangential scrub at the contact.
 	var t := Vector2(-n.y, n.x)
 	# Gentle contact (leaning on a wall) must not stall the car: scrub scales with how hard the hit was.
-	c.vel -= t * (c.vel - vb).dot(t) * 0.12 * clampf(-vn / 3.0, 0.1, 1.0)
+	c.vel -= t * (c.vel - vb).dot(t) * 0.12 * clampf((-vn - 0.6) / 3.0, 0.0, 1.0)
 	# A hit never leaves a car faster than it was going (or than the other car was going).
 	c.vel = c.vel.limit_length(maxf(pre_a, pre_b * 0.6))
 	if other:
@@ -611,9 +613,22 @@ func _collide() -> void:
 			if pen > 0.0:
 				c.pos -= wn * pen
 				var cp := _corner_support(c, wn)
+				var v_before := c.vel.length()
 				var hit := _apply_contact(c, -wn, cp, Vector2.ZERO, null)
-				c.vel *= 0.995
+				if OS.get_cmdline_user_args().has("--rxgrind") and v_before - c.vel.length() > 0.4:
+					print("  WALLHIT v %.1f -> %.1f vn=%.2f pen=%.2f ext=%.2f wall=%.2f lat=%.2f" % [v_before, c.vel.length(), hit, pen, ext, wall, c.lat])
+				c.vel *= 1.0 - 0.012 * clampf(hit / 6.0, 0.0, 1.0)   # only real impacts cost speed; scraping along does not
 				_on_impact(c, hit, cp)
+				# A car pinned against the wall at low speed is eased away from it, so it can always drive off.
+				if c.vel.length() < 3.0:
+					_wall_time[c] = float(_wall_time.get(c, 0.0)) + FIXED
+					if float(_wall_time[c]) > 0.35:
+						c.vel += -wn * 3.0 * FIXED
+						c.yaw_rate *= 0.9
+				else:
+					_wall_time[c] = 0.0
+			elif _wall_time.has(c):
+				_wall_time[c] = maxf(0.0, float(_wall_time[c]) - FIXED * 2.0)
 	for i in cars.size():
 		for j in range(i + 1, cars.size()):
 			var a := cars[i]
@@ -671,6 +686,7 @@ func _on_impact(c: Car, strength: float, at: Vector2 = Vector2.INF, paper := fal
 
 
 var _cheered := {}
+var _wall_time := {}   # car -> seconds pinned against a wall at low speed
 var ghost: Ghost
 var skids: SkidMarks
 var _last_view := -1

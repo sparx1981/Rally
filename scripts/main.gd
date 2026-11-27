@@ -1445,6 +1445,10 @@ func _run_bench() -> void:
 		await _run_rxcheck(list)
 		get_tree().quit()
 		return
+	if OS.get_cmdline_user_args().has("--rxgrind"):
+		await _run_rxgrind(list)
+		get_tree().quit()
+		return
 	for si in list:
 		for m in ([Game.Mode.TIME_TRIAL] if si == 35 else ([Game.Mode.TIME_TRIAL] if Catalog.stages()[si].has("rx") and not OS.get_cmdline_user_args().has("--grid") else ([Game.Mode.RACE] if Catalog.stages()[si].has("rx") else [Game.Mode.TIME_TRIAL, Game.Mode.RACE]))):
 			Game.mode = m
@@ -1761,5 +1765,75 @@ func _run_rxcheck(list: Array) -> void:
 						drive_first = "%s@s=%.0f lat=%.1f r=%.1f" % [k2, st2, lt2, float(o[2])]
 		print("RXDRIVE %s on_driving_surface=%d first=%s kinds=%s" % [Catalog.stages()[si].id, drive_n, drive_first, str(drive)])
 		print("RXOBJ %s solid_on_road=%d %s kinds=%s" % [Catalog.stages()[si].id, on_road, first_bad, str(kinds)])
+		var nlast := tr.pts.size() - 1
+		for pl in race.stage.scenery.placements:
+			var ps: float = float(pl.s)
+			if minf(absf(ps), absf(ps - tr.length)) < 14.0:
+				print("RXNEAR %s kind=%s s=%.1f pos=(%.1f,%.1f)" % [Catalog.stages()[si].id, str(pl.kind), ps, pl.pos.x, pl.pos.y])
+		var probe := Vector3(tr.pts[0].x, tr.elev[0] + 0.6, tr.pts[0].y)
+		var stack2: Array = [race.stage]
+		while not stack2.is_empty():
+			var n2: Node = stack2.pop_back()
+			for ch in n2.get_children():
+				stack2.append(ch)
+			if n2 is MeshInstance3D and n2.mesh:
+				var bb2: AABB = n2.global_transform * n2.mesh.get_aabb()
+				if bb2.grow(0.3).has_point(probe) and bb2.size.y > 0.4:
+					print("RXHIT %s %s size=(%.1f,%.1f,%.1f) pos=(%.1f,%.1f,%.1f)" % [Catalog.stages()[si].id, n2.get_path(), bb2.size.x, bb2.size.y, bb2.size.z, bb2.position.x, bb2.position.y, bb2.position.z])
+		for bar in tr.barriers:
+			var kk := float(bar["s0"])
+			while kk < float(bar["s1"]):
+				var k2 := minf(kk + 3.0, float(bar["s1"]))
+				var q0: Vector2 = tr.pts[tr.index_at(kk)] + tr.nrm[tr.index_at(kk)] * float(bar["side"]) * tr.barrier_wall(bar, kk)
+				var q1: Vector2 = tr.pts[tr.index_at(k2)] + tr.nrm[tr.index_at(k2)] * float(bar["side"]) * tr.barrier_wall(bar, k2)
+				if q0.distance_to(q1) > 6.0:
+					print("RXWALL %s bar kind=%s ref=%s side=%.0f s0=%.1f s1=%.1f seg at k=%.1f..%.1f len=%.1f wall0=%.1f wall1=%.1f idx=%d,%d" % [Catalog.stages()[si].id, bar["kind"], bar.get("ref", ""), float(bar["side"]), float(bar["s0"]), float(bar["s1"]), kk, k2, q0.distance_to(q1), tr.barrier_wall(bar, kk), tr.barrier_wall(bar, k2), tr.index_at(kk), tr.index_at(k2)])
+				kk = k2
+		print("RXSEAMN %s nrm0=%s nrmN=%s tang0=%s tangN=%s n=%d" % [Catalog.stages()[si].id, str(tr.nrm[0]), str(tr.nrm[nlast]), str(tr.tang[0]), str(tr.tang[nlast]), tr.pts.size()])
+		print("RXSEAMGAP %s gap=%.2f start_s=%.1f finish_s=%.1f len=%.1f" % [Catalog.stages()[si].id, tr.pts[nlast].distance_to(tr.pts[0]), tr.start_s, tr.finish_s, tr.length])
+		print("RXSEAM %s elev[0]=%.2f elev[last]=%.2f road_h(0)=%.2f road_h(L-1)=%.2f road_h(L-10)=%.2f road_h(10)=%.2f heights0=%.2f heightsN=%.2f bank0=%.3f bankN=%.3f" % [Catalog.stages()[si].id, tr.elev[0], tr.elev[nlast], tr.road_h(0.0), tr.road_h(tr.length - 1.0), tr.road_h(tr.length - 10.0), tr.road_h(10.0), tr.heights[0], tr.heights[nlast], tr.bank_slope(0), tr.bank_slope(nlast)])
 		print("RXCROSS %s %s" % [Catalog.stages()[si].id, str(tr.stacked_crossing)])
 		print("RXCHECK %s samples=%d buried=%d worst=%.2f@%s perched=%d worst=%.2f@%s" % [Catalog.stages()[si].id, total, buried, worst_b, wb, perched, worst_p, wp])
+
+
+## Wall test: hold full throttle with the nose angled into the wall and watch speed, then try to drive away.
+func _run_rxgrind(list: Array) -> void:
+	Game.mode = Game.Mode.TIME_TRIAL
+	for si in list:
+		Game.stage_index = si
+		await _start_race()
+		var tr := race.stage.track
+		var c: Car = race.player
+		race.drivers.erase(c)
+		while race.state != Race.State.RACING:
+			await get_tree().process_frame
+		for case_i in 3:
+			var s0 := 40.0
+			var side := 1.0 if case_i != 1 else -1.0
+			c.place_at(s0, side * (tr.road_half_width(s0) - 1.2) if case_i < 2 else 0.0)
+			var i := tr.index_at(s0)
+			var tang := tr.tang[i]
+			c.h = atan2(tang.x, tang.y) + (side * -0.07 if case_i < 2 else 0.0)   # nose slightly toward the wall (case 2: control, no wall)
+			c.vel = tang * 20.0
+			c.throttle = 1.0
+			c.steer = 0.0
+			var t := 0.0
+			var line := "RXGRIND %s case=%d side=%.0f speed:" % [Catalog.stages()[si].id, case_i, side]
+			for f in 480:
+				await get_tree().physics_frame
+				t += 1.0 / 60.0
+				if f % 60 == 59:
+					line += " %.1f" % c.vel.length()
+				if case_i == 2 and f % 30 == 0 and f < 210:
+					print("  GRIND f=%d v=%.1f vl=%.1f lat=%.2f dh=%.3f yaw=%.2f slip=%.2f thr=%.1f grounded=%s" % [f, c.vel.length(), c.v_long, c.lat, wrapf(c.h - atan2(tang.x, tang.y), -PI, PI), c.yaw_rate, c.slip, c.throttle, str(not c.airborne)])
+			# Now stop dead against the wall and try to drive off.
+			c.place_at(s0 + 40.0, side * tr.road_half_width(s0 + 40.0))
+			c.vel = Vector2.ZERO
+			c.throttle = 1.0
+			c.steer = 0.0
+			c.h = atan2(tang.x, tang.y) + side * -0.6
+			var start := c.s
+			for f in 360:
+				await get_tree().physics_frame
+			line += " | pinned restart: moved %.1f m, speed %.1f" % [c.s - start, c.vel.length()]
+			print(line)

@@ -381,9 +381,14 @@ func _finalize() -> void:
 	curv.resize(n)
 	curv_abs.resize(n)
 	var acc := 0.0
+	var closed := n > 4 and pts[n - 1].distance_to(pts[0]) < 0.5   # a circuit: the last sample is the first
 	for i in n:
 		var a := pts[maxi(i - 1, 0)]
 		var b := pts[mini(i + 1, n - 1)]
+		if closed and i == 0:
+			a = pts[n - 2]
+		elif closed and i == n - 1:
+			b = pts[1]
 		var t := (b - a).normalized()
 		tang[i] = t
 		nrm[i] = Vector2(-t.y, t.x)

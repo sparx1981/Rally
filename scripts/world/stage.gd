@@ -589,6 +589,8 @@ func _make_kerbs() -> void:
 
 
 func _make_gantries() -> void:
+	if track.rx:
+		return   # circuits have their own braced start gantry (RxProps); a second arch would double up
 	var timing_lines := [[track.start_s, false]] if track.circuit else [[track.start_s, false], [track.finish_s, true]]
 	for pair in timing_lines:
 		var s: float = pair[0]
@@ -1032,10 +1034,37 @@ func _make_bridges() -> void:
 		else:
 			_covered_bridge(b, org, fx, fz, sc, half, hw, wy, ybase)
 		if br.get("stacked", false):
-			var soff := float(br.half)
-			var left := org - fx * soff + Vector3.UP * (ybase - 0.17)
-			var right := org + fx * soff + Vector3.UP * (ybase - 0.17)
-			b.slab(left-fz*hw, right-fz*hw, right+fz*hw, left+fz*hw, 0.65, Color("#66636b"))
+			# The deck follows the road's own height and banking, a hair below its surface, so the two are level.
+			var steps := maxi(4, int(half * 2.0 / 3.0))
+			var prev_a := Vector3.ZERO
+			var prev_b := Vector3.ZERO
+			for k in steps + 1:
+				var sk := sc - half + half * 2.0 * k / float(steps)
+				var ik := track.index_at(sk)
+				var yk := ROAD_Y + track.road_h_i(ik) - 0.37
+				var tilt_k := track.bank_slope(ik) * hw
+				var a_pt := track.pts[ik] - track.nrm[ik] * hw
+				var b_pt := track.pts[ik] + track.nrm[ik] * hw
+				var va := Vector3(a_pt.x, yk - tilt_k, a_pt.y)
+				var vb := Vector3(b_pt.x, yk + tilt_k, b_pt.y)
+				if k > 0:
+					b.slab(prev_a, va, vb, prev_b, 0.6, Color("#66636b"))
+				prev_a = va
+				prev_b = vb
+			# Concrete piers under both ends of the span, so the deck is plainly held up.
+			for end_sign in [-1.0, 1.0]:
+				var se: float = sc + end_sign * (half - 1.5)
+				var ie := track.index_at(se)
+				for side_p in [-1.0, 1.0]:
+					var q: Vector2 = track.pts[ie] + track.nrm[ie] * side_p * (hw - 0.9)
+					var top: float = ROAD_Y + track.road_h_i(ie) + track.bank_slope(ie) * side_p * (hw - 0.9) - 0.7
+					var bottom: float = track.terrain.height(q) - 0.6
+					if top - bottom > 0.8:
+						b.box(Vector3.ZERO, Vector3(1.3, top - bottom, 1.3), Transform3D(Basis(), Vector3(q.x, (top + bottom) * 0.5, q.y)), Color("#a9a49a"))
+				var ia := track.pts[ie] - track.nrm[ie] * (hw - 0.9)
+				var ib := track.pts[ie] + track.nrm[ie] * (hw - 0.9)
+				var yb := ROAD_Y + track.road_h_i(ie) - 0.95
+				b.box(Vector3.ZERO, Vector3(hw * 2.0, 0.7, 1.2), Transform3D(Basis(Vector3.UP, track.heading_at(ie)), Vector3((ia.x + ib.x) * 0.5, yb, (ia.y + ib.y) * 0.5)), Color("#a9a49a"))
 		var mi := MeshInstance3D.new()
 		mi.mesh = b.mesh()
 		mi.material_override = paper_mat

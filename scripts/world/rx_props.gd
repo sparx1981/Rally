@@ -134,19 +134,49 @@ func _turn_sign(i: int) -> float:
 
 # --- start line ------------------------------------------------------------------------------------
 
+func _beam(b: PaperKit.Builder, xf: Transform3D, a: Vector3, z: Vector3, w: float, ink: Color) -> void:
+	var dir := a.direction_to(z)
+	var up := Vector3.BACK if absf(dir.y) > 0.98 else Vector3.UP
+	var mid := (a + z) * 0.5
+	b.box(Vector3.ZERO, Vector3(w, w, a.distance_to(z)), xf * Transform3D(Basis.looking_at(dir, up), mid), ink)
+
+
+## Steel truss gantry over the line: braced twin legs on concrete footings and an open lattice beam
+## (5.6 m clear underneath), so it reads as a built structure rather than a floating slab.
 func _start_gantry(b: PaperKit.Builder) -> void:
 	var i := track.index_at(0.0)
 	var hw := track.road_half_width(0.0)
 	var xf := Transform3D(Basis(Vector3.UP, track.heading_at(i)), Vector3(track.pts[i].x, track.elev[i], track.pts[i].y))
 	var steel := Color("#7a8087")
+	var dark := Color("#5a5f66")
+	var span := hw + 1.4
+	var low := 6.4
+	var high := 7.4
 	for side in [-1.0, 1.0]:
-		b.box(Vector3(side * (hw + 1.0), 3.2, 0), Vector3(0.5, 6.4, 0.5), xf, steel)
-		b.box(Vector3(side * (hw + 1.0), 0.4, 0), Vector3(1.0, 0.8, 1.0), xf, Color("#5a5f66"))
-	b.box(Vector3(0, 6.2, 0), Vector3(hw * 2.0 + 3.0, 1.2, 0.8), xf, steel, Color("#9aa0a6"))
-	b.box(Vector3(0, 5.5, 0), Vector3(hw * 2.0 + 3.0, 0.2, 0.2), xf, Color("#c8553d"))
-	# Chequered timer panel on the beam.
+		var lx: float = side * span
+		b.box(Vector3(lx, 0.45, 0), Vector3(1.6, 0.9, 2.2), xf, Color("#a9a49a"))      # footing
+		for lz in [-0.7, 0.7]:
+			b.box(Vector3(lx, 4.0, lz), Vector3(0.4, 7.4, 0.4), xf, steel)
+		_beam(b, xf, Vector3(lx, 1.2, -0.7), Vector3(lx, 4.0, 0.7), 0.16, dark)         # cross braces
+		_beam(b, xf, Vector3(lx, 1.2, 0.7), Vector3(lx, 4.0, -0.7), 0.16, dark)
+		_beam(b, xf, Vector3(lx, 4.0, -0.7), Vector3(lx, 6.4, 0.7), 0.16, dark)
+		_beam(b, xf, Vector3(lx, 4.0, 0.7), Vector3(lx, 6.4, -0.7), 0.16, dark)
+	for lz in [-0.7, 0.7]:
+		_beam(b, xf, Vector3(-span, high, lz), Vector3(span, high, lz), 0.3, steel)
+		_beam(b, xf, Vector3(-span, low, lz), Vector3(span, low, lz), 0.3, steel)
+		var n := maxi(4, int(span * 2.0 / 1.8))
+		for k in n:
+			var x0 := lerpf(-span, span, k / float(n))
+			var x1 := lerpf(-span, span, (k + 1) / float(n))
+			_beam(b, xf, Vector3(x0, low if k % 2 == 0 else high, lz), Vector3(x1, high if k % 2 == 0 else low, lz), 0.14, dark)
+	for k in range(0, int(span * 2.0 / 1.8) + 1):
+		var x: float = lerpf(-span, span, k / float(maxi(1, int(span * 2.0 / 1.8))))
+		_beam(b, xf, Vector3(x, low, -0.7), Vector3(x, high, -0.7), 0.12, dark)
+		_beam(b, xf, Vector3(x, low, 0.7), Vector3(x, high, 0.7), 0.12, dark)
+		_beam(b, xf, Vector3(x, high, -0.7), Vector3(x, high, 0.7), 0.12, dark)
+	# Timer board hung in the lattice, chequered.
 	for k in 8:
-		b.box(Vector3(-2.0 + k * 0.5, 6.85, 0.0), Vector3(0.5, 0.5, 0.82), xf, Color("#e9e9e4") if k % 2 == 0 else Color("#2b2b2e"))
+		b.box(Vector3(-2.0 + k * 0.5, 6.9, -0.82), Vector3(0.5, 0.7, 0.06), xf, Color("#e9e9e4") if k % 2 == 0 else Color("#2b2b2e"))
 	# Five lights, dark until the countdown lights them (see set_start_lights).
 	for k in 5:
 		var mi := MeshInstance3D.new()
@@ -159,7 +189,7 @@ func _start_gantry(b: PaperKit.Builder) -> void:
 		m.emission = Color("#ff2a1a")
 		m.emission_energy_multiplier = 0.0
 		mi.material_override = m
-		mi.transform = xf * Transform3D(Basis(), Vector3(-1.6 + k * 0.8, 5.9, -0.45))
+		mi.transform = xf * Transform3D(Basis(), Vector3(-1.6 + k * 0.8, 5.95, -0.2))
 		add_child(mi)
 		start_lights.append(mi)
 
