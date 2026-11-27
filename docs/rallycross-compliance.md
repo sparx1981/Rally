@@ -124,3 +124,14 @@ All 12 circuits complete 3 laps. A human player is not affected by the AI's lane
 - Joker status tag on the HUD ("JOKER: TO DO / NEEDED NOW / DONE").
 - Every scenery piece is rejected if it would stand on any road section or Joker lane; buildings keep a 2.5 m extra gap.
 - Forest dirt grip raised and drag trimmed (standing start to 80 km/h about 3.0-3.4 s, was 4.0 s).
+
+## Fourth polish pass
+
+- Breton Dustbowl: shallow water splash across the road and a table jump added.
+- Bauxite Cauldron: profile flattened (the lap used to end on a crest and dive about 10% past the line); steepest grade now about 9%.
+- Joker lanes roughly twice as long (capped at 300 m; Granite about 1.2x, the only stretch without opposing bends), moved clear of crossings, jumps, tunnels and the start line. Entry and exit are blended over 36-80 m, with the island appearing after the lane has opened.
+- Island walls only stand where the road-side and lane-side walls clear each other (they used to cross and squeeze cars).
+- Outer walls now pull a car back in if it gets beyond them (tunnelling at lane exits).
+- Cockpit and HUD speeds share one scale.
+- Terrain claim allows for sample spread on bends, so no ground shows through lanes on hairpins.
+- Benchmark: all 12 AI cars take the Joker; measured cost +1.3 to +4.5 s.
