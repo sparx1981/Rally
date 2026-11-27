@@ -79,32 +79,29 @@ Circuit benchmark numbers are filled in from `--view=bench --rx` runs (3 laps, s
 
 See `docs/car-audit.md` (in progress).
 
-## Benchmark: Joker lane cost per circuit (AI driver, 3 laps, solo)
+## Benchmark: Joker lane cost per circuit (AI driver, 3 laps, solo, latest build)
 
-Measured with `--view=bench --rx`; "natural" is the lane's cost with no extra pacing, "pace" is what the data adds.
+| Circuit | Target | Measured | AI takes Joker |
+| --- | --- | --- | --- |
+| Chalk Valley Bowl | +2.0 | +1.8 | yes |
+| Timberline Crest | +2.2 | +2.9 | yes |
+| Fjord Switchback | +1.9 | +3.3 | yes |
+| Breton Dustbowl | +1.5 | +2.1 | yes |
+| Sierra Alta Quarry | +1.6 | +0.8 | yes |
+| Bauxite Cauldron | +2.1 | +1.1 | yes |
+| Funnel Ring | +2.3 | n/a (lane not completed) | no |
+| Ardennes Gorge | +1.9 | +1.6 | yes |
+| Baltic Concrete | +2.0 | +1.4 | yes |
+| Apex Ridge | +1.8 | n/a (lane not completed) | no |
+| Harbor Grid | +2.1 | +3.4 | yes |
+| Granite Apex | +2.2 | +2.1 | yes |
 
-| Circuit | Target | Natural | Pace added | AI completes Joker |
-| --- | --- | --- | --- | --- |
-| Chalk Valley Bowl | +2.0 | +0.5 | 2.2 | yes (measured about +1.8) |
-| Timberline Crest | +2.2 | +4.2 | 0 | yes, but lane too slow |
-| Fjord Switchback | +1.9 | +3.2 | 0 | yes, but lane too slow |
-| Breton Dustbowl | +1.5 | +2.1 | 0 | yes |
-| Sierra Alta Quarry | +1.6 | +1.2 | 0.6 | yes |
-| Bauxite Cauldron | +2.1 | +3.5 | 0 | yes, but lane too slow |
-| Funnel Ring | +2.3 | +5.5 | 0 | no: AI loses the lane mouth |
-| Ardennes Gorge | +1.9 | +1.3 | 0.8 | yes |
-| Baltic Concrete | +2.0 | +0.2 | 2.5 | yes |
-| Apex Ridge | +1.8 | +3.2 | 0 | no |
-| Harbor Grid | +2.1 | +2.4 | 0 | no |
-| Granite Apex | +2.2 | +2.1 | 0.15 | yes |
+All 12 circuits complete 3 laps. A human player is not affected by the AI's lane trouble; the Joker counts once half the lane has been driven.
 
-All 12 circuits complete 3 laps in the benchmark. A human player is not affected by the AI's lane trouble;
-the Joker counts once half the lane has been driven.
+## Track polish pass
 
-## Fixed during this pass
-
-- Lap counting failed when a car's station landed exactly on the lap length (Baltic Concrete never advanced past lap 1).
-- Banked roads left the low-side wheels unloaded, stalling cars on Timberline Crest's spiral.
-- The Joker lane's outer wall jumped inward at the merge; it now funnels back to the road.
-- Lane entry is open for the first fifth of the lane before the island begins.
-- Route preview images generated for all 12 circuits.
+- Ground now conforms to the road surface (banking, wide bowls, Joker lane) with embankments; the audit (`--view=bench --rx --rxcheck`) finds no road buried under terrain. Terrain poking through the road (shapeless wedges) is fixed.
+- Where two roads at different heights are close, the ground takes the lower one; bridge spans are sized to the crossing angle; support piers go under any stretch standing more than 1.8 m clear.
+- Large props (containers, campervans, paddock, tower, bleachers, floodlights, arch columns) are solid and kept clear of every road and lane; mining relics became stone block piles.
+- Wall contact no longer bleeds all speed when a car leans on Armco.
+- Remaining: gaps of 1-3 m between road and ground at a few embankment starts, and two stray scenery pieces on Timberline's lane side.
