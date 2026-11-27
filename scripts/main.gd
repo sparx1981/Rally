@@ -638,6 +638,18 @@ func _process(delta: float) -> void:
 	_blur = lerpf(_blur, want, clampf(delta * 3.0, 0.0, 1.0))
 	(post.material as ShaderMaterial).set_shader_parameter("speed_blur", _blur)
 	(post.material as ShaderMaterial).set_shader_parameter("shimmer", 0.0)   # exhaust heat shimmer removed
+	var god := 0.0
+	var sun_uv := Vector2(0.5, 0.2)
+	if Settings.fx_level() >= 2 and race != null and race.stage != null and race.camera != null and not race.attract:
+		var sun_dir: Vector3 = race.stage.key_light.global_basis.z
+		var altitude := rad_to_deg(asin(clampf(sun_dir.y, -1.0, 1.0)))
+		if altitude > 1.0 and altitude < 28.0 and race.stage.kind() != "rain":
+			var wpos: Vector3 = race.camera.global_position + sun_dir * 800.0
+			if not race.camera.is_position_behind(wpos):
+				sun_uv = race.camera.unproject_position(wpos) / Vector2(get_viewport().get_visible_rect().size)
+				god = clampf(1.0 - absf(altitude - 10.0) / 22.0, 0.0, 1.0) * (1.0 if sun_uv.x > -0.2 and sun_uv.x < 1.2 else 0.0)
+	(post.material as ShaderMaterial).set_shader_parameter("god", god)
+	(post.material as ShaderMaterial).set_shader_parameter("sun_uv", sun_uv)
 
 
 # --- stage / series select --------------------------------------------------------------------------

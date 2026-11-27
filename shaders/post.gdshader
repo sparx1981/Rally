@@ -21,6 +21,8 @@ uniform vec3 vig_color : source_color = vec3(0.23, 0.13, 0.05);
 uniform float grain = 0.01;
 uniform float shimmer = 0.0;       // 0..1: heat haze behind the exhaust
 uniform vec2 shimmer_pos = vec2(0.5, 0.7);
+uniform float god = 0.0;           // sunset light shafts through gaps (High)
+uniform vec2 sun_uv = vec2(0.5, 0.3);
 uniform float speed_blur = 0.0;   // 0..1: mild radial blur toward the screen edges (High only)
 uniform float bloom = 0.0;          // glow around bright areas (used for the loading art)
 uniform float bloom_px = 14.0;
@@ -72,6 +74,19 @@ void fragment() {
 			acc2 += texture(screen, uv - dv * kk).rgb;
 		}
 		col = mix(col, acc2 / 5.0, clamp(edge * speed_blur * 1.2, 0.0, 1.0));
+	}
+	if (god > 0.0) {
+		vec2 dl = (sun_uv - uv) / 12.0;
+		vec2 gp = uv;
+		vec3 shafts = vec3(0.0);
+		float wgt = 1.0;
+		for (int q = 0; q < 12; q++) {
+			gp += dl;
+			vec3 sm = texture(screen, clamp(gp, vec2(0.0), vec2(1.0))).rgb;
+			shafts += max(sm - vec3(0.72), vec3(0.0)) * wgt;
+			wgt *= 0.9;
+		}
+		col += shafts * god * 0.16 * vec3(1.0, 0.86, 0.62);
 	}
 	if (bloom > 0.0) {
 		vec3 glow = vec3(0.0);

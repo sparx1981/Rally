@@ -82,6 +82,8 @@ static var ARCH_STYLE := 2   # night lighting: 0 none, 1 glowing name and trim, 
 var _crowd_boost := 0.0
 var _crowd: Array = []   # [node, base, phase, is_stand]: spectators that cheer when the action is near
 var _car_mat: ShaderMaterial
+var _puddle_pts: Array = []
+var _ripples: Array = []
 var _reflect_t := 0.0
 var _lamp_level := 0.0
 var _head_cache := PackedVector3Array()
@@ -175,6 +177,9 @@ func build(stage_def: Dictionary, time_of_day := -1) -> void:
 		_make_sponsor_arches()
 	if Settings.fx_level() >= 1:
 		_make_markers()
+		_make_road_markings()
+	if Settings.fx_level() >= 2:
+		_make_verge_detail()
 	if track.rx:
 		rx_props = RxProps.new()
 		rx_props.name = "RallycrossProps"
@@ -413,6 +418,7 @@ func _apply_lighting(phase: float) -> void:
 	var zen: Color = warm[1].lerp(cool[1], mix_amount)
 	var mid_col := horizon.lerp(zen, 0.45).lerp(Color("#d98a92"), glow * 0.55 * (0.35 if stormy else 1.0))
 	sky_mat.set_shader_parameter("mid_ink", mid_col)
+	road_mat.set_shader_parameter("sky_tint", horizon.lerp(zen, 0.3))
 	paper_mat.set_shader_parameter("rim_color", horizon.lerp(Color.WHITE, 0.35))
 	paper_mat.set_shader_parameter("glass_horizon", horizon)
 	paper_mat.set_shader_parameter("glass_zenith", zen)
@@ -823,6 +829,125 @@ func _make_sponsor_arches() -> void:
 	add_child(mi)
 
 
+## Circuits: a chequered start line, painted grid boxes, and white dashes and direction arrows on tarmac straights.
+func _rp(st: float, lat: float, lift: float) -> Vector3:
+	var i := track.index_at(st)
+	var p := track.point_at(st) + track.nrm[i] * lat
+	return Vector3(p.x, ROAD_Y + track.road_h(st) + lat * track.bank_at(st) + lift, p.y)
+
+
+func _paint(b: PaperKit.Builder, s0: float, s1: float, l0: float, l1: float, col: Color, lift := 0.048) -> void:
+	b.quad(_rp(s0, l0, lift), _rp(s1, l0, lift), _rp(s1, l1, lift), _rp(s0, l1, lift), Vector3.UP, col)
+
+
+func _make_road_markings() -> void:
+	if not track.rx:
+		return
+	var white := PaperKit.lin(Color("#f4f0e4"), 1.0)
+	var black := PaperKit.lin(Color("#2b2b2e"), 1.0)
+	var b := PaperKit.Builder.new(404)
+	var tarmac_only := func(st: float) -> bool:
+		var pt: Dictionary = track.patch_at(st, 0.0)
+		return pt.is_empty() or str(pt.get("kind", "tarmac")) == "tarmac"
+	# Start/finish line: a chequered strip two squares deep.
+	var hw0 := track.road_half_width(0.0) - 0.2
+	var cells := 16
+	for c in cells:
+		for row in 2:
+			var l0 := lerpf(-hw0, hw0, float(c) / cells)
+			var l1 := lerpf(-hw0, hw0, float(c + 1) / cells)
+			_paint(b, float(row) * 0.6, float(row + 1) * 0.6, l0, l1, white if (c + row) % 2 == 0 else black)
+	# Grid boxes behind the line, where the cars actually stand.
+	for row in 6:
+		for col in 2:
+			var s_c := fposmod(-5.0 - float(row) * 12.5 - (6.25 if col == 0 else 0.0), track.length)
+			var lat_c := -2.7 if col == 0 else 2.7
+			var half_l := 2.3
+			var half_w := 1.15
+			var e := 0.1
+			_paint(b, s_c - half_l, s_c + half_l, lat_c - half_w, lat_c - half_w + e, white)
+			_paint(b, s_c - half_l, s_c + half_l, lat_c + half_w - e, lat_c + half_w, white)
+			_paint(b, s_c - half_l, s_c - half_l + e, lat_c - half_w, lat_c + half_w, white)
+	# Dashes down the middle of tarmac straights.
+	var sd := 40.0
+	while sd < track.length - 40.0:
+		var k := 0.0
+		for off in range(-1, 3):
+			k += absf(float(track.curv[track.index_at(sd + off * 4.0)]))
+		var in_joker := not track.joker.is_empty() and sd > float(track.joker.s0) - 30.0 and sd < float(track.joker.s1) + 30.0
+		if k < 0.012 and tarmac_only.call(sd) and tarmac_only.call(sd + 3.0) and not track.on_stacked_span(sd) and not in_joker:
+			_paint(b, sd, sd + 3.0, -0.12, 0.12, white)
+		sd += 9.0
+	# Direction arrows before corners.
+	for c: Dictionary in track.corners:
+		var sa := float(c.s0) - 45.0
+		if sa < 20.0 or not tarmac_only.call(sa):
+			continue
+		var turn := _turn_sign_marker(int(c.apex))
+		for k2 in 3:
+			var ss := sa - float(k2) * 6.0
+			var lat_a := -turn * (track.road_half_width(ss) * 0.4)
+			_paint(b, ss, ss + 2.6, lat_a - 0.4, lat_a + 0.4, white)
+			b.quad(_rp(ss + 2.6, lat_a - 1.0, 0.048), _rp(ss + 4.2, lat_a, 0.048), _rp(ss + 2.6, lat_a + 1.0, 0.048), _rp(ss + 2.6, lat_a + 1.0, 0.048), Vector3.UP, white)
+	var mi := MeshInstance3D.new()
+	mi.mesh = b.mesh()
+	mi.material_override = paper_mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi)
+
+
+func _turn_sign_marker(i: int) -> float:
+	var a := track.tang[maxi(i - 6, 0)]
+	var c := track.tang[mini(i + 6, track.tang.size() - 1)]
+	return signf(a.x * c.y - a.y * c.x)
+
+
+## Rally stages: crumbling road edge with scattered chips, and grass tufts and gravel spilling onto the verge.
+func _make_verge_detail() -> void:
+	if track.rx:
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(def.seed) * 3 + 41
+	var road := Color(def["pal"]["road"])
+	var grass := Color(def["pal"]["f_mid"]) if def["pal"].has("f_mid") else Color("#6f9a4e")
+	var s := track.start_s + 6.0
+	var count := 0
+	var b := PaperKit.Builder.new(505)
+	while s < track.finish_s - 6.0:
+		var i := track.index_at(s)
+		if track.bridge_at(s, 8).is_empty():
+			for side: float in [-1.0, 1.0]:
+				if not track.barriers_at(s, side).is_empty():
+					continue
+				var hw := track.road_half_width(s)
+				var base := track.pts[i] + track.nrm[i] * side * (hw + rng.randf_range(0.1, 0.55))
+				var y := (track.terrain.height(base) if track.terrain else track.elev[i]) + 0.02
+				var xf := Transform3D(Basis(Vector3.UP, rng.randf() * TAU), Vector3(base.x, y, base.y))
+				var sz := rng.randf_range(0.1, 0.3)
+				b.box(Vector3(0, sz * 0.3, 0), Vector3(sz * 1.4, sz * 0.6, sz), xf, road.darkened(rng.randf_range(0.05, 0.3)))
+				if rng.randf() < 0.7:
+					var gx := Transform3D(Basis(Vector3.UP, rng.randf() * TAU), Vector3(base.x + side * 0.3, y, base.y))
+					for blade in 3:
+						b.box(Vector3((blade - 1) * 0.06, 0.16, 0), Vector3(0.035, 0.32 + rng.randf() * 0.12, 0.035), gx * Transform3D(Basis(Vector3.BACK, (blade - 1) * 0.35), Vector3.ZERO), grass)
+				count += 1
+		s += rng.randf_range(4.0, 7.0)
+		if count % 40 == 39:
+			var mi := MeshInstance3D.new()
+			mi.mesh = b.mesh()
+			mi.material_override = paper_mat
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			mi.visibility_range_end = 120.0
+			add_child(mi)
+			b = PaperKit.Builder.new(505 + count)
+			count += 1
+	var last := MeshInstance3D.new()
+	last.mesh = b.mesh()
+	last.material_override = paper_mat
+	last.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	last.visibility_range_end = 120.0
+	add_child(last)
+
+
 ## Reflector posts close to the road edge, alternating sides every ~20 m: nearby fast-moving objects are what
 ## makes speed readable. (Circuits already have walls.)
 func _make_markers() -> void:
@@ -1231,6 +1356,7 @@ func _make_puddles() -> void:
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		mi.visibility_range_end = float(Settings.g("draw_distance"))
 		add_child(mi)
+		_puddle_pts.append(mi)
 
 
 ## Visuals for the hazards: water splashes, chicane bales (solid), surface patches, ramp struts.
@@ -2407,6 +2533,51 @@ func _update_storm(dt: float) -> void:
 			env.ambient_light_energy = float(wx.amb_e) * 0.95
 
 
+## Rain on puddles: expanding rings on the nearest few.
+func _update_ripples(focus: Vector3) -> void:
+	if kind() != "rain" or Settings.fx_level() < 1 or _puddle_pts.is_empty():
+		return
+	if _ripples.is_empty():
+		var rm := StandardMaterial3D.new()
+		rm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		rm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		rm.cull_mode = BaseMaterial3D.CULL_DISABLED
+		rm.albedo_color = Color(1, 1, 1, 0.5)
+		rm.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
+		for i in 14:
+			var ring := MeshInstance3D.new()
+			var rmesh := TorusMesh.new()
+			rmesh.inner_radius = 0.9
+			rmesh.outer_radius = 1.0
+			rmesh.rings = 14
+			rmesh.ring_segments = 3
+			ring.mesh = rmesh
+			ring.material_override = rm.duplicate()
+			ring.scale = Vector3(0.01, 0.01, 0.01)
+			ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			add_child(ring)
+			_ripples.append({"node": ring, "t": randf() * 1.4, "puddle": null})
+	for r: Dictionary in _ripples:
+		r.t = float(r.t) + get_process_delta_time()
+		if float(r.t) > 1.4 or r.puddle == null:
+			r.t = randf() * 0.2
+			var pick: MeshInstance3D = _puddle_pts[randi() % _puddle_pts.size()]
+			if pick.global_position.distance_to(focus) < 45.0:
+				r.puddle = pick
+				var ring: MeshInstance3D = r.node
+				ring.global_position = pick.global_position + Vector3(randf_range(-0.5, 0.5), 0.03, randf_range(-0.5, 0.5)) * pick.scale.x
+			else:
+				r.puddle = null
+		if r.puddle != null:
+			var ring2: MeshInstance3D = r.node
+			var k := float(r.t) / 1.4
+			var rad := lerpf(0.08, 0.55, k) * (r.puddle as MeshInstance3D).scale.x
+			ring2.scale = Vector3(rad, 1.0, rad)
+			(ring2.material_override as StandardMaterial3D).albedo_color.a = (1.0 - k) * 0.55
+		else:
+			(r.node as MeshInstance3D).scale = Vector3(0.001, 0.001, 0.001)
+
+
 func cheer_crowd() -> void:
 	_crowd_boost = 2.2
 
@@ -2445,6 +2616,14 @@ func update(dt: float, focus: Vector3, radius: float, player_s: float, cam: Came
 		helicopter.update(dt, player_s)
 	_crowd_boost = maxf(0.0, _crowd_boost - dt)
 	_update_storm(dt)
+	if _sky_mat:
+		var bow := 0.0
+		if kind() == "rain" and tod == 0 and Settings.fx_level() >= 1:
+			bow = clampf((_time - 40.0) / 30.0, 0.0, 1.0)
+		_sky_mat.set_shader_parameter("rainbow", bow)
+	_update_ripples(focus)
+	if tod > 0 or changing_light():
+		LightHalo.flicker_windows(_time)
 	if rx_props:
 		rx_props.set_focus(focus)
 	for c: Array in _crowd:

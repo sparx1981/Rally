@@ -26,6 +26,12 @@ var _shake := 0.0
 var _speed_fov := 0.0
 var _speed_t := 0.0
 var _roll := 0.0
+var _brake_fov := 0.0
+var _gear_kick := 0.0
+
+
+func gear_kick() -> void:
+	_gear_kick = 1.0
 var _init_done := false
 var _last_view := -1
 
@@ -91,6 +97,10 @@ func follow(dt: float) -> void:
 		fast = clampf((target.speed() - 10.0) / 32.0, 0.0, 1.0)
 	_speed_fov = lerpf(_speed_fov, fast, clampf(dt * 1.8, 0.0, 1.0))
 	fov += _speed_fov * (7.0 if vi == LOW_VIEW_INDEX else (4.0 if is_mounted(vi) else 3.0))
+	var braking := target != null and target.service_brake > 0.5 and target.speed() > 14.0
+	_brake_fov = lerpf(_brake_fov, 1.0 if (braking and bool(Settings.g("speed_fx"))) else 0.0, clampf(dt * (6.0 if braking else 3.0), 0.0, 1.0))
+	fov -= _brake_fov * 3.5
+	_gear_kick = maxf(0.0, _gear_kick - dt * 6.0)
 	_speed_t += dt
 	var sh := Vector3.ZERO
 	if _speed_fov > 0.02:
@@ -198,3 +208,4 @@ func _apply_roll(dt: float) -> void:
 		want = clampf(-yaw_rate * 0.018 - lateral * 0.0016, -0.07, 0.07) * clampf(target.speed() / 25.0, 0.0, 1.0)
 	_roll = lerpf(_roll, want, clampf(dt * 4.0, 0.0, 1.0))
 	rotate_object_local(Vector3.FORWARD, _roll)
+	rotate_object_local(Vector3.RIGHT, _gear_kick * 0.012)

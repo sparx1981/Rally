@@ -38,6 +38,7 @@ var _intro_t := -1.0          # intro flyover clock (seconds); -1 = none
 const INTRO_LEN := 10.0
 var _orbit_t := 0.0
 var _rain_lens: RainLens
+var _cracks: GlassCracks
 var _last_count := 4
 var _done_t := 0.0
 var _reset_cd := 0.0
@@ -211,6 +212,9 @@ func _make_hud() -> void:
 	add_child(_hud_layer)
 	hud = Hud.new()
 	_hud_layer.add_child(hud)
+	_cracks = GlassCracks.new()
+	_cracks.visible = false
+	_hud_layer.add_child(_cracks)
 	_rain_lens = RainLens.new()
 	_rain_lens.visible = false
 	_hud_layer.add_child(_rain_lens)
@@ -346,6 +350,9 @@ func _process(delta: float) -> void:
 		camera.follow(dt)
 	var vi := camera.view_index()
 	stage.set_bonnet(ChaseCamera.is_ground_level(vi))
+	if _cracks:
+		_cracks.visible = ChaseCamera.is_mounted(vi) and _intro_t < 0.0 and player.damage_level() >= 3
+		_cracks.set_level(player.damage_level())
 	if _rain_lens:
 		_rain_lens.visible = stage.kind() == "rain" and ChaseCamera.is_mounted(vi) and _intro_t < 0.0
 	if vi != _last_view:
@@ -518,6 +525,8 @@ func _update_circuit(car: Car) -> void:
 	var to_gate := fposmod(checkpoint - fposmod(previous, tr.length), tr.length)
 	if to_gate > advance:
 		return
+	if car == player and progress.started:
+		_split_delta(int(progress.gate))
 	if progress.gate == 0:
 		if progress.started:
 			progress.completed += 1
@@ -525,8 +534,31 @@ func _update_circuit(car: Car) -> void:
 			_lap_log[car].append(race_time)
 		progress.started = true
 		if car == player:
+			_lap_start = race_time
+		if car == player:
 			_seek_stage_audio(true)
 	progress.gate = (int(progress.gate) + 1) % 4
+
+
+var _lap_start := 0.0
+var _splits_best := [0.0, 0.0, 0.0, 0.0]
+var _splits_now := [0.0, 0.0, 0.0, 0.0]
+var _best_lap := INF
+
+
+## A quarter-lap checkpoint was crossed: show how far ahead or behind the best lap so far we are.
+func _split_delta(gate: int) -> void:
+	var t := race_time - _lap_start
+	var idx := (gate + 3) % 4          # gate 1 closes quarter 1 ... gate 0 closes the lap
+	_splits_now[idx] = t
+	var best: float = _splits_best[idx]
+	if best > 0.0 and hud:
+		var d := t - best
+		hud.show_hint_timed("%s%.2f s  vs best lap" % ["+" if d >= 0.0 else "-", absf(d)], 2.4)
+	if idx == 3:
+		if t < _best_lap:
+			_best_lap = t
+			_splits_best = _splits_now.duplicate()
 
 
 ## Joker lane: counts the distance driven inside the lane; half of it counts as taken.
@@ -868,6 +900,8 @@ func _on_splashed(c: Car, v: float) -> void:
 
 
 func _on_gear(gear: int, previous: int) -> void:
+	if camera:
+		camera.gear_kick()
 	Haptics.impulse(0.18, 0.035)
 	Sfx.engine_shift(gear > previous and previous > 0)
 

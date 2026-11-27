@@ -122,6 +122,8 @@ func setup(car_stats: Dictionary, num: int, stg: Stage, mat: Material) -> void:
 	_make_dust()
 	_make_wheel_debris()
 	_make_dirt()
+	if Settings.fx_level() >= 1:
+		_make_brake_glow()
 	_make_rear_lamps()
 	if not is_player:
 		# AI engines are positional: you hear rivals close behind and alongside.
@@ -445,6 +447,9 @@ var _stone_t := 0.0
 var _sparks: CPUParticles3D
 var _spark_t := 0.0
 var dirt := 0.0
+var dust_film := 0.0
+var _disc_heat := 0.0
+var _disc_glow: Array = []
 var _dirt_nodes: Array = []
 
 
@@ -484,6 +489,45 @@ func spark(at_world: Vector3, outward: Vector3) -> void:
 	_spark_t = 0.18
 
 
+## Brake discs glow orange behind the wheel spokes after hard braking, most visibly at night.
+func _make_brake_glow() -> void:
+	if _wheels.is_empty():
+		return
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	m.albedo_color = Color(0, 0, 0, 1)
+	m.disable_fog = true
+	for i in _wheels.size():
+		var wnode: Node3D = _wheels[i]
+		var disc := MeshInstance3D.new()
+		var cm := CylinderMesh.new()
+		cm.top_radius = wheel_r * 0.55
+		cm.bottom_radius = wheel_r * 0.55
+		cm.height = 0.02
+		cm.radial_segments = 14
+		disc.mesh = cm
+		disc.material_override = m.duplicate()
+		disc.rotation.z = PI * 0.5
+		disc.position = Vector3(0.0, 0.0, 0.0)
+		disc.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		disc.visible = false
+		wnode.add_child(disc)
+		_disc_glow.append(disc)
+
+
+func _update_brake_glow(delta: float) -> void:
+	if _disc_glow.is_empty():
+		return
+	_disc_heat = clampf(_disc_heat + service_brake * clampf(speed() / 25.0, 0.0, 1.5) * delta * 0.9 - delta * 0.18, 0.0, 1.0)
+	var night := stage.tod > 0 or stage.changing_light()
+	var level := _disc_heat * (1.0 if night else 0.35)
+	for d: MeshInstance3D in _disc_glow:
+		d.visible = level > 0.06
+		if d.visible:
+			(d.material_override as StandardMaterial3D).albedo_color = Color(1.0, 0.42, 0.1) * (level * 1.4)
+
+
 func _make_dirt() -> void:
 	var m := StandardMaterial3D.new()
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -513,13 +557,21 @@ func _update_dirt(delta: float) -> void:
 	var mucky := patch_kind == "mud" or in_puddle or in_water or (stage.kind() == "rain" and (patch_kind in ["", "gravel"]) and (not stage.track.rx or on_road == false))
 	if mucky and speed() > 3.0 and not airborne:
 		dirt = minf(1.0, dirt + delta * 0.012 * clampf(speed() / 14.0, 0.0, 2.0))
+	# Dry loose ground (gravel, dirt, sand, off the road): a pale film of dust builds on the lower body instead.
+	var loose := _loose_color().a > 0.0 and stage.kind() != "rain" and stage.kind() != "snow"
+	if loose and not mucky and speed() > 6.0 and not airborne:
+		dust_film = minf(1.0, dust_film + delta * 0.01 * clampf(speed() / 16.0, 0.0, 2.0))
+	_update_brake_glow(delta)
 	if _dirt_nodes.is_empty():
 		return
-	var show := dirt > 0.04
+	var amount := maxf(dirt, dust_film * 0.8)
+	var show := amount > 0.04
 	for n: MeshInstance3D in _dirt_nodes:
 		n.visible = show
 	if show:
-		(_dirt_nodes[0].material_override as StandardMaterial3D).albedo_color.a = clampf(dirt, 0.0, 1.0) * 0.6
+		var tone := Color(0.30, 0.22, 0.14).lerp(Color(0.82, 0.74, 0.58), dust_film / maxf(dust_film + dirt, 0.001))
+		var mat := _dirt_nodes[0].material_override as StandardMaterial3D
+		mat.albedo_color = Color(tone.r, tone.g, tone.b, clampf(amount, 0.0, 1.0) * 0.6)
 
 
 func _make_dust() -> void:
@@ -659,6 +711,51 @@ func sync_now() -> void:
 
 var _pristine_shell: PackedVector3Array
 var _damage_count := 0
+var _parts: Array = []
+
+
+func damage_level() -> int:
+	return _damage_count
+
+
+## A bumper or mirror torn off in a hard hit tumbles away (visual only; the car keeps its shape).
+func _throw_part(at_world: Vector3, outward: Vector3, colour: Color, size: Vector3) -> void:
+	if Settings.fx_level() < 1 or _parts.size() > 6:
+		return
+	var mi := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = size
+	var sm := StandardMaterial3D.new()
+	sm.albedo_color = colour
+	sm.roughness = 1.0
+	bm.material = sm
+	mi.mesh = bm
+	mi.top_level = true
+	add_child(mi)
+	mi.global_position = at_world
+	_parts.append({"node": mi, "vel": outward * 4.0 + Vector3(randf_range(-1, 1), 3.0, randf_range(-1, 1)) + Vector3(vel.x, 0, vel.y) * 0.5, "life": 5.0})
+
+
+func _update_parts(delta: float) -> void:
+	for i in range(_parts.size() - 1, -1, -1):
+		var pt: Dictionary = _parts[i]
+		pt.life = float(pt.life) - delta
+		var n: MeshInstance3D = pt.node
+		var v: Vector3 = pt.vel
+		v.y -= 22.0 * delta
+		n.global_position += v * delta
+		n.rotate_x(5.0 * delta)
+		n.rotate_z(3.0 * delta)
+		var gh: float = stage.track.surface_height(Vector2(n.global_position.x, n.global_position.z), s, lat) + 0.05
+		if n.global_position.y < gh and v.y < 0.0:
+			n.global_position.y = gh
+			v.y = -v.y * 0.3
+			v.x *= 0.6
+			v.z *= 0.6
+		pt.vel = v
+		if float(pt.life) <= 0.0:
+			n.queue_free()
+			_parts.remove_at(i)
 
 
 ## Press the actual bodywork and its printed detail inward around the contact point.
@@ -730,6 +827,9 @@ func add_damage(at: Vector2, strength: float) -> void:
 	if nose:
 		nose.mesh = CarModel.cockpit_nose(dented, _cockpit["nose_clip"])
 	_damage_count += 1
+	if strength > 9.0 and _damage_count >= 3:
+		var wp := global_position + (fwd3() if not side_hit else right_axis3() * signf(x)) * (half_len if not side_hit else half_wid) * signf(z if not side_hit else 1.0) + Vector3(0, 0.5, 0)
+		_throw_part(wp, Vector3(outward.x, 0.0, outward.z) if side_hit else Vector3(0, 0, 0), Color("#d8d4cc") if not side_hit else Color("#2b2b2e"), Vector3(0.9, 0.12, 0.2) if not side_hit else Vector3(0.18, 0.16, 0.12))
 
 
 func _crush_point(original: Vector3, current: Vector3, center: Vector3, outward: Vector3, radius: float, crush: float) -> Vector3:
@@ -1244,6 +1344,7 @@ func _sync_visual(delta: float) -> void:
 		wnode.get_child(0).rotation.x = _spin
 	_update_wheel_debris()
 	_update_stones(delta)
+	_update_parts(delta)
 	# Dust / spray / snow from the wheels.
 	if _dust:
 		var spd := absf(v_long)

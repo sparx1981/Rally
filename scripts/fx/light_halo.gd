@@ -46,6 +46,25 @@ static func _material(tex: Texture2D, color: Color, strength: float, billboard: 
 
 
 ## A round glow that always faces the camera (vehicle lamps, floodlights).
+static var _window_mat: StandardMaterial3D
+
+
+## A window glow that shares one material, so every window can flicker together cheaply.
+static func make_window(size: float) -> MeshInstance3D:
+	var mi := make(Color("#ffb860"), size, 0.4)
+	if _window_mat == null:
+		_window_mat = (mi.material_override as StandardMaterial3D).duplicate()
+	mi.material_override = _window_mat
+	return mi
+
+
+static func flicker_windows(t: float) -> void:
+	if _window_mat == null:
+		return
+	var f := 0.78 + 0.14 * sin(t * 7.3) + 0.08 * sin(t * 17.1 + 1.3) + 0.06 * sin(t * 3.1)
+	_window_mat.albedo_color = Color(1.0 * 0.4 * f, 0.72 * 0.4 * f, 0.38 * 0.4 * f, 1.0)
+
+
 static func make(color: Color, size: float, strength := 1.0) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	var q := QuadMesh.new()

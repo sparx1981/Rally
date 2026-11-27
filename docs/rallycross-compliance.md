@@ -241,3 +241,13 @@ All 12 circuits complete 3 laps. A human player is not affected by the AI's lane
 - First-launch self-check (fresh installs only): hidden benchmark behind the title picks High, Medium or Low.
 - Effects: car-tinted dust; stones that land and bounce; heat shimmer (dry day, High); rain beads on the lens in bonnet/cockpit views and a wetter rim on cars in rain; lightning and thunder on storm stages; flags that react to passing cars; crowds jump after jumps/splashes; night photographers with flashes; lit sponsor boards, car underglow and a bigger start-light haze at night; skid marks last longer; cinematic three-shot camera after the finish.
 - Not done: a true rewind replay, exhaust heat haze, dynamic drying of water trails.
+
+## Twenty-first pass
+
+- Plants sway in the wind (vertex shader, strength grows with height; stronger in rain). Houses and cars get a darkened silhouette edge (Medium+).
+- LOD now also covers rocks, logs and houses/barns/cabins; far trees get per-tree colour variation. Seasons: Settings > Season (stage default, green, autumn).
+- Rainbow on daytime rain stages after about 40 s; sunset light shafts (High); puddle ripples; window glow flicker; wetter road sheen.
+- Cars: dust film in dry loose conditions (mud in wet), brake discs glow after hard braking (visible at night), parts fly off in hard hits, cracked windscreen overlay in bonnet/cockpit views.
+- Circuits: chequered start line, grid boxes, centre dashes and arrows on tarmac. Rally stages: crumbling edge chips and grass tufts on the verge (High).
+- Camera: slight FOV squeeze when braking hard, a small kick on gear changes. Lap delta vs best lap at each quarter-lap gate (circuits).
+- Texture compression was already on (ETC2/ASTC import); scenery batching left as is (draw calls measured at 130-280).

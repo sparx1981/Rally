@@ -860,7 +860,7 @@ func _make_fx(members: Array, node: Node3D) -> Array:
 			var wp: Vector2 = pl["pos"]
 			var wxf := Transform3D(Basis(Vector3.UP, float(pl["yaw"])), Vector3(wp.x, _ground(wp), wp.y))
 			for wi in mini(wl.size(), 5):
-				var halo := LightHalo.make(Color("#ffb860"), 1.7, 0.4)
+				var halo := LightHalo.make_window(1.7)
 				var wlocal: Vector3 = wl[wi]
 				if popups and _pivots[i] != null:
 					(_pivots[i] as Node3D).get_child(0).add_child(halo)

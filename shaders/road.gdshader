@@ -15,6 +15,7 @@ uniform float wet = 0.0;
 uniform vec3 lamp_pts[8];
 uniform int lamp_n = 0;
 uniform float refl = 0.0;
+uniform vec3 sky_tint : source_color = vec3(0.7, 0.78, 0.88);
 
 varying vec3 wpos;
 
@@ -49,6 +50,11 @@ void fragment() {
 	ALBEDO = c;
 	ROUGHNESS = 1.0;
 	SPECULAR = 0.0;
+	if (wet > 0.0 && COLOR.r >= 0.5) {
+		vec3 cam2 = (INV_VIEW_MATRIX * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+		float fres2 = pow(1.0 - clamp(dot(normalize(cam2 - wpos), vec3(0.0, 1.0, 0.0)), 0.0, 1.0), 3.0);
+		EMISSION += sky_tint * fres2 * wet * 0.3 * (0.5 + 0.5 * smoothstep(0.35, 0.6, texture(noise, wpos.xz * 0.05 + vec2(0.7, 0.3)).r));
+	}
 	// Wet night road: lamps mirrored in the water, broken up by puddle patches.
 	if (refl > 0.0 && wet > 0.0 && lamp_n > 0) {
 		vec3 cam = (INV_VIEW_MATRIX * vec4(0.0, 0.0, 0.0, 1.0)).xyz;

@@ -20,6 +20,7 @@ uniform float cover = 0.54;
 uniform float storm = 0.0;
 uniform int layers = 3;
 uniform float flash = 0.0;
+uniform float rainbow = 0.0;
 uniform float night_amount = 0.0;
 uniform float glow_amount = 0.0;
 uniform bool peaks;
@@ -162,6 +163,14 @@ void sky() {
 	col += lamp * ray * pow(ld, 3.0) * vis * strength * fade;
 	}
 
+	if (rainbow > 0.0 && sun.y > 0.0) {
+		float ang = acos(clamp(dot(dir, -sun), -1.0, 1.0));
+		float k = (ang - 0.69) / 0.1;
+		if (k > 0.0 && k < 1.0 && dir.y > 0.02) {
+			vec3 rc = clamp(abs(fract(vec3(1.0, 0.667, 0.333) + (1.0 - k) * 0.78) * 6.0 - 3.0) - 1.0, 0.0, 1.0);
+			col = mix(col, rc, rainbow * 0.38 * sin(k * 3.14159));
+		}
+	}
 	col += vec3(0.75, 0.82, 1.0) * flash * (0.35 + 0.65 * smoothstep(0.0, 0.5, height));
 	COLOR = col;
 
