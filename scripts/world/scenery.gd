@@ -290,6 +290,8 @@ func _place_hazard_props(rng: RandomNumberGenerator) -> void:
 		var sc: float = f["s"]
 		match f["type"]:
 			"chicane":
+				if str(f.get("kind", "hay")) == "tyre":
+					continue   # built from tyre stacks by RxProps
 				var side: float = f["side"]
 				for pair in [[sc, side], [sc + 16.0, -side]]:
 					var j := track.index_at(pair[0])

@@ -187,6 +187,8 @@ static func build(track: Track, def: Dictionary) -> void:
 		track.flatten_at(mid, 40.0, 30.0)
 	if rx.has("bridge"):
 		_add_covered_bridge(track, float(rx.bridge.f) * length)
+	if int(rx.get("tchicane", 0)) > 0:
+		_add_tyre_chicane(track)
 	_build_barriers(track, rx)
 	# The lap line must not carry a step in the road: make the end of the lap meet the start.
 	var last := n - 1
@@ -326,6 +328,37 @@ static func _build_joker(track: Track, jk: Dictionary) -> void:
 
 
 ## A shallow water crossing: the road dips a little and water runs over it (a splash for the pace notes).
+## A tyre-wall chicane on the straightest clear stretch of the main road: a block of tyre stacks from one
+## edge, then another from the other edge 16 m on (see RxProps).
+static func _add_tyre_chicane(track: Track) -> void:
+	var length := track.length
+	var best_s := -1.0
+	var best_k := 1e9
+	var s := 140.0
+	while s < length - 140.0:
+		var clear := true
+		if not track.joker.is_empty() and s > float(track.joker.s0) - 70.0 and s < float(track.joker.s1) + 70.0:
+			clear = false
+		for f: Dictionary in track.features:
+			if absf(float(f.get("s", -999.0)) - s) < 70.0:
+				clear = false
+		for br: Dictionary in track.bridges:
+			if absf(float(br.get("s", -999.0)) - s) < 80.0:
+				clear = false
+		if clear and not track.on_stacked_span(s) and not track.on_stacked_span(s + 40.0):
+			var k := 0.0
+			for off in range(-2, 12):
+				k += absf(float(track.curv[track.index_at(s + off * 4.0)]))
+			if k < best_k:
+				best_k = k
+				best_s = s
+		s += 4.0
+	if best_s < 0.0:
+		return
+	track.features.append({"type": "chicane", "kind": "tyre", "s": best_s, "s0": best_s - 2.0, "s1": best_s + 18.0, "side": 1.0})
+	track.notes.append({"s0": best_s - 2.0, "s1": best_s + 18.0, "kind": "chicane", "dir": 0.0, "sev": 0, "hairpin": false})
+
+
 static func _add_splash(track: Track, station: float) -> void:
 	var ci := track.index_at(station)
 	track.flatten_at(station, 12.0, 20.0)
@@ -413,6 +446,21 @@ static func _build_barriers(track: Track, rx: Dictionary) -> void:
 		if isl1 > isl0 and isl0 >= 0.0:
 			track.barriers.append(_bar(isl0, isl1, side, "island", "road"))
 			track.barriers.append(_bar(isl0, isl1, side, "island", "lane_in"))
+		# Where the void is too narrow for two walls (just after the nose and just before the merge), a single
+		# divider fills it, so the barrier runs the whole length of the gap and entry and exit are real gates.
+		var run0 := -1.0
+		for i in range(int(jk.i0), int(jk.i1) + 1):
+			var lo_m: float = jk.lo[i]
+			var gap := (lo_m - track.widths[i] * 0.5) if not is_nan(lo_m) else -1.0
+			var narrow := gap >= 1.0 and gap < 1.9
+			if narrow and run0 < 0.0:
+				run0 = track.dist[i]
+			elif not narrow and run0 >= 0.0:
+				if track.dist[i] - run0 > 3.0:
+					track.barriers.append(_bar(run0, track.dist[i], side, "island", "mid"))
+				run0 = -1.0
+		if run0 >= 0.0 and track.dist[int(jk.i1)] - run0 > 3.0:
+			track.barriers.append(_bar(run0, track.dist[int(jk.i1)], side, "island", "mid"))
 	track.index_barriers()
 
 

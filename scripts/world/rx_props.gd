@@ -42,6 +42,7 @@ func build(t: Track, d: Dictionary, mat: Material, is_dark: bool) -> void:
 	_control_tower(b)
 	_paddock(b)
 	_braking_boards_and_booths(b)
+	_tyre_chicanes(b)
 	if not t.joker.is_empty():
 		_joker_signage(b)
 	_floodlights(b)
@@ -218,6 +219,61 @@ func _spawn_firework(at: Vector3) -> void:
 	p.emitting = true
 	get_tree().create_timer(3.5).timeout.connect(p.queue_free)
 	Sfx.play("thud", -12.0, 2.4)
+
+
+## Tyre-wall chicanes: two staggered blocks of painted stacks, solid for cars.
+func _tyre_chicanes(b: PaperKit.Builder) -> void:
+	for f: Dictionary in track.features:
+		if f.get("type", "") != "chicane" or str(f.get("kind", "")) != "tyre":
+			continue
+		var sc: float = f["s"]
+		var side: float = f["side"]
+		var w := track.width
+		for pair in [[sc, side], [sc + 16.0, -side]]:
+			var j := track.index_at(pair[0])
+			var edge := float(pair[1]) * (track.road_half_width(pair[0]) - 0.1)
+			var lat := edge
+			var n := 0
+			while absf(lat) > 0.9:
+				for row in 2:
+					var along := (float(row) - 0.5) * 0.95
+					var p: Vector2 = track.pts[j] + track.nrm[j] * lat + track.tang[j] * along
+					var y := track.road_h_i(j) + lat * track.bank_slope(j) + Stage.ROAD_Y
+					_tyre_stack(b, Vector3(p.x, y, p.y), Color("#c93a30") if (n + row) % 2 == 0 else Color("#eee8dc"))
+					solids.append([p, 0.52])
+				lat -= signf(lat) * 0.95
+				n += 1
+
+
+## A stack of three painted tyres (8-sided rings with a hole through the top), standing at pos.
+func _tyre_stack(b: PaperKit.Builder, pos: Vector3, paint: Color) -> void:
+	var outer := 0.46
+	var inner := 0.22
+	var sides := 8
+	var col := PaperKit.lin(paint, 1.0)
+	var mid := PaperKit.lin(paint.darkened(0.14), 1.0)
+	var dark := PaperKit.lin(Color("#1c1c1f"), 1.0)
+	for t in 3:
+		var y0 := 0.01 + t * 0.33
+		var y1 := y0 + 0.32
+		for q in sides:
+			var a0 := TAU * float(q) / sides
+			var a1 := TAU * float(q + 1) / sides
+			var am := (a0 + a1) * 0.5
+			var o0 := Vector3(cos(a0) * outer, 0, sin(a0) * outer)
+			var o1 := Vector3(cos(a1) * outer, 0, sin(a1) * outer)
+			b.quad(pos + o1 + Vector3(0, y0, 0), pos + o0 + Vector3(0, y0, 0), pos + o0 + Vector3(0, y1, 0), pos + o1 + Vector3(0, y1, 0),
+				Vector3(cos(am), 0, sin(am)), col if t != 1 else mid)
+	for q in sides:
+		var a0 := TAU * float(q) / sides
+		var a1 := TAU * float(q + 1) / sides
+		var am := (a0 + a1) * 0.5
+		var o0 := Vector3(cos(a0) * outer, 0.99, sin(a0) * outer)
+		var o1 := Vector3(cos(a1) * outer, 0.99, sin(a1) * outer)
+		var i0 := Vector3(cos(a0) * inner, 0.99, sin(a0) * inner)
+		var i1 := Vector3(cos(a1) * inner, 0.99, sin(a1) * inner)
+		b.quad(pos + o1, pos + i1, pos + i0, pos + o0, Vector3.UP, col)
+		b.quad(pos + i0, pos + i1, pos + i1 - Vector3(0, 0.99, 0), pos + i0 - Vector3(0, 0.99, 0), Vector3(-cos(am), 0, -sin(am)), dark)
 
 
 ## One painted tyre ring (outer wall, top ring, bottom, hole), cached per colour.

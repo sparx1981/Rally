@@ -1297,6 +1297,12 @@ func barrier_wall(bar: Dictionary, s: float) -> float:
 		"lane_out":
 			var band := joker_band(s)
 			return (maxf(absf(band.x), absf(band.y)) if not is_nan(band.x) else road_half_width(s)) + float(bar.get("offset", 0.75))
+		"mid":
+			# A thin divider down the middle of the void between the road edge and the lane.
+			var bm := joker_band(s)
+			if is_nan(bm.x):
+				return road_half_width(s) + 0.75
+			return (road_half_width(s) + minf(absf(bm.x), absf(bm.y))) * 0.5
 		"lane_in":
 			var b := joker_band(s)
 			return (minf(absf(b.x), absf(b.y)) - float(bar.get("offset", 0.75)) if not is_nan(b.x) else road_half_width(s) + 0.75)
