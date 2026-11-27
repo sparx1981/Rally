@@ -881,13 +881,24 @@ func _rx_wall(b: PaperKit.Builder, kind: String, p0: Vector2, p1: Vector2, y0: f
 	var frame := Transform3D(Basis(Vector3.UP, yaw), Vector3((p0.x + p1.x) * 0.5, (y0 + y1) * 0.5, (p0.y + p1.y) * 0.5))
 	match kind:
 		"tyre":
-			# Three tyres high, with a conveyor-belt face in a lighter tone and a painted band.
-			b.box(Vector3(0, 0.50, 0), Vector3(0.95, 1.0, seg + 0.02), frame, Color("#2d2c30"), Color("#4a4a52"))
-			var face := Vector3(out.x, 0, out.y).dot(Vector3(frame.basis.x)) 
-			var face_sign := -1.0 if face > 0.0 else 1.0   # the belted face looks at the road
-			b.box(Vector3(face_sign * 0.49, 0.5, 0), Vector3(0.05, 0.62, seg), frame, Color("#8f8b84"))
-			if n % 3 == 0:
-				b.box(Vector3(face_sign * 0.50, 0.85, 0), Vector3(0.05, 0.14, seg), frame, Color("#c8553d") if n % 6 == 0 else PaperKit.CREAM)
+			# Stacks of three painted tyres, red and white in turn, standing side by side along the wall.
+			b.box(Vector3(0, 0.47, 0), Vector3(0.62, 0.94, seg + 0.02), frame, Color("#26262a"))
+			var stacks := maxi(1, roundi(seg / 0.95))
+			var pitch := seg / float(stacks)
+			var tilt := Basis(Vector3.BACK, PI * 0.5)
+			var disc := PaperKit.circle(0.46, 0.0, 0.0, 10)
+			var tread := PaperKit.circle(0.475, 0.0, 0.0, 10)
+			var hole := PaperKit.circle(0.24, 0.0, 0.0, 8)
+			for k in stacks:
+				var z := -seg * 0.5 + pitch * (k + 0.5)
+				var idx := n * 3 + k
+				var paint := Color("#c93a30") if idx % 2 == 0 else Color("#eee8dc")
+				for t in 3:
+					var y := -(y1 - y0) * 0.0 + 0.165 + t * 0.33 - 0.5
+					var pos := Vector3(0, y + 0.5, z)
+					b.prism(disc, -0.15, 0.15, frame * Transform3D(tilt, pos), paint)
+					b.prism(tread, -0.035, 0.035, frame * Transform3D(tilt, pos), paint.darkened(0.28))
+				b.prism(hole, 0.0, 0.2, frame * Transform3D(tilt, Vector3(0, 0.99, z)), Color("#1c1c1f"))
 		"jersey":
 			b.box(Vector3(0, 0.50, 0), Vector3(0.55, 1.0, seg + 0.02), frame, Color("#bfbab0"), Color("#d0cbc0"))
 			b.box(Vector3(0, 0.12, 0), Vector3(0.75, 0.24, seg + 0.02), frame, Color("#aaa59b"))

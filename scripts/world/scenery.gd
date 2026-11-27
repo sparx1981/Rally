@@ -774,6 +774,8 @@ func _make_fx(members: Array, node: Node3D) -> Array:
 			ol.position = Vector3(lp.x, _ground(lp) + 3.6, lp.y)
 			ol.visible = false
 			node.add_child(ol)
+			if LightHalo.enabled():
+				ol.add_child(LightHalo.street(Color("#ffb878"), 3.6, 4.5, 0.9))
 			out.append([ol, ol.position, -1])
 			continue
 		if not info.has("chimney"):

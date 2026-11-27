@@ -527,6 +527,10 @@ func _floodlights(b: PaperKit.Builder) -> void:
 		b.box(Vector3(0, 16.5, 0), Vector3(3.2, 1.0, 0.5), xf, Color("#4a4e54"))
 		for h in 6:
 			b.box(Vector3(-1.3 + h * 0.52, 16.5, -0.3), Vector3(0.36, 0.5, 0.1), xf, Color("#fff2c4"), Color(-1, 0, 0), night)
+		if night and LightHalo.enabled():
+			var fh := LightHalo.make(Color("#fff0c8"), 14.0, 0.8)
+			add_child(fh)
+			fh.global_position = xf * Vector3(0, 16.5, -0.6)
 
 
 ## Night: lamp masts along the main straight (the run into and out of the start line), each throwing a
@@ -562,6 +566,10 @@ func _track_lights(b: PaperKit.Builder) -> void:
 		b.box(Vector3(toward * 0.85, 9.0, 0), Vector3(1.7, 0.14, 0.14), Transform3D(xf.basis, xf.origin), Color("#6a6e75"))
 		b.box(head, Vector3(0.9, 0.18, 0.5), xf, Color("#fff2c4"), Color(-1, 0, 0), true)
 		solids.append([pt.p, 0.4])
+		if LightHalo.enabled():
+			var hh := LightHalo.street(Color("#ffd9a0"), 9.0 + 0.1, 7.0, 0.85)
+			add_child(hh)
+			hh.global_position = xf * head + Vector3(0, -0.2, 0)
 		# Pool of light on the road under the head.
 		var c: Vector2 = track.pts[i]
 		var pool := MeshInstance3D.new()

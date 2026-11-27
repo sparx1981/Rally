@@ -19,7 +19,7 @@ var data := {
 	"render_scale": 0.8, "shadows": 1, "tilt_shift": 1, "density": 0.7, "draw_distance": 110.0, "msaa": 1,
 	"particles": 0.7, "paper_detail": true,
 	"popups": true,            # pop-up / unfolding scenery animation (test toggle)
-	"fps": 60, "show_fps": false, "debug_hud": false,
+	"fps": 60, "show_fps": false, "debug_hud": false, "light_halos": true,
 	"ai_difficulty": 1, "opponents": 5, "camera": 0, "units": 0,
 	"progressive_trigger": false, "controller_trigger_mode": 0, "cockpit_fov": 58.0,
 	"touch_mode": 0, "tilt_sens": 1.0, "tilt_invert": false, "touch_controls": 0,

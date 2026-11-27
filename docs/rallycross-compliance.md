@@ -165,3 +165,8 @@ All 12 circuits complete 3 laps. A human player is not affected by the AI's lane
 - Start lights are housings with the lens on the face toward the grid (they used to glow on every side).
 - Finish-line confetti cannons and fireworks fire when the first car (and again when the player) finishes a circuit race.
 - Circuit grids are spaced 12.5 m between rows (was 8 m), wider lanes, and staggered by half a row.
+
+## Ninth pass
+
+- Tyre barriers are now stacks of three painted tyres (red and white in turn) with tread rings and dark centres.
+- Light glow is on by default (Settings > Graphics > Light glow). Vehicle lamps and floodlights use a round glow; street and track lamps throw light downward only (small halo at the head, a faint cone, a pool on the ground).

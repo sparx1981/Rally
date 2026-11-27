@@ -441,6 +441,15 @@ func enable_lights(shadows: bool, night := false) -> void:
 		sl.rotation = Vector3(-0.085, PI + signf(mount.x)*0.035, 0.0)
 		_body.add_child(sl)
 		_lights.append(sl)
+	if LightHalo.enabled():
+		for i in mounts.size():
+			var hl := LightHalo.make(Color("#fff0d0"), 1.5, 0.9)
+			hl.position = mounts[i] + Vector3(0, 0, 0.12)
+			_body.add_child(hl)
+		for sx: float in [-1.0, 1.0]:
+			var tl := LightHalo.make(Color("#ff3a2a"), 0.9, 0.8)
+			tl.position = Vector3(sx * half_wid * 0.72, lamp.y, -half_len - 0.12)
+			_body.add_child(tl)
 	var tail := OmniLight3D.new()
 	tail.light_color = Color("#ff5a3a")
 	tail.light_energy = 0.7
