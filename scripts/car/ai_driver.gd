@@ -50,13 +50,11 @@ func update(dt: float, others: Array, t: float) -> void:
 	if not is_nan(lane):
 		want = lane
 	var taking_joker := false
-	var s_rel_lane := 0.0
 	if not tr.joker.is_empty() and not car.joker_taken and car.laps_total > 0:
 		if joker_lap == 0:
 			joker_lap = 1 + (car.driver_name.hash() & 0xffff) % maxi(car.laps_total, 1)
 		var is_lap := (car.lap + 1 == joker_lap or car.lap + 1 >= car.laps_total) and _jk_abort_lap != car.lap
 		var s_rel := wrapf(car.s - float(tr.joker.s0), -tr.length * 0.5, tr.length * 0.5)
-		s_rel_lane = s_rel
 		if is_lap and s_rel > -90.0 and s_rel < float(tr.joker.s1) - float(tr.joker.s0):
 			taking_joker = true
 			var band := tr.joker_band(car.s + look)
@@ -89,12 +87,6 @@ func update(dt: float, others: Array, t: float) -> void:
 		# The lane is longer and looser: spread the circuit's Joker time delta evenly over its length.
 		var lane_len := maxf(float(tr.joker.s1) - float(tr.joker.s0), 40.0)
 		vt = 1.0 / (1.0 / maxf(vt, 4.0) + float(tr.rx_info.get("pace", 0.0)) / lane_len)
-	if taking_joker and car.s > float(tr.joker.s0) - 40.0:
-		# The lane's line has a different radius from the centre line the speed profile was made for.
-		var k := float(tr.curv[tr.index_at(car.s + 6.0)])
-		vt *= sqrt(clampf(1.0 - k * clampf(_jk_lat, -30.0, 30.0), 0.25, 1.0))
-	if taking_joker and s_rel_lane < 25.0:
-		vt = minf(vt, 17.0)   # slow for the lane mouth: the nose and the sideways move need a controlled entry
 	if tr.rx and car.lap < 5:
 		var patch_now := tr.patch_at(car.s + 3.0, car.lat)
 		if patch_now.get('rx', false) and patch_now['kind'] != 'tarmac':
