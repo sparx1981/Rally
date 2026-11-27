@@ -9,6 +9,7 @@ signal camera_pressed
 var time_tag: PanelContainer
 var sub_tag: PanelContainer
 var speed_tag: PanelContainer
+var joker_tag: PanelContainer
 var pos_tag: PanelContainer
 var fps_label: Label
 var center_card: PanelContainer
@@ -46,6 +47,14 @@ func _ready() -> void:
 	pos_tag.offset_left = -260
 	pos_tag.offset_right = -130
 	pos_tag.offset_top = 96
+	joker_tag = PaperTheme.tag("", 26)
+	joker_tag.visible = false
+	add_child(joker_tag)
+	joker_tag.anchor_left = 1.0
+	joker_tag.anchor_right = 1.0
+	joker_tag.offset_left = -300
+	joker_tag.offset_right = -130
+	joker_tag.offset_top = 172
 	var cam := CameraButton.new()
 	add_child(cam)
 	cam.anchor_left = 1.0
@@ -120,6 +129,16 @@ func set_time(t: float) -> void:
 func set_sub(text: String) -> void:
 	sub_tag.visible = text != ""
 	_txt(sub_tag, text)
+
+
+## Rallycross: whether this race's Joker lane has been driven (hidden on stages without one).
+func set_joker(present: bool, taken: bool, last_lap: bool) -> void:
+	joker_tag.visible = present
+	if not present:
+		return
+	var label := joker_tag.get_child(0) as Label
+	label.text = "JOKER: DONE" if taken else ("JOKER: NEEDED NOW" if last_lap else "JOKER: TO DO")
+	label.add_theme_color_override("font_color", Color("#2f7a3a") if taken else (Color("#b3362a") if last_lap else Color("#9a6b12")))
 
 
 func set_position_text(text: String) -> void:

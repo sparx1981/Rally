@@ -838,6 +838,7 @@ func _update_hud() -> void:
 		var lap := mini(int(_circuit_progress[player].completed) + 1, _laps) if _laps > 0 else 0
 		var lap_text := "  ·  Lap %d/%d" % [lap, _laps] if _laps > 0 else ""
 		hud.set_position_text("P%d/%d%s" % [pos, cars.size(), lap_text])
+	hud.set_joker(not tr.joker.is_empty() and not attract, player.joker_taken, player.lap + 1 >= _laps)
 	var wrong := player.vel.length() > 3.0 and player.vel.normalized().dot(tr.tang[player.track_i]) < -0.4
 	var lost := _off_track_time >= RECOVERY_WARNING and state == State.RACING
 	var seconds := maxi(1, ceili(RECOVERY_LIMIT - _off_track_time))

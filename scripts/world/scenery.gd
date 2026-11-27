@@ -354,6 +354,8 @@ func _overlaps(p: Vector2, r: float) -> bool:
 func _add(kind: String, vi: int, p: Vector2, yaw: float, s: float, rng: RandomNumberGenerator, solid: bool, text := "", force := false) -> void:
 	if _in_joker(p, s) and not force:
 		return
+	if track.rx and not force and track.near_road(p, float(lib[kind][vi]["r"]) + (2.5 if kind in ["house", "cabin", "barn", "tent", "mesa", "lamp"] else 0.0)):
+		return   # nothing stands on a road or Joker lane; buildings keep an extra gap
 	if not track.terrain.supports_prop(p,lib[kind][vi]["shore_radius"]):
 		return
 	var r: float = lib[kind][vi]["r"]

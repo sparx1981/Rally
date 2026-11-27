@@ -554,6 +554,31 @@ func clearance(p: Vector2) -> float:
 	return sqrt(bd)
 
 
+## True when a prop of radius r at p would stand on, or too close to, ANY drivable surface: any stretch of road
+## nearby (switchbacks and loops put other legs close by) and any Joker lane, to either side.
+func near_road(p: Vector2, r: float, margin := 1.5) -> bool:
+	var c := Vector2i(floori(p.x / CELL), floori(p.y / CELL))
+	for dx in range(-1, 2):
+		for dy in range(-1, 2):
+			var key := Vector2i(c.x + dx, c.y + dy)
+			if not grid.has(key):
+				continue
+			for j in grid[key]:
+				var dv: Vector2 = p - pts[j]
+				var lat := dv.dot(nrm[j])
+				var along := dv.dot(tang[j])
+				var ext := road_half_width(dist[j])
+				var band := joker_band(dist[j])
+				if not is_nan(band.x):
+					if lat >= 0.0 and band.y > 0.0:
+						ext = maxf(ext, band.y)
+					elif lat < 0.0 and band.x < 0.0:
+						ext = maxf(ext, -band.x)
+				if Vector2(maxf(absf(lat) - ext, 0.0), maxf(absf(along) - 2.5, 0.0)).length() < r + margin:
+					return true
+	return false
+
+
 func heading_at(i: int) -> float:
 	return atan2(tang[i].x, tang[i].y)
 
