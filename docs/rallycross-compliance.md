@@ -313,3 +313,7 @@ All 12 circuits complete 3 laps. A human player is not affected by the AI's lane
 
 - The 2D screen overlay is gone. Each hard front hit (strength > 8, up to 5) adds a star crack on the cockpit windscreen at the lateral position of the hit: radial cracks with branches, a broken ring and a frosted patch, built as strips flush with the glass quad (`WindscreenCracks`, `shaders/windscreen_crack.gdshader`). The shader refracts the screen behind each crack sideways (opposite directions either side, strongest at the edges), adds edge glints and a scatter blur in the frosted patch.
 - Visible in the cockpit view only (the bonnet camera cannot see the windscreen, and the exterior body glass is not cracked). Rear and side hits do not crack glass. Dev: `--crack` forces three sample hits.
+
+## Thirty-first pass: Timberline Crest Joker relocated
+
+- The Joker lane moved from the steep banked spiral (f 0.247-0.387, about 160 m) to the long flat back straight (f 0.700-0.925, about 260 m), 100 m after the jump landing. Measured on the new lane: surface roughness (second difference) 0.002 m rms with nothing over 5 cm, car vertical speed in the section max 0.96 m/s (was 33 m/s before the height-station fix and 2.2 m/s after it), AI Joker lap costs +3.2 s against a 2.2 s target (penalty 15 s).

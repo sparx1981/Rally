@@ -58,7 +58,7 @@ static func circuits() -> Array:
 			"elev": [[0, 0], [0.16, 2], [0.25, 14], [0.42, 22], [0.50, 24], [0.58, 20], [0.64, 10], [0.78, 4], [1, 0]],
 			"surf": [[0.18, 0.64, "forest_dirt"]],
 			"bank": [[0.25, 0.41, 0.14]],
-			"joker": {"f0": 0.247, "f1": 0.387, "side": "inner", "surf": "forest_dirt", "w": 10.0, "out": 3.0, "delta": 2.2},
+			"joker": {"f0": 0.700, "f1": 0.925, "side": "inner", "surf": "forest_dirt", "w": 10.0, "out": 3.0, "delta": 2.2},
 			"jumps": [{"f": 0.60, "kind": "table", "h": 1.5, "len": 26.0}], "barrier": [[0, 1, "tyre"]], "kerbs": [[0.95, 1.0]]},
 		{"id": "fjord", "name": "Fjord Switchback", "kit": "B", "racers": 5, "length": 1090.0, "weather": "dry_noon",
 			"desc": "A steep launch climb, a blind summit and a plunging gravel corkscrew above the fjord.",
