@@ -692,7 +692,7 @@ func enable_lights(shadows: bool, night := false) -> void:
 		sl.rotation = Vector3(-0.085, PI + signf(mount.x)*0.035, 0.0)
 		_body.add_child(sl)
 		_lights.append(sl)
-	if OS.get_cmdline_user_args().has("--dust"):
+	if Settings.fx_level() >= 1 and not OS.get_cmdline_user_args().has("--nodust") and stage.kind() == "dry":
 		_make_headlight_dust(lamp, night)
 	if LightHalo.enabled():
 		for i in mounts.size():
@@ -735,51 +735,51 @@ var _beam_dust: CPUParticles3D
 var _beam_dust_mat: StandardMaterial3D
 
 
-## PREVIEW: a few motes of dust hanging in the air ahead of the car, catching the headlights. They stay where they
-## are in the world, so they stream past as the car drives through them.
+## A few very small motes of dust hanging in the air ahead of the car. They are lit by the headlamps themselves (a
+## shaded material), so they only show inside the beam, never behind the car or off to the sides. They stay put in
+## the world, so they stream past as the car drives through them.
 func _make_headlight_dust(lamp: Vector3, night: bool) -> void:
 	var p := CPUParticles3D.new()
-	p.amount = 120
-	p.lifetime = 3.2
-	p.preprocess = 3.2
+	p.amount = 200
+	p.lifetime = 1.6
+	p.preprocess = 1.6
 	p.local_coords = false
 	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
-	p.emission_box_extents = Vector3(2.4, 0.9, 8.0)
+	p.emission_box_extents = Vector3(3.0, 0.9, 7.0)
 	p.direction = Vector3(0, 0.2, 0)
 	p.spread = 180.0
-	p.gravity = Vector3(0, 0.0, 0)
-	p.initial_velocity_min = 0.04
-	p.initial_velocity_max = 0.22
-	p.scale_amount_min = 0.5
-	p.scale_amount_max = 1.3
+	p.gravity = Vector3.ZERO
+	p.initial_velocity_min = 0.03
+	p.initial_velocity_max = 0.18
+	p.scale_amount_min = 0.6
+	p.scale_amount_max = 1.2
 	var gt := GradientTexture2D.new()
 	gt.fill = GradientTexture2D.FILL_RADIAL
 	gt.fill_from = Vector2(0.5, 0.5)
 	gt.fill_to = Vector2(1.0, 0.5)
-	gt.width = 32
-	gt.height = 32
+	gt.width = 16
+	gt.height = 16
 	var gr := Gradient.new()
 	gr.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 0.0)])
 	gt.gradient = gr
 	var m := StandardMaterial3D.new()
-	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
 	m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
 	m.vertex_color_use_as_albedo = true
 	m.albedo_texture = gt
-	m.albedo_color = Color(1.0, 0.92, 0.74, 0.55 if night else 0.0)
-	m.disable_fog = true
+	m.albedo_color = Color(1.0, 0.95, 0.82, 0.9)
+	m.roughness = 1.0
+	m.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
 	var q := QuadMesh.new()
-	q.size = Vector2(0.07, 0.07)
+	q.size = Vector2(0.04, 0.04)
 	q.material = m
 	p.mesh = q
 	var ramp := Gradient.new()
 	ramp.colors = PackedColorArray([Color(1, 1, 1, 0), Color(1, 1, 1, 1), Color(1, 1, 1, 1), Color(1, 1, 1, 0)])
-	ramp.offsets = PackedFloat32Array([0.0, 0.25, 0.7, 1.0])
+	ramp.offsets = PackedFloat32Array([0.0, 0.2, 0.75, 1.0])
 	p.color_ramp = ramp
 	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	p.position = Vector3(0, lamp.y + 0.1, half_len + 7.0)
+	p.position = Vector3(0, lamp.y + 0.3, half_len + 8.5)
 	p.visible = night
 	_body.add_child(p)
 	_beam_dust = p
@@ -789,7 +789,7 @@ func _make_headlight_dust(lamp: Vector3, night: bool) -> void:
 func set_headlight_level(level: float) -> void:
 	if _beam_dust:
 		_beam_dust.visible = level > 0.05
-		_beam_dust_mat.albedo_color = Color(1.0, 0.92, 0.74, clampf(level, 0.0, 1.0) * 0.55)
+		_beam_dust_mat.albedo_color = Color(1.0, 0.95, 0.82, clampf(level, 0.0, 1.0) * 0.9)
 	for node in _lights:
 		var light := node as Light3D
 		if not light.has_meta("full_energy"):

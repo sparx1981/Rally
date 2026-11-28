@@ -328,3 +328,7 @@ All 12 circuits complete 3 laps. A human player is not affected by the AI's lane
 
 - The island divider used to start only where the gap between road and lane reached 1 m, leaving the entry and exit wedges open. It now starts at 0.8 m of gap at the entry (cars still cross into the lane over the first metres: closer to the nose the AI could not enter, Chalk Valley then never counted the Joker) and at 0.5 m at the exit, with a minimum run of 1.5 m. Per-circuit overrides `div_in`, `div_out`, `div_min` (Fjord keeps 1.0 / 1.0 / 3.0 because its short lane stalled the AI otherwise).
 - Latest AI Joker costs (section time, Joker lap minus normal): Fjord 4.7, Funnel 4.7, Chalk 4.7, Apex 4.5, Granite 4.9, Timberline 5.1, Breton 5.2, Baltic 5.2, Sierra 5.1, Ardennes 5.8. Still off target: Bauxite about 11.5 (the AI stalls in the second bend of the lane) and Harbor (the AI does not complete the lane, about 6.5).
+
+## Thirty-fourth pass: headlight dust
+
+- The player's car emits 200 very small (4 cm) dust motes into a volume 1.5-15 m ahead of the front bumper, shaded by the headlamps so they only show inside the beam. They are world-fixed and short-lived (1.6 s). Medium and High presets, dry weather only (rain and snow already have their own particles). `--nodust` disables it.
