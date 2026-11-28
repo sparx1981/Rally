@@ -216,4 +216,3 @@ func _apply_roll(dt: float) -> void:
 		want = clampf(-yaw_rate * 0.018 - lateral * 0.0016, -0.07, 0.07) * clampf(target.speed() / 25.0, 0.0, 1.0)
 	_roll = lerpf(_roll, want, clampf(dt * 4.0, 0.0, 1.0))
 	rotate_object_local(Vector3.FORWARD, _roll)
-	rotate_object_local(Vector3.RIGHT, _gear_kick * 0.012)

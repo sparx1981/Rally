@@ -1037,9 +1037,7 @@ func _on_splashed(c: Car, v: float) -> void:
 
 
 func _on_gear(gear: int, previous: int) -> void:
-	if camera:
-		camera.gear_kick()
-	Haptics.impulse(0.18, 0.035)
+	# No camera nudge or phone buzz on a shift: both read as a judder in motion. The engine note still dips.
 	Sfx.engine_shift(gear > previous and previous > 0)
 
 
