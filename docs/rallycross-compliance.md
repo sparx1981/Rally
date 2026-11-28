@@ -332,3 +332,8 @@ All 12 circuits complete 3 laps. A human player is not affected by the AI's lane
 ## Thirty-fourth pass: headlight dust
 
 - The player's car emits 140 very small (4 cm) dust motes into a volume 1.5-15 m ahead of the front bumper, shaded by the headlamps so they only show inside the beam. They are world-fixed and short-lived (1.6 s). Medium and High presets, dry weather only (rain and snow already have their own particles). `--nodust` disables it.
+
+## Thirty-fifth pass: living loading screens
+
+- The boot and stage loading screens (ui/boot.png, ui/loading_hero.png) now move: the painted sky drifts and breathes (shader `hero_sky`, the baked title and the car are masked out), dust trails from both wheels and rolls out ahead of the car, tiny motes hang in the headlight beam, the lamps pulse, the brake discs glow, and a reflection slides across the windscreen (`HeroFx`, laid out in the art's own 1920x1080 pixel space and fitted like the picture's "cover" crop).
+- Each screen now holds for 0.9-1.0 s before the (blocking) build starts so the motion is seen; the build itself still freezes the frame. Low preset halves the particle counts. Dev: `--view=boot`.

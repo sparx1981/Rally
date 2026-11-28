@@ -136,6 +136,38 @@ const TIPS := [
 ]
 
 
+## Bring the hero art to life: drifting clouds (shader on the picture) and the HeroFx layer (dust, beam motes, brake
+## glow, windscreen reflection).
+func _hero_life(sky: TextureRect, startup: bool) -> void:
+	var sm := ShaderMaterial.new()
+	sm.shader = preload("res://shaders/hero_sky.gdshader")
+	var nt := NoiseTexture2D.new()
+	var fnl := FastNoiseLite.new()
+	fnl.frequency = 0.012
+	fnl.seed = 5
+	nt.noise = fnl
+	nt.seamless = true
+	nt.width = 256
+	nt.height = 256
+	sm.set_shader_parameter("drift_noise", nt)
+	if startup:
+		sm.set_shader_parameter("protect", Vector4(0.07, 0.17, 0.72, 0.42))   # the title painted into boot.png
+	sky.material = sm
+	var fx := HeroFx.new()
+	sky.add_child(fx)
+	var fit := func():
+		HeroFx.fit_cover(fx, sky.size)
+	sky.resized.connect(fit)
+	fit.call()
+
+
+## Keep a loading screen on show for a moment so its motion is seen before the (blocking) stage build starts.
+func _hero_hold(seconds: float) -> void:
+	if DisplayServer.get_name() == "headless" or _shot.has("path"):
+		return
+	await get_tree().create_timer(seconds).timeout
+
+
 ## Loading screen: a cut-paper sunrise or sunset, the stage name in large type, a preview card and a tip.
 func _loading_stage(sdef: Dictionary, startup := false) -> void:
 	_clear_menu()
@@ -149,6 +181,7 @@ func _loading_stage(sdef: Dictionary, startup := false) -> void:
 	sky.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	sky.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	menu.add_child(sky)
+	_hero_life(sky, startup)
 	if startup:
 		var boot_wait := Label.new()
 		boot_wait.text = "Folding the paper…"
@@ -167,6 +200,7 @@ func _loading_stage(sdef: Dictionary, startup := false) -> void:
 		await get_tree().process_frame
 		await get_tree().process_frame
 		await get_tree().process_frame
+		await _hero_hold(0.9)
 		return
 	var scrim := TextureRect.new()
 	var gr := Gradient.new()
@@ -271,6 +305,7 @@ func _loading_stage(sdef: Dictionary, startup := false) -> void:
 	sky.add_child(wait)
 	await get_tree().process_frame
 	await get_tree().process_frame
+	await _hero_hold(1.0)
 	await get_tree().process_frame
 
 
@@ -2726,9 +2761,9 @@ func _run_shot() -> void:
 	if view == "bench":
 		_run_bench()
 		return
-	if view == "loading":
-		await _loading_stage(Catalog.stages()[int(_shot.get("stage", 0))])
-		await get_tree().create_timer(0.5).timeout
+	if view == "loading" or view == "boot":
+		await _loading_stage(Catalog.stages()[int(_shot.get("stage", 0))], view == "boot")
+		await get_tree().create_timer(float(_shot.get("time", 0.5))).timeout
 		await RenderingServer.frame_post_draw
 		get_viewport().get_texture().get_image().save_png(_shot["path"])
 		print("SHOT saved ", _shot["path"])
