@@ -318,7 +318,7 @@ static func _build_joker(track: Track, jk: Dictionary) -> void:
 		var leave := 0.25 + 0.75 * smoothstep(0.0, 1.3 * blend, d1)
 		hi[i] = inner_edge + lane_w * enter * leave
 	track.joker = {"s0": s0, "s1": s1, "side": side, "w": lane_w, "i0": i0, "i1": i1, "lo": lo, "hi": hi, "gap": gap,
-		"surf": str(jk.surf), "max_hw": max_hw, "blend": blend, "cap": float(jk.get("cap", 0.0)), "chicane": bool(jk.get("chicane", true))}
+		"surf": str(jk.surf), "max_hw": max_hw, "blend": blend, "cap": float(jk.get("cap", 0.0)), "chicane": bool(jk.get("chicane", true)), "div_in": float(jk.get("div_in", _dv_in)), "div_out": float(jk.get("div_out", _dv_out)), "div_min": float(jk.get("div_min", 1.5))}
 	var lat0 := max_hw + 0.3 if side > 0.0 else -99.0
 	var lat1 := 99.0 if side > 0.0 else -(max_hw + 0.3)
 	_add_patch(track, s0, s1, lat0, lat1, str(jk.surf))
@@ -407,6 +407,11 @@ static func _add_covered_bridge(track: Track, station: float) -> void:
 ## Edge walls (tyre walls, jersey barriers, Armco) following the road width, with the Joker island and
 ## the lane's outer wall replacing the ordinary wall on the lane side while the lane runs.
 static func _build_barriers(track: Track, rx: Dictionary) -> void:
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--divin="):
+			_dv_in = float(a.substr(8))
+		elif a.begins_with("--divout="):
+			_dv_out = float(a.substr(9))
 	var length := track.length
 	track.barriers = []
 	var jk := track.joker
@@ -454,16 +459,29 @@ static func _build_barriers(track: Track, rx: Dictionary) -> void:
 		for i in range(int(jk.i0), int(jk.i1) + 1):
 			var lo_m: float = jk.lo[i]
 			var gap := (lo_m - track.widths[i] * 0.5) if not is_nan(lo_m) else -1.0
-			var narrow := gap >= 1.0 and gap < 1.9
+			# The divider starts a little way past the nose (cars still cross into the lane over the first metres) but
+			# runs right up to the merge at the far end.
+			var past_nose := dist_from_start_ok(track, i, jk)
+			var thr: float = float(jk.get("div_in", _dv_in)) if past_nose else float(jk.get("div_out", _dv_out))
+			var narrow := gap >= thr and gap < 1.9
 			if narrow and run0 < 0.0:
 				run0 = track.dist[i]
 			elif not narrow and run0 >= 0.0:
-				if track.dist[i] - run0 > 3.0:
+				if track.dist[i] - run0 > float(jk.get("div_min", 1.5)):
 					track.barriers.append(_bar(run0, track.dist[i], side, "island", "mid"))
 				run0 = -1.0
-		if run0 >= 0.0 and track.dist[int(jk.i1)] - run0 > 3.0:
+		if run0 >= 0.0 and track.dist[int(jk.i1)] - run0 > float(jk.get("div_min", 1.5)):
 			track.barriers.append(_bar(run0, track.dist[int(jk.i1)], side, "island", "mid"))
 	track.index_barriers()
+
+
+## True while index i is on the entry half of the lane (before its midpoint).
+static var _dv_in := 0.8
+static var _dv_out := 0.5
+
+
+static func dist_from_start_ok(track: Track, i: int, jk: Dictionary) -> bool:
+	return track.dist[i] < (float(jk.s0) + float(jk.s1)) * 0.5
 
 
 static func _bar(s0: float, s1: float, side: float, kind: String, ref: String) -> Dictionary:
