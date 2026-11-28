@@ -740,7 +740,7 @@ var _beam_dust_mat: StandardMaterial3D
 ## the world, so they stream past as the car drives through them.
 func _make_headlight_dust(lamp: Vector3, night: bool) -> void:
 	var p := CPUParticles3D.new()
-	p.amount = 200
+	p.amount = 140   # about 30% fewer than the first version (200)
 	p.lifetime = 1.6
 	p.preprocess = 1.6
 	p.local_coords = false

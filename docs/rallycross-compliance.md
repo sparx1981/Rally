@@ -331,4 +331,4 @@ All 12 circuits complete 3 laps. A human player is not affected by the AI's lane
 
 ## Thirty-fourth pass: headlight dust
 
-- The player's car emits 200 very small (4 cm) dust motes into a volume 1.5-15 m ahead of the front bumper, shaded by the headlamps so they only show inside the beam. They are world-fixed and short-lived (1.6 s). Medium and High presets, dry weather only (rain and snow already have their own particles). `--nodust` disables it.
+- The player's car emits 140 very small (4 cm) dust motes into a volume 1.5-15 m ahead of the front bumper, shaded by the headlamps so they only show inside the beam. They are world-fixed and short-lived (1.6 s). Medium and High presets, dry weather only (rain and snow already have their own particles). `--nodust` disables it.
