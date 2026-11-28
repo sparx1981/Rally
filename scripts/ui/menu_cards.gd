@@ -259,7 +259,8 @@ class Carousel:
 	var big := Vector2(340, 330)
 	var small := Vector2(220, 250)
 	var _press_x := 0.0
-	var _dragging := false
+	var _tracking := false
+	var _block_taps_until := 0
 
 	func setup(items: Array, start: int) -> void:
 		clip_contents = true
@@ -280,6 +281,8 @@ class Carousel:
 		moved.emit(i)
 
 	func _on_card_pressed(i: int) -> void:
+		if Time.get_ticks_msec() < _block_taps_until:
+			return   # the finger swiped across this card: it was a swipe, not a tap
 		if i != selected:
 			cards[i].grab_focus()   # a tap on a side card brings it forward first
 		else:
@@ -293,12 +296,20 @@ class Carousel:
 		_pos = lerpf(_pos, float(selected), clampf(delta * 11.0, 0.0, 1.0))
 		_layout()
 
-	func _gui_input(event: InputEvent) -> void:
+	## Swipes are read at viewport level so they work wherever the finger lands, including on top of a card
+	## (cards are buttons and swallow the press before the carousel itself would see it).
+	func _input(event: InputEvent) -> void:
+		if not is_visible_in_tree():
+			return
 		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 			if event.pressed:
+				_tracking = get_global_rect().has_point(event.position)
 				_press_x = event.position.x
-			elif absf(event.position.x - _press_x) > 70.0:
-				select(selected + (1 if event.position.x < _press_x else -1))
+			elif _tracking:
+				_tracking = false
+				if absf(event.position.x - _press_x) > 60.0:
+					_block_taps_until = Time.get_ticks_msec() + 300
+					select(selected + (1 if event.position.x < _press_x else -1))
 
 	func _unhandled_input(event: InputEvent) -> void:
 		if not is_visible_in_tree():

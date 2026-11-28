@@ -971,7 +971,7 @@ func _stage_details(location: int) -> void:
 	preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	preview.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	preview.custom_minimum_size = Vector2(0, 220)
+	preview.custom_minimum_size = Vector2(0, 150)
 	overview.add_child(preview)
 
 	var details := PanelContainer.new()
@@ -1028,6 +1028,7 @@ func _stage_details(location: int) -> void:
 	var race_option := _button("", func(): pass, 200)
 	race_option.toggle_mode = true
 	var ai_race := Game.mode == Game.Mode.RACE
+	var ai_rows: Array = _ai_rows(content) if ai_race else []
 	var option_label := "Impact with AI" if ai_race else "Show ghost"
 	race_option.button_pressed = Game.ai_contact if ai_race else Game.show_ghost
 	race_option.text = option_label + (" · On" if race_option.button_pressed else " · Off")
@@ -1047,7 +1048,10 @@ func _stage_details(location: int) -> void:
 		_start_race(), 200)
 	pg.bar.add_child(start)
 	refresh.call()
-	_focus_rows([distance, times, weather, _focus_controls(pg.bar)], distance[0 if circuit else selection.variant])
+	var focus_list: Array = [distance, times, weather]
+	focus_list.append_array(ai_rows)
+	focus_list.append(_focus_controls(pg.bar))
+	_focus_rows(focus_list, distance[0 if circuit else selection.variant])
 
 
 func _stage_options(parent: VBoxContainer, title: String, options: Array, active: int, on_change: Callable) -> Array:
@@ -1117,11 +1121,18 @@ func _series_select() -> void:
 	var items: Array = []
 	for i in Catalog.series().size():
 		var se: Dictionary = Catalog.series()[i]
-		var sub := "%s\n%d stages" % [se["desc"], se["stages"].size()]
+		var rx_count := 0
+		for si: int in se["stages"]:
+			if Catalog.stages()[si].has("rx"):
+				rx_count += 1
+		var sub := "%s\n%d rounds  ·  %d rallycross" % [se["desc"], se["stages"].size(), rx_count]
 		if Game.cups.has(se["id"]):
-			sub += "  ·  best finish P%d" % int(Game.cups[se["id"]])
+			sub += "\nBest finish P%d" % int(Game.cups[se["id"]])
+		var locked := Game.series_locked(i)
+		if locked:
+			sub += "\nFinish %s to unlock" % Catalog.series()[i - 1]["name"]
 		items.append({"title": se["name"], "title_size": 25, "sub": sub, "sub_size": 15, "size": Vector2(260, 300),
-			"image": Catalog.stage_preview(Catalog.stages()[int(se["stages"][0])]), "badge": "NIGHT" if se.get("night", false) else ""})
+			"image": Catalog.stage_preview(Catalog.stages()[int(se["stages"][0])]), "badge": "LOCKED" if locked else ("NIGHT" if se.get("night", false) else "")})
 	var holder := HBoxContainer.new()
 	holder.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	holder.add_theme_constant_override("separation", 8)
@@ -1146,6 +1157,9 @@ func _series_select() -> void:
 	prev.get_child(0).pressed.connect(func(): carousel.select(carousel.selected - 1))
 	nxt.get_child(0).pressed.connect(func(): carousel.select(carousel.selected + 1))
 	carousel.chosen.connect(func(i: int):
+		if Game.series_locked(i):
+			Sfx.toggle()
+			return
 		Sfx.click()
 		Game.start_championship(i)
 		_champ_intro())
@@ -1169,10 +1183,13 @@ func _champ_intro() -> void:
 	content.add_child(PaperTheme.tag("Next: %s  (%s, %.1f km%s)" % [Catalog.stage_title(Game.stage_index), wx["label"], float(sd["length"]) / 1000.0, ", night" if Game.race_tod() == 2 else ""], 28))
 	var dl := PaperTheme.tag(sd["desc"], 20)
 	content.add_child(dl)
+	var ai_rows := _ai_rows(content, Game.champ_round > 0)
 	_standings_table(content)
 	var go := _button("Start stage", _start_race, 260)
 	(pg["bar"] as HBoxContainer).add_child(go)
-	_focus_rows([_focus_controls(pg.bar)], go)
+	var rows: Array = ai_rows.duplicate()
+	rows.append(_focus_controls(pg.bar))
+	_focus_rows(rows, go)
 
 
 func _standings_table(parent: Control) -> void:
@@ -1354,8 +1371,6 @@ func _settings() -> void:
 			pedal_test.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			list.add_child(pedal_test)
 			list.add_child(_choice("Speed units", ["km/h", "mph"], int(Settings.g("units")), func(i): Settings.set_value("units", i)))
-			list.add_child(_choice("AI difficulty", ["Easy", "Medium", "Hard"], int(Settings.g("ai_difficulty")), func(i): Settings.set_value("ai_difficulty", i)))
-			list.add_child(_choice("Opponents (Race / Championship)", ["3", "5"], 1 if int(Settings.g("opponents")) == 5 else 0, func(i): Settings.set_value("opponents", 5 if i == 1 else 3)))
 			var pads := Input.get_connected_joypads()
 			var pad_txt := "No controller connected." if pads.is_empty() else "Connected: " + ", ".join(pads.map(func(d): return Input.get_joy_name(d)))
 			list.add_child(_note(pad_txt + "  Menus: D-pad or left stick to move, A to select, B to go back. Driving: RT/A accelerate, LT/X brake, B/RB handbrake, Y reset, Start pause, Back/LB or the camera icon cycles camera views."))
@@ -1411,6 +1426,35 @@ func _note(t: String) -> Label:
 
 
 ## A cycling choice: press (or left / right on a controller) to change.
+## AI difficulty and number of opponents, shown on the confirmation screens of Race and Championship events.
+func _ai_rows(parent: Control, opponents_locked := false) -> Array:
+	var rows: Array = []
+	var line := HBoxContainer.new()
+	line.add_theme_constant_override("separation", 12)
+	parent.add_child(line)
+	var diff := _choice("AI difficulty", ["Easy", "Medium", "Hard"], int(Settings.g("ai_difficulty")), func(i): Settings.set_value("ai_difficulty", i))
+	(diff.get_child(0) as Control).custom_minimum_size.x = 160
+	(diff.get_child(1) as Control).custom_minimum_size.x = 220
+	line.add_child(diff)
+	rows.append(_focus_controls(diff))
+	if opponents_locked:
+		var fixed := _note("Opponents: %d (fixed for this championship)" % (Game.champ_entrants.size() - 1))
+		fixed.custom_minimum_size.x = 0.0
+		line.add_child(fixed)
+	else:
+		var opp := _choice("Opponents", ["3", "5"], 1 if int(Settings.g("opponents")) == 5 else 0, func(i):
+			Settings.set_value("opponents", 5 if i == 1 else 3)
+			if Game.mode == Game.Mode.CHAMPIONSHIP:
+				Game.reset_champ_entrants()
+				_champ_intro.call_deferred())
+		(opp.get_child(0) as Control).custom_minimum_size.x = 140
+		(opp.get_child(1) as Control).custom_minimum_size.x = 150
+		opp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		line.add_child(opp)
+		rows[0].append_array(_focus_controls(opp))
+	return rows
+
+
 func _choice(label: String, options: Array, current: int, on_change: Callable) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 12)
@@ -1549,13 +1593,7 @@ func _race_results(r: Dictionary) -> void:
 	var pg := _page("Race result", Callable())
 	_back = _results_back
 	var content: VBoxContainer = pg["content"]
-	var rows: Array = r["rows"]
-	var pos := 1
-	for i in rows.size():
-		if rows[i]["player"]:
-			pos = i + 1
-	content.add_child(PaperTheme.tag("You finished P%d of %d" % [pos, rows.size()], 36, Color("#f0cf6a") if pos == 1 else PaperTheme.CREAM))
-	_results_table(content, rows, false)
+	content.add_child(RaceResults.new().setup(r))
 	var bar: HBoxContainer = pg["bar"]
 	var retry := _button("Race again", _start_race, 220)
 	bar.add_child(retry)
@@ -1573,22 +1611,10 @@ func _champ_results(r: Dictionary) -> void:
 	var pg := _page("%s  -  Round %d of %d" % [se["name"], Game.champ_round, Game.champ_total_rounds()], Callable())
 	_back = _results_back
 	var content: VBoxContainer = pg["content"]
-	var cols := HBoxContainer.new()
-	cols.add_theme_constant_override("separation", 24)
-	content.add_child(cols)
-	var left := VBoxContainer.new()
-	cols.add_child(left)
-	left.add_child(PaperTheme.tag("Stage result", 24))
-	_results_table(left, r["rows"], true)
-	var right := VBoxContainer.new()
-	cols.add_child(right)
-	right.add_child(PaperTheme.tag("Standings", 24))
-	_standings_table(right)
+	content.add_child(RaceResults.new().setup(r, RaceResults.champ_info(r)))
 	var bar: HBoxContainer = pg["bar"]
 	var b: Button
 	if Game.champ_finished():
-		var pos := Game.standings().map(func(x): return x["name"]).find("You") + 1
-		content.add_child(PaperTheme.tag("Championship over - you finished P%d!" % pos, 30, Color("#f0cf6a") if pos == 1 else PaperTheme.CREAM))
 		b = _button("Menu", func():
 			await _start_attract(Game.stage_index)
 			_title(), 200)
@@ -1877,6 +1903,41 @@ func _run_bench() -> void:
 	get_tree().quit()
 
 
+## Dev: show the results screen with made-up finishing order (--pos=N sets where "You" finish, --final ends the championship).
+func _fake_results(champ_mode: bool) -> void:
+	var want := 1
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--pos="):
+			want = int(a.substr(6))
+	var ents := Game.make_entrants(5)
+	var names: Array = ["You"]
+	for e in ents:
+		if e["name"] != "You":
+			names.append(e["name"])
+	var rows: Array = []
+	var others: Array = names.slice(1)
+	var t := 151.3
+	for i in 6:
+		var is_you := i == want - 1
+		var nm: String = "You" if is_you else String(others.pop_front())
+		rows.append({"name": nm, "time": t, "car": (i * 3 + 1) % Catalog.cars().size(), "player": is_you})
+		t += 1.1 + float(i) * 0.9
+	var res := {"rows": rows, "player_time": rows[want - 1]["time"], "medal": 1, "medals": [140.0, 155.0, 170.0], "stage": 0}
+	Game.mode = Game.Mode.CHAMPIONSHIP if champ_mode else Game.Mode.RACE
+	if champ_mode:
+		Game.start_championship(1)
+		Game.champ_entrants = ents
+		Game.champ_points = {}
+		for i in ents.size():
+			Game.champ_points[ents[i]["name"]] = (ents.size() - i) * 3
+		Game.champ_round = Game.champ_total_rounds() - 1 if OS.get_cmdline_user_args().has("--final") else 2
+		Game.no_save = true
+		Game.record_champ_round(rows)
+		_champ_results(res)
+	else:
+		_race_results(res)
+
+
 func _run_shot() -> void:
 	var view: String = _shot.get("view", "race")
 	if view == "bench":
@@ -1972,6 +2033,11 @@ func _run_shot() -> void:
 			"details": _stage_details(int(_shot.get("stage", 0)))
 			"settings": _settings()
 			"benchmark": _benchmark_ui()
+			"champintro":
+				Game.mode = Game.Mode.CHAMPIONSHIP
+				Game.start_championship(1)
+				_champ_intro()
+			"raceresults", "champresults": _fake_results(view == "champresults")
 	var t: float = _shot.get("time", 6.0)
 	var frames := 0
 	var t0 := Time.get_ticks_msec()

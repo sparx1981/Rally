@@ -268,3 +268,11 @@ All 12 circuits complete 3 laps. A human player is not affected by the AI's lane
 - Results screen: 18 s after the finish the 3D world behind the results page is frozen, frame rate capped at 20, 3D scale at most 0.75 and dynamic resolution paused; restored when leaving the page.
 - Dev: `--bench --soak [--teleport --manualcam --grid --soakfor=N --soakevery=N --soakshots]` leaves a finished race running and logs node/object/memory growth; `--heat`, `--sidecam` for brake-disc close-ups.
 - The reported crash could NOT be reproduced in the soak (node count, objects and memory flat for 10 minutes of results time); the freeze above is a mitigation, not a confirmed root-cause fix.
+
+## Twenty-fourth pass: career ladder, menu fixes, podium results
+
+- Championships are now a three-tier ladder: Rookie Cup (5 x 4 km), Pro Series (9 rounds: 5 x 8 km stages + 4 rallycross), Champion's Trial (13 rounds: 15 km stages, twilight Taiga + 8 rallycross). Finishing a tier unlocks the next. Old cup records for the removed series are no longer shown.
+- Carousel swipe is read at viewport level, so it works over the cards (the championship cards fill the strip, which is why only the circuit carousel responded before). A swipe suppresses the tap on release.
+- AI difficulty and opponents moved from Settings to the Race and Championship confirmation screens (hidden for Time Trial). Opponents lock after round one of a championship.
+- New `RaceResults` screen (scripts/ui/race_results.gd): paper podium, rally stamp, classification with gap bars, championship points and rank movement. Animation is finite (~4.5 s), tap to skip, redraw loop stops afterwards.
+- Dev views: `--view=raceresults|champresults [--pos=N --final]`, `--view=champintro`.

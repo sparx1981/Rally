@@ -64,6 +64,11 @@ func difficulty_factor() -> float:
 
 # --- Championship ----------------------------------------------------------------------------------
 
+## Career ladder: each tier opens once the previous one has been finished.
+func series_locked(i: int) -> bool:
+	return i > 0 and not cups.has(Catalog.series()[i - 1]["id"])
+
+
 func start_championship(series_i: int) -> void:
 	series_index = series_i
 	weather_override = -1
@@ -74,6 +79,16 @@ func start_championship(series_i: int) -> void:
 		champ_points[e["name"]] = 0
 	champ_last_results = []
 	stage_index = current_series()["stages"][0]
+
+
+## Rebuild the grid (before the first round) after the opponent count changed on the confirmation screen.
+func reset_champ_entrants() -> void:
+	if champ_round > 0:
+		return
+	champ_entrants = make_entrants(int(Settings.g("opponents")))
+	champ_points = {}
+	for e in champ_entrants:
+		champ_points[e["name"]] = 0
 
 
 func current_series() -> Dictionary:

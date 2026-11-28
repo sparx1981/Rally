@@ -405,13 +405,12 @@ static func lighting(weather_id: String, tod: int) -> Dictionary:
 static func series() -> Array:
 	if _series.is_empty():
 		_series = [
-			{"id": "sprint", "name": "Sprint Cup", "desc": "Five 4 km Sprint stages.", "stages": [0, 16, 28, 4, 20]},
-			{"id": "dry", "name": "Dry Cup", "desc": "Three dry 8 km Classic stages: meadow, canyon and forest.", "stages": [1, 5, 9]},
-			{"id": "storm", "name": "Storm Cup", "desc": "Three rain-soaked 8 km stages with puddles and mud.", "stages": [13, 17, 21]},
-			{"id": "winter", "name": "Winter Cup", "desc": "Three snow and ice 8 km stages. Very low grip.", "stages": [25, 29, 33]},
-			{"id": "night", "name": "Night Rally", "desc": "Four stages always run at night, on headlights alone.", "stages": [25, 16, 5, 34], "night": true},
-			{"id": "coast", "name": "Coast Cup", "desc": "Harbour cobbles and clifftop lanes above the sea.", "stages": [21, 36, 37, 22]},
-			{"id": "grand", "name": "Grand Rally", "desc": "Ten locations at 10 and 15 km.", "stages": [2, 14, 27, 6, 18, 31, 10, 22, 35, 39]},
+			{"id": "rookie", "name": "Rookie Cup", "desc": "Short 4 km Sprint stages across five landscapes. Learn the cars and the roads.",
+				"stages": [0, 4, 8, 40, 20]},
+			{"id": "pro", "name": "Pro Series", "desc": "8 km stages in rain, snow and cliffs, with four rallycross circuits in between.",
+				"stages": [5, 45, 13, 47, 29, 49, 37, 53, 41]},
+			{"id": "champion", "name": "Champion's Trial", "desc": "Marathon 15 km stages, a twilight run and eight rallycross circuits. Everything counts.",
+				"stages": [27, 46, 48, 31, 50, 51, 35, 52, 54, 39, 55, 56, 43], "night": false},
 		]
 	return _series
 
