@@ -636,6 +636,13 @@ func _hard_surface() -> bool:
 	return false
 
 
+## Fewer dust motes while the car sits on the grid or crawls: the extra emitter only spawns once it is moving
+## (motes already in the air fade out over 1.6 s).
+func _update_beam_dust() -> void:
+	if _beam_dust_extra:
+		_beam_dust_extra.emitting = absf(v_long) > 5.0 and not frozen
+
+
 func _make_tyre_smoke() -> void:
 	if Settings.fx_level() < 1 or _wheels.size() < 4:
 		return
@@ -900,6 +907,7 @@ func enable_lights(shadows: bool, night := false) -> void:
 
 
 var _beam_dust: CPUParticles3D
+var _beam_dust_extra: CPUParticles3D
 var _beam_dust_mat: StandardMaterial3D
 
 
@@ -907,10 +915,16 @@ var _beam_dust_mat: StandardMaterial3D
 ## shaded material), so they only show inside the beam, never behind the car or off to the sides. They stay put in
 ## the world, so they stream past as the car drives through them.
 func _make_headlight_dust(lamp: Vector3, night: bool) -> void:
+	_beam_dust = _build_beam_dust(lamp, night, 40)
+	_beam_dust_extra = _build_beam_dust(lamp, night, 100)   # joins in once the car is moving (see _update_beam_dust)
+	_beam_dust_extra.emitting = false
+
+
+func _build_beam_dust(lamp: Vector3, night: bool, count: int) -> CPUParticles3D:
 	var p := CPUParticles3D.new()
-	p.amount = 140   # about 30% fewer than the first version (200)
+	p.amount = count
 	p.lifetime = 1.6
-	p.preprocess = 1.6
+	p.preprocess = 1.6 if count < 60 else 0.0
 	p.local_coords = false
 	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
 	p.emission_box_extents = Vector3(3.0, 0.9, 7.0)
@@ -930,7 +944,7 @@ func _make_headlight_dust(lamp: Vector3, night: bool) -> void:
 	var gr := Gradient.new()
 	gr.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 0.0)])
 	gt.gradient = gr
-	var m := StandardMaterial3D.new()
+	var m: StandardMaterial3D = _beam_dust_mat if _beam_dust_mat != null else StandardMaterial3D.new()
 	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
 	m.vertex_color_use_as_albedo = true
@@ -950,13 +964,14 @@ func _make_headlight_dust(lamp: Vector3, night: bool) -> void:
 	p.position = Vector3(0, lamp.y + 0.3, half_len + 8.5)
 	p.visible = night
 	_body.add_child(p)
-	_beam_dust = p
 	_beam_dust_mat = m
+	return p
 
 
 func set_headlight_level(level: float) -> void:
 	if _beam_dust:
 		_beam_dust.visible = level > 0.05
+		_beam_dust_extra.visible = level > 0.05
 		_beam_dust_mat.albedo_color = Color(1.0, 0.95, 0.82, clampf(level, 0.0, 1.0) * 0.9)
 	for node in _lights:
 		var light := node as Light3D
@@ -1681,6 +1696,7 @@ func _sync_visual(delta: float) -> void:
 	_update_parts(delta)
 	_update_tyre_smoke()
 	_update_backfire(delta)
+	_update_beam_dust()
 	# Dust / spray / snow from the wheels.
 	if _dust:
 		var spd := absf(v_long)
