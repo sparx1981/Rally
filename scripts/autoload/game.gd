@@ -52,9 +52,22 @@ func make_entrants(count: int) -> Array:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 4242 + series_index * 17 + stage_index
 	var names: Array = Catalog.AI_NAMES.duplicate()
+	var pool: Array = []
+	if bool(Settings.g("same_class")):
+		var mine := Catalog.car_class(car_index)
+		for ci in cars.size():
+			if ci != car_index and Catalog.car_class(ci) == mine:
+				pool.append(ci)
 	for i in count:
-		var c := (car_index + 1 + i) % cars.size()
-		out.append({"name": names[i % names.size()], "car": c, "skill": rng.randf_range(0.93, 1.0), "player": false})
+		if pool.is_empty():
+			var c := (car_index + 1 + i) % cars.size()
+			out.append({"name": names[i % names.size()], "car": c, "skill": rng.randf_range(0.93, 1.0), "player": false})
+		else:
+			# Same-class grid: use each rival in turn; when the class runs out the models repeat in another livery.
+			var entry := {"name": names[i % names.size()], "car": pool[i % pool.size()], "skill": rng.randf_range(0.93, 1.0), "player": false}
+			if i >= pool.size():
+				entry["livery"] = 1 + (i / pool.size() - 1) % 2   # a repeated model is painted differently
+			out.append(entry)
 	return out
 
 

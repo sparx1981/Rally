@@ -276,3 +276,9 @@ All 12 circuits complete 3 laps. A human player is not affected by the AI's lane
 - AI difficulty and opponents moved from Settings to the Race and Championship confirmation screens (hidden for Time Trial). Opponents lock after round one of a championship.
 - New `RaceResults` screen (scripts/ui/race_results.gd): paper podium, rally stamp, classification with gap bars, championship points and rank movement. Animation is finite (~4.5 s), tap to skip, redraw loop stops afterwards.
 - Dev views: `--view=raceresults|champresults [--pos=N --final]`, `--view=champintro`.
+
+## Twenty-fifth pass: car classes
+
+- Four racing classes (Catalog.CAR_CLASS): Heritage (8), Groups (11), Elite (8), Off-road (4). Shown on the car-select card.
+- "Cars: Any class / <Class> only" option on the Race and Championship confirmation screens (setting `same_class`, off by default). Same-class grids use each rival in turn and repeat models in an alternate livery when the class is smaller than the grid (Off-road with 5 opponents repeats Badger and Mule). Locked after round one of a championship.
+- Dev: `--car=N --sameclass --gridinfo` print the grid.

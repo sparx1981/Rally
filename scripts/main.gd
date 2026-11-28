@@ -281,6 +281,8 @@ func _start_race() -> void:
 		_:
 			entrants = Game.champ_entrants
 			entrants[0]["car"] = Game.car_index
+	if OS.get_cmdline_user_args().has("--gridinfo"):
+		print("GRID ", entrants.map(func(e): return "%s:%s%s" % [Catalog.cars()[int(e["car"])]["id"], Catalog.class_name_of(int(e["car"])), "/L%d" % int(e["livery"]) if e.has("livery") else ""]))
 	race = Race.new()
 	race.autopilot = _shot.get("autopilot", false)
 	if _shot.has("path"):
@@ -536,7 +538,7 @@ func _car_select() -> void:
 	var refresh := func():
 		var c: Dictionary = Catalog.livery(Catalog.cars()[Game.car_index], Game.livery)
 		name_l.text = c["name"]
-		desc.text = "%s  -  %s drive\n%s" % [c["class"], {"rwd": "Rear", "fwd": "Front", "awd": "Four-wheel"}[c["drive"]], c["desc"]]
+		desc.text = "%s  ·  %s class  -  %s drive\n%s" % [c["class"], Catalog.class_name_of_id(String(c["id"])), {"rwd": "Rear", "fwd": "Front", "awd": "Four-wheel"}[c["drive"]], c["desc"]]
 		for k in bars.keys():
 			bars[k].value = clampf((float(c[k]) - 0.8) / 0.38, 0.05, 1.0)
 			bars[k].queue_redraw()
@@ -1433,12 +1435,13 @@ func _ai_rows(parent: Control, opponents_locked := false) -> Array:
 	line.add_theme_constant_override("separation", 12)
 	parent.add_child(line)
 	var diff := _choice("AI difficulty", ["Easy", "Medium", "Hard"], int(Settings.g("ai_difficulty")), func(i): Settings.set_value("ai_difficulty", i))
-	(diff.get_child(0) as Control).custom_minimum_size.x = 160
-	(diff.get_child(1) as Control).custom_minimum_size.x = 220
+	(diff.get_child(0) as Control).custom_minimum_size.x = 150
+	(diff.get_child(1) as Control).custom_minimum_size.x = 200
 	line.add_child(diff)
 	rows.append(_focus_controls(diff))
 	if opponents_locked:
-		var fixed := _note("Opponents: %d (fixed for this championship)" % (Game.champ_entrants.size() - 1))
+		var fixed := _note("Opponents: %d · %s (fixed for this championship)" % [Game.champ_entrants.size() - 1,
+			"%s class only" % Catalog.class_name_of(Game.car_index) if bool(Settings.g("same_class")) else "any class"])
 		fixed.custom_minimum_size.x = 0.0
 		line.add_child(fixed)
 	else:
@@ -1447,11 +1450,20 @@ func _ai_rows(parent: Control, opponents_locked := false) -> Array:
 			if Game.mode == Game.Mode.CHAMPIONSHIP:
 				Game.reset_champ_entrants()
 				_champ_intro.call_deferred())
-		(opp.get_child(0) as Control).custom_minimum_size.x = 140
-		(opp.get_child(1) as Control).custom_minimum_size.x = 150
-		opp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		(opp.get_child(0) as Control).custom_minimum_size.x = 112
+		(opp.get_child(1) as Control).custom_minimum_size.x = 110
 		line.add_child(opp)
 		rows[0].append_array(_focus_controls(opp))
+		var grid := _choice("Cars", ["Any class", "%s only" % Catalog.class_name_of(Game.car_index)], 1 if bool(Settings.g("same_class")) else 0, func(i):
+			Settings.set_value("same_class", i == 1)
+			if Game.mode == Game.Mode.CHAMPIONSHIP:
+				Game.reset_champ_entrants()
+				_champ_intro.call_deferred())
+		(grid.get_child(0) as Control).custom_minimum_size.x = 64
+		(grid.get_child(1) as Control).custom_minimum_size.x = 240
+		grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		line.add_child(grid)
+		rows[0].append_array(_focus_controls(grid))
 	return rows
 
 
@@ -1686,6 +1698,10 @@ func _parse_args() -> void:
 			_shot["zoom"] = float(a.substr(7))
 		elif a.begins_with("--hazard="):
 			_shot["hazard"] = a.substr(9)
+		elif a.begins_with("--car="):
+			Game.car_index = int(a.substr(6))
+		elif a == "--sameclass":
+			Settings.data["same_class"] = true
 		elif a.begins_with("--mode="):
 			Game.mode = int(a.substr(7))
 

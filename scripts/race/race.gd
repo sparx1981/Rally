@@ -84,6 +84,8 @@ func setup(stage_i: int, mode_v: int, entrants: Array, attract_v := false, tod :
 		var cdef: Dictionary = Catalog.cars()[int(e["car"])]
 		if bool(e["player"]) and not attract:
 			cdef = Catalog.livery(cdef, Game.livery)
+		elif e.has("livery") and not attract:
+			cdef = Catalog.livery(cdef, int(e["livery"]))
 		car.setup(cdef, i + 1, stage, stage.car_material())
 		var row := i / 2
 		var gap := 12.5 if tr.circuit else 8.0

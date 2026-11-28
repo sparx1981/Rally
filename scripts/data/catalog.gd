@@ -402,6 +402,28 @@ static func lighting(weather_id: String, tod: int) -> Dictionary:
 	return w
 
 
+## Racing classes for "same class" grids, by era and pace.
+const CLASS_NAMES := ["Heritage", "Groups", "Elite", "Off-road"]
+const CAR_CLASS := {
+	"ventura": 0, "scarab": 0, "pip": 0, "comet": 0, "otter": 0, "verbena": 0, "gazelle": 0, "stiletto": 0,
+	"gallo": 1, "alder": 1, "cormorant": 1, "mirage": 1, "strega": 1, "rook": 1, "halcyon": 1, "quadra": 1, "celeste": 1, "marten": 1, "fennec": 1,
+	"marmot": 2, "lince": 2, "nimbus": 2, "lynx": 2, "tempest": 2, "wraith": 2, "summit": 2, "vortex": 2,
+	"drover": 3, "badger": 3, "mule": 3, "sandhopper": 3,
+}
+
+
+static func car_class(car_i: int) -> int:
+	return int(CAR_CLASS.get(String(cars()[car_i]["id"]), 1))
+
+
+static func class_name_of_id(car_id: String) -> String:
+	return CLASS_NAMES[int(CAR_CLASS.get(car_id, 1))]
+
+
+static func class_name_of(car_i: int) -> String:
+	return CLASS_NAMES[car_class(car_i)]
+
+
 static func series() -> Array:
 	if _series.is_empty():
 		_series = [
