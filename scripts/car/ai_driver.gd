@@ -94,6 +94,9 @@ func update(dt: float, others: Array, t: float) -> void:
 		# The lane is longer and looser: spread the circuit's Joker time delta evenly over its length.
 		var lane_len := maxf(float(tr.joker.s1) - float(tr.joker.s0), 40.0)
 		vt = 1.0 / (1.0 / maxf(vt, 4.0) + float(tr.rx_info.get("pace", 0.0)) / lane_len)
+		var lane_cap := float(tr.joker.get("cap", 0.0))
+		if lane_cap > 0.0:
+			vt = minf(vt, lane_cap)
 	if taking_joker and s_rel_j > -40.0:
 		# An inside lane through a bend has a much tighter radius than the centre line the speed profile was made
 		# for, so slow for it (never below 55 % of the profile speed).

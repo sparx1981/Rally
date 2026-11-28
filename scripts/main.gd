@@ -2353,6 +2353,8 @@ func _parse_args() -> void:
 			Settings.data["popups"] = a.substr(9) == "1"
 		elif a.begins_with("--camera="):
 			Settings.data["camera"] = int(a.substr(9))
+		elif a == "--notilt":
+			Settings.data["tilt_shift"] = 0
 		elif a == "--moves":
 			Settings.data["time_moves"] = true
 		elif a.begins_with("--tod="):
@@ -2840,7 +2842,15 @@ func _run_shot() -> void:
 			pp = Vector3(cen.x, race.stage.track.elev[0], cen.y)
 			hgt = maxf(box.size.x, box.size.y) * 0.62 * float(_shot.get("zoom", 1.0))
 		oc.position = pp + Vector3(hgt * float(_shot.get("ox", 0.35)), hgt, hgt * float(_shot.get("oz", 0.35)))
-		oc.look_at(pp)
+		if OS.get_cmdline_user_args().has("--aligned") and not _shot.has("overview"):
+			# Straight down with the road's sideways direction as screen "up", so a lane lies left to right.
+			var ai := race.stage.track.index_at(race.player.s)
+			var an: Vector2 = race.stage.track.nrm[ai]
+			oc.position = pp + Vector3(0, hgt, 0)
+			oc.fov = 60.0
+			oc.look_at(pp, Vector3(an.x, 0.0, an.y))
+		else:
+			oc.look_at(pp)
 		oc.current = true
 		await get_tree().process_frame
 	if OS.get_cmdline_user_args().has("--party") and race and race.stage.rx_props:

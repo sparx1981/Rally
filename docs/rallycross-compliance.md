@@ -317,3 +317,9 @@ All 12 circuits complete 3 laps. A human player is not affected by the AI's lane
 ## Thirty-first pass: Timberline Crest Joker relocated
 
 - The Joker lane moved from the steep banked spiral (f 0.247-0.387, about 160 m) to the long flat back straight (f 0.700-0.925, about 260 m), 100 m after the jump landing. Measured on the new lane: surface roughness (second difference) 0.002 m rms with nothing over 5 cm, car vertical speed in the section max 0.96 m/s (was 33 m/s before the height-station fix and 2.2 m/s after it), AI Joker lap costs +3.2 s against a 2.2 s target (penalty 15 s).
+
+## Thirty-second pass: Joker target +5 s, lane speed caps
+
+- Joker target is now +5 s on every circuit (`delta` 5.0). Each lane has a speed `cap` (m/s) in the Joker data: deep loose going that no car, human or AI, can exceed (soft limiter in `Car`, and the AI's lane target speed). Caps were derived from each circuit's measured main-road section time and refined by benchmark. Joker credit now counts distance actually driven in the lane (the projected station crawls on the inside of tight bends, so Funnel Ring never counted).
+- Measured AI Joker cost (section time, Joker lap minus normal laps): Breton 5.1, Fjord 5.1, Timberline 5.1, Chalk 5.0, Funnel 4.9, Ardennes 5.9, Sierra 4.9, Apex 4.5, Baltic 4.8, Granite 4.7. NOT on target: Bauxite (about 9 s; the AI stalls against the lane wall in the second bend) and Harbor (the AI does not complete the lane, about 6.5 s). Funnel Joker moved to the outer side, Fjord and Harbor lanes made less wide-swinging, Joker hay chicane switchable per circuit (`"chicane": false` on Bauxite, Funnel, Harbor, Fjord).
+- Dev: `--aligned --notilt` with `--overhead --at` for top-down lane images.

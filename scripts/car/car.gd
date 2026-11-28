@@ -1205,12 +1205,14 @@ func step(dt: float) -> void:
 	# Loose surface patches (gravel / mud / ice / deep snow).
 	var patch := track.patch_at(s, lat)
 	var patch_drag := 0.0
+	var patch_cap := 0.0
 	patch_kind = ""
 	if not patch.is_empty():
 		patch_kind = patch["kind"]
 		_rx_grip = move_toward(_rx_grip, _patch_grip(patch, lat), dt / 0.15 * 0.4) if patch.get("rx", false) else 1.0
 		surface *= _rx_grip if patch.get("rx", false) else _patch_grip(patch, lat)
 		patch_drag = float(patch["drag"])
+		patch_cap = float(patch.get("cap", 0.0))
 		patch_drag *= lerpf(1.0, 0.4, offroad)
 		if patch.get("rx", false):
 			# Dirty tyres: leaving loose ground onto tarmac starts at 0.88 grip and recovers over seconds.
@@ -1288,6 +1290,8 @@ func step(dt: float) -> void:
 	if water:
 		a -= vl * 1.1
 	a -= vl * patch_drag
+	if patch_cap > 0.0 and vl > patch_cap:
+		a -= (vl - patch_cap) * 6.0   # deep loose going: nothing runs faster than the lane's cap
 	# Gravity along the slope: climbs cost speed, descents add it.
 	if grounded > 0.0:
 		a -= 9.0 * clampf(track.grade_along(pos, s, lat, f) , -0.4, 0.4)

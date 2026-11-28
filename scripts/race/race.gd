@@ -699,9 +699,15 @@ func _update_joker(c: Car) -> void:
 	var st: Dictionary = _joker_state[c]
 	var advance := fposmod(c.s - float(st.prev), tr.length)
 	st.prev = c.s
+	# Credit the distance the car actually drives, not the change in its projected station: on the inside of a tight
+	# bend (Funnel Ring, Harbor Grid, Bauxite) the station crawls forward and the lane was never counted as taken.
+	var travelled: float = c.pos.distance_to(st.get("pp", c.pos))
+	st["pp"] = c.pos
 	var band := tr.joker_band(c.s)
-	if not is_nan(band.x) and c.lat >= band.x and c.lat <= band.y and advance < 8.0:
-		st.run += advance
+	if OS.get_cmdline_user_args().has("--jokerdbg") and c == player and c.s > float(tr.joker.s0) - 20.0 and c.s < float(tr.joker.s1) + 20.0 and Engine.get_process_frames() % 20 == 0:
+		print("JD lap=%d s=%.1f lat=%.2f band=[%.2f,%.2f] adv=%.2f run=%.1f need=%.1f" % [c.lap, c.s, c.lat, band.x, band.y, advance, float(st.run), 0.5 * (float(tr.joker.s1) - float(tr.joker.s0))])
+	if not is_nan(band.x) and c.lat >= band.x and c.lat <= band.y and advance < 8.0 and travelled < 8.0:
+		st.run += maxf(advance, travelled)
 	elif c.s < tr.joker.s0 or c.s > tr.joker.s1:
 		st.run = 0.0
 	if float(st.run) >= 0.5 * (float(tr.joker.s1) - float(tr.joker.s0)):

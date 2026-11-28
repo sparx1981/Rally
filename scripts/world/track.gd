@@ -585,6 +585,8 @@ var _jstations: Array = []
 
 
 func joker_chicane_stations() -> Array:
+	if not bool(joker.get("chicane", true)):
+		return []
 	if not _jstations.is_empty() or joker.is_empty():
 		return _jstations
 	var s0 := float(joker.s0)

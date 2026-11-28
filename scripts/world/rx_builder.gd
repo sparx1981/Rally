@@ -318,13 +318,15 @@ static func _build_joker(track: Track, jk: Dictionary) -> void:
 		var leave := 0.25 + 0.75 * smoothstep(0.0, 1.3 * blend, d1)
 		hi[i] = inner_edge + lane_w * enter * leave
 	track.joker = {"s0": s0, "s1": s1, "side": side, "w": lane_w, "i0": i0, "i1": i1, "lo": lo, "hi": hi, "gap": gap,
-		"surf": str(jk.surf), "max_hw": max_hw, "blend": blend}
+		"surf": str(jk.surf), "max_hw": max_hw, "blend": blend, "cap": float(jk.get("cap", 0.0)), "chicane": bool(jk.get("chicane", true))}
 	var lat0 := max_hw + 0.3 if side > 0.0 else -99.0
 	var lat1 := 99.0 if side > 0.0 else -(max_hw + 0.3)
 	_add_patch(track, s0, s1, lat0, lat1, str(jk.surf))
 	# The lane is graded and packed, so it costs the Joker's time delta without being a mud bath:
 	# half way between its loose surface and tarmac.
 	track.patches[-1]["grip"] = lerpf(float(track.patches[-1]["grip"]), 1.15, 0.35)
+	# The lane is deep loose going: a speed cap per circuit (m/s), tuned so a Joker lap costs about 5 s.
+	track.patches[-1]["cap"] = float(jk.get("cap", 0.0))
 
 
 ## A shallow water crossing: the road dips a little and water runs over it (a splash for the pace notes).
