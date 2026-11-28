@@ -1515,12 +1515,23 @@ func _choice(label: String, options: Array, current: int, on_change: Callable) -
 		b.text = "<  %s  >" % options[state["i"]]
 		Sfx.toggle()
 		on_change.call(state["i"])
-	b.pressed.connect(func(): change.call(1))
+	# Touch / mouse: the "<" end steps back, the ">" end (and the middle) steps forward. Keys and pad: left / right
+	# step, accept steps forward. The press is handled directly so one tap is exactly one step.
 	b.gui_input.connect(func(ev: InputEvent):
-		if ev.is_action_pressed("ui_left"):
+		if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT and ev.pressed:
+			b.grab_focus()
+			change.call(-1 if ev.position.x < b.size.x * 0.3 else 1)
+			b.accept_event()
+		elif ev is InputEventMouseButton and ev.pressed and ev.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_LEFT]:
 			change.call(-1)
 			b.accept_event()
-		elif ev.is_action_pressed("ui_right"):
+		elif ev is InputEventMouseButton and ev.pressed and ev.button_index in [MOUSE_BUTTON_WHEEL_DOWN, MOUSE_BUTTON_WHEEL_RIGHT]:
+			change.call(1)
+			b.accept_event()
+		elif ev.is_action_pressed("ui_left"):
+			change.call(-1)
+			b.accept_event()
+		elif ev.is_action_pressed("ui_right") or ev.is_action_pressed("ui_accept"):
 			change.call(1)
 			b.accept_event())
 	row.add_child(b)
@@ -2003,6 +2014,29 @@ func _fake_results(champ_mode: bool) -> void:
 
 func _run_shot() -> void:
 	var view: String = _shot.get("view", "race")
+	if OS.get_cmdline_user_args().has("--steppertest"):
+		var seen: Array = []
+		var row := _choice("Test", ["A", "B", "C"], 0, func(i): seen.append(i))
+		menu.add_child(row)
+		await get_tree().process_frame
+		await get_tree().process_frame
+		var btn := row.get_child(1) as Button
+		var click := func(x: float):
+			var ev := InputEventMouseButton.new()
+			ev.button_index = MOUSE_BUTTON_LEFT
+			ev.pressed = true
+			ev.position = Vector2(x, 10)
+			btn.gui_input.emit(ev)
+		click.call(5.0)       # left end: back (wraps A -> C)
+		click.call(btn.size.x - 5.0)   # right end: forward (C -> A)
+		click.call(btn.size.x * 0.5)   # middle: forward (A -> B)
+		var key := InputEventAction.new()
+		key.action = "ui_left"
+		key.pressed = true
+		btn.gui_input.emit(key)   # B -> A
+		print("STEPPER ", seen, " expected [2, 0, 1, 0]")
+		get_tree().quit()
+		return
 	if view == "bench":
 		_run_bench()
 		return
