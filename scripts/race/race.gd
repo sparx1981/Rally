@@ -56,7 +56,7 @@ var sim_dt := 0.0        # test mode: fixed simulated frame time
 var autopilot := false   # test/screenshot mode: the AI drives the player's car
 
 
-func setup(stage_i: int, mode_v: int, entrants: Array, attract_v := false, tod := -1) -> void:
+func setup(stage_i: int, mode_v: int, entrants: Array, attract_v := false, tod := -1, moves := false) -> void:
 	stage_index = stage_i
 	mode = mode_v
 	attract = attract_v
@@ -64,7 +64,7 @@ func setup(stage_i: int, mode_v: int, entrants: Array, attract_v := false, tod :
 	stage = Stage.new()
 	stage.name = "Stage"
 	add_child(stage)
-	stage.build(Catalog.stages()[stage_i], tod)
+	stage.build(Catalog.stages()[stage_i], tod, moves and not attract_v)
 	var tr := stage.track
 	_laps = clampi(Game.circuit_laps, 3, 12) if tr.circuit else 0
 	var n := entrants.size()

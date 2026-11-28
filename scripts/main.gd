@@ -130,7 +130,7 @@ func _loading_stage(sdef: Dictionary, startup := false) -> void:
 	var tod_i := Game.race_tod()
 	if tod_i < 0:
 		tod_i = int(sdef.get("tod", 0))
-	var sunrise := (int(sdef.get("seed", 0)) % 2 == 0 or tod_i == Catalog.SUNRISE) and tod_i != 1
+	var sunrise := (int(sdef.get("seed", 0)) % 2 == 0 or tod_i == Catalog.DAWN) and tod_i != 1
 	var sky := TextureRect.new()
 	sky.texture = preload("res://ui/boot.png") if startup else preload("res://ui/loading_hero.png")
 	sky.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -288,7 +288,7 @@ func _start_race() -> void:
 	if _shot.has("path"):
 		race.sim_dt = 1.0 / 30.0
 	world.add_child(race)
-	race.setup(Game.stage_index, Game.mode, entrants, false, Game.race_tod())
+	race.setup(Game.stage_index, Game.mode, entrants, false, Game.race_tod(), Game.race_moves())
 	race.lighting_changed.connect(_apply_post)
 	race.finished.connect(_on_race_finished)
 	race.pause_requested.connect(_pause)
@@ -963,7 +963,7 @@ func _stage_details(location: int) -> void:
 	var sd: Dictionary = Catalog.stages()[circuit_index] if circuit else Catalog.locations()[location]
 	var pg := _page(sd.name, func(): _stage_carousel(circuit, location - (location_count if circuit else 0)))
 	var content: VBoxContainer = pg.content
-	var selection := {"variant": int(Catalog.stages()[Game.stage_index].variant), "time": Game.time_of_day, "laps": Game.circuit_laps, "weather": Game.weather_override}
+	var selection := {"variant": int(Catalog.stages()[Game.stage_index].variant), "time": Game.time_of_day, "laps": Game.circuit_laps, "weather": Game.weather_override, "moves": Game.race_moves()}
 	var overview := HBoxContainer.new()
 	overview.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	overview.add_theme_constant_override("separation", 16)
@@ -1006,7 +1006,9 @@ func _stage_details(location: int) -> void:
 	var distance_names: Array[String] = []
 	for variant in Catalog.VARIANTS:
 		distance_names.append("%s · %.0f km" % [variant[0], float(variant[1]) / 1000.0])
-	var time_names := ["Default · %s" % Catalog.TOD_NAMES[int(sd.get("tod", 0))]] + Catalog.TOD_NAMES
+	var time_names: Array = ["Default · %s" % Catalog.TOD_NAMES[int(sd.get("tod", 0))]]
+	for mode: int in Catalog.TOD_ORDER:
+		time_names.append(Catalog.TOD_NAMES[mode])
 	var refresh := func():
 		var index := circuit_index if circuit else location * routes + int(selection.variant)
 		map.show_route(Catalog.stages()[index])
@@ -1022,11 +1024,34 @@ func _stage_details(location: int) -> void:
 		distance = _stage_options(content, "Distance", distance_names, selection.variant, func(index: int):
 			selection.variant = index
 			refresh.call())
-	var times := _stage_options(content, "Time of day", time_names, selection.time + 1, func(index: int):
-		selection.time = index - 1)
 	var weather_names := ["Default · %s" % Catalog.weather(sd.weather).label] + Catalog.WEATHER_NAMES
-	var weather := _stage_options(content, "Weather", weather_names, selection.weather + 1, func(index: int):
-		selection.weather = index - 1)
+	var env_row := HBoxContainer.new()
+	env_row.add_theme_constant_override("separation", 12)
+	content.add_child(env_row)
+	var time_start := 0 if int(selection.time) < 0 else 1 + Catalog.TOD_ORDER.find(int(selection.time))
+	var time_choice := _choice("Time of day", time_names, time_start, func(i: int):
+		selection.time = -1 if i == 0 else int(Catalog.TOD_ORDER[i - 1]))
+	(time_choice.get_child(0) as Control).custom_minimum_size.x = 140
+	(time_choice.get_child(1) as Control).custom_minimum_size.x = 235
+	env_row.add_child(time_choice)
+	var weather_choice := _choice("Weather", weather_names, int(selection.weather) + 1, func(i: int):
+		selection.weather = i - 1)
+	(weather_choice.get_child(0) as Control).custom_minimum_size.x = 96
+	(weather_choice.get_child(1) as Control).custom_minimum_size.x = 215
+	env_row.add_child(weather_choice)
+	var moves_button := _button("", func(): pass, 0)
+	moves_button.toggle_mode = true
+	moves_button.button_pressed = bool(selection.moves)
+	moves_button.text = "Time moves on · " + ("On" if moves_button.button_pressed else "Off")
+	moves_button.toggled.connect(func(on: bool):
+		selection.moves = on
+		moves_button.text = "Time moves on · " + ("On" if on else "Off"))
+	moves_button.add_theme_font_size_override("font_size", 22)
+	moves_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	env_row.add_child(moves_button)
+	var times := _focus_controls(time_choice)
+	var weather := _focus_controls(weather_choice)
+	weather.append_array(_focus_controls(env_row).filter(func(n): return n == moves_button))
 	var race_option := _button("", func(): pass, 200)
 	race_option.toggle_mode = true
 	var ai_race := Game.mode == Game.Mode.RACE
@@ -1043,6 +1068,7 @@ func _stage_details(location: int) -> void:
 			Game.circuit_laps = int(selection.laps)
 		Game.time_of_day = int(selection.time)
 		Game.weather_override = int(selection.weather)
+		Settings.set_value("time_moves", bool(selection.moves))
 		if ai_race:
 			Game.ai_contact = race_option.button_pressed
 		else:
@@ -1050,7 +1076,7 @@ func _stage_details(location: int) -> void:
 		_start_race(), 200)
 	pg.bar.add_child(start)
 	refresh.call()
-	var focus_list: Array = [distance, times, weather]
+	var focus_list: Array = [distance, times + weather]
 	focus_list.append_array(ai_rows)
 	focus_list.append(_focus_controls(pg.bar))
 	_focus_rows(focus_list, distance[0 if circuit else selection.variant])
@@ -1187,6 +1213,14 @@ func _champ_intro() -> void:
 	content.add_child(dl)
 	var ai_rows := _ai_rows(content, Game.champ_round > 0)
 	_standings_table(content)
+	var moves := _button("", func(): pass, 0)
+	moves.toggle_mode = true
+	moves.button_pressed = Game.race_moves()
+	moves.text = "Time moves on · " + ("On" if moves.button_pressed else "Off")
+	moves.toggled.connect(func(on: bool):
+		Settings.set_value("time_moves", on)
+		moves.text = "Time moves on · " + ("On" if on else "Off"))
+	(pg["bar"] as HBoxContainer).add_child(moves)
 	var go := _button("Start stage", _start_race, 260)
 	(pg["bar"] as HBoxContainer).add_child(go)
 	var rows: Array = ai_rows.duplicate()
@@ -1666,6 +1700,8 @@ func _parse_args() -> void:
 			Settings.data["popups"] = a.substr(9) == "1"
 		elif a.begins_with("--camera="):
 			Settings.data["camera"] = int(a.substr(9))
+		elif a == "--moves":
+			Settings.data["time_moves"] = true
 		elif a.begins_with("--tod="):
 			Game.time_of_day = int(a.substr(6))
 		elif a.begins_with("--weather="):

@@ -89,12 +89,28 @@ var _lamp_level := 0.0
 var _head_cache := PackedVector3Array()
 
 
-func build(stage_def: Dictionary, time_of_day := -1) -> void:
+## Time of day is a fixed look (dawn, day, dusk, night); "time moves on" then drifts it one step forward over the
+## event: dawn -> day -> dusk -> night -> dawn. Phases: 0 day, 1 dusk or dawn, 2 night.
+var _moves := false
+var _from_phase := 0.0
+var _to_phase := 0.0
+var _morning := false
+var _cur_phase := 0.0
+
+
+func build(stage_def: Dictionary, time_of_day := -1, moves := false) -> void:
 	def = Catalog.with_season(stage_def, int(Settings.g("season")))
 	_lighting_mode = int(def.get("tod", 0)) if time_of_day < 0 else time_of_day
-	tod = 2 if _lighting_mode == Catalog.SUNRISE else (0 if _lighting_mode == Catalog.SUNSET else clampi(_lighting_mode, 0, 2))
+	_moves = moves
+	_from_phase = [0.0, 1.0, 2.0, 1.0][clampi(_lighting_mode, 0, 3)]
+	_to_phase = _from_phase
+	if _moves:
+		_to_phase = [1.0, 2.0, 1.0, 0.0][clampi(_lighting_mode, 0, 3)]
+	_morning = _lighting_mode == Catalog.DAWN or (_lighting_mode == 2 and _moves)
+	_cur_phase = _from_phase
+	tod = clampi(roundi(_from_phase), 0, 2)
 	_light_presets = [Catalog.lighting(def.weather, 0), Catalog.lighting(def.weather, 1), Catalog.lighting(def.weather, 2)]
-	if changing_light():
+	if _moves or _lighting_mode == Catalog.DAWN:
 		_light_presets[1].elev = 9.0
 	wx = _light_presets[tod].duplicate()
 	track.build_stage_route(def, wx.kind)
@@ -311,7 +327,7 @@ func _make_lights() -> void:
 	fill_light = DirectionalLight3D.new()
 	fill_light.shadow_enabled = false
 	add_child(fill_light)
-	_apply_lighting(float(tod))
+	_apply_lighting(_from_phase)
 
 
 ## How strongly street or track lamps light a spot on the ground (0 = not at all), for the cars passing under them.
@@ -360,7 +376,7 @@ func _update_wet_reflections(focus: Vector3) -> void:
 
 
 func changing_light() -> bool:
-	return _lighting_mode in [Catalog.SUNRISE, Catalog.SUNSET]
+	return _moves
 
 
 ## Advance the sky with completed course distance, so a retry starts at the
@@ -373,7 +389,7 @@ func advance_lighting(station: float) -> bool:
 	if next <= _light_progress:
 		return false
 	_light_progress = next
-	var journey := next * 2.0 if _lighting_mode == Catalog.SUNSET else (1.0 - next) * 2.0
+	var journey := lerpf(_from_phase, _to_phase, next)
 	_apply_lighting(journey)
 	return true
 
@@ -383,6 +399,11 @@ func _sky_colors(index: int) -> Array[Color]:
 	if index == 2:
 		return [Color("#2c3a66"), Color("#070c24"), Color("#3a4468")]
 	if index == 1:
+		if _morning:
+			# Dawn: a cooler, paler sky than dusk, peach at the horizon and blue-grey overhead.
+			if stormy:
+				return [Color("#cbb2a4"), Color("#5f6684"), Color("#858592")]
+			return [Color("#f6c8a2"), Color("#6c84b4"), Color("#d6b2b4")]
 		if stormy:
 			return [Color("#c9967c"), Color("#5a5878"), Color("#7e7886")]
 		return [Color("#f3a46c"), Color("#5f5c94"), Color("#b98a98")]
@@ -393,6 +414,7 @@ func _sky_colors(index: int) -> Array[Color]:
 
 
 func _apply_lighting(phase: float) -> void:
+	_cur_phase = phase
 	var lower := mini(floori(phase), 1)
 	var mix_amount := smoothstep(0.0, 1.0, phase - lower)
 	var left: Dictionary = _light_presets[lower]
@@ -424,7 +446,7 @@ func _apply_lighting(phase: float) -> void:
 	paper_mat.set_shader_parameter("glass_zenith", zen)
 	paper_mat.set_shader_parameter("glass_night", darkness)
 	sky_mat.set_shader_parameter("glow_amount", glow)
-	sky_mat.set_shader_parameter("glow_ink", Color("#ffcf9a").lerp(Color("#ff6a38"), glow))
+	sky_mat.set_shader_parameter("glow_ink", Color("#ffd8ac").lerp(Color("#ff9c78") if _morning else Color("#ff6a38"), glow))
 	sky_mat.set_shader_parameter("moon_ink", Color("#d4e0ff"))
 	sky_mat.set_shader_parameter("light_dir", _sky_direction(lerpf(altitude - 10.0 * glow, -6.0, darkness), azimuth))
 	sky_mat.set_shader_parameter("moon_dir", _sky_direction(_light_presets[2].elev, azimuth))
@@ -454,6 +476,8 @@ func _apply_lighting(phase: float) -> void:
 	_sync_car_mat()
 	if rx_props:
 		rx_props.set_lamp_level(_lamp_level)
+	if env != null and _morning:
+		apply_haze()
 
 
 func _sky_direction(elevation: float, azimuth: float) -> Vector3:
@@ -2418,7 +2442,7 @@ func _make_mist() -> void:
 		col = Color("#f2f3f8") if tod < 2 else Color("#343c60")
 	var k := 0
 	var offs: Array = [0.6, 2.2, 4.2]
-	var dawn_banks: bool = _lighting_mode == Catalog.SUNRISE
+	var dawn_banks: bool = _morning
 	if dawn_banks:
 		# Dawn: extra low banks stacked up the valley sides, thicker and slower, that burn off as the sun climbs.
 		offs = [0.3, 1.2, 2.2, 3.2, 4.2, 5.6]
@@ -2602,9 +2626,9 @@ func apply_haze() -> void:
 	var lvl := Settings.fx_level()
 	env.fog_enabled = lvl >= 1
 	var dawn := 0.0
-	if _lighting_mode == Catalog.SUNRISE:
-		dawn = clampf(1.0 - _light_progress * 1.6, 0.0, 1.0)
-	elif tod == 1 and _lighting_mode != Catalog.SUNSET:
+	if _morning:
+		dawn = clampf(1.0 - absf(_cur_phase - 1.0) * 1.6, 0.0, 1.0)   # thickest at first light, burns off towards day
+	elif tod == 1 and not _moves:
 		dawn = 0.3
 	env.fog_density = 0.0018 + 0.0035 * dawn
 	env.fog_sky_affect = 0.0

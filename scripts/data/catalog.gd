@@ -236,9 +236,11 @@ static func locations() -> Array:
 
 
 const VARIANTS := [["Sprint", 4000.0], ["Classic", 8000.0], ["Long", 10000.0], ["Marathon", 15000.0]]
-const SUNSET := 3
-const SUNRISE := 4
-const TOD_NAMES := ["Day", "Dusk", "Night", "Sunset", "Sunrise"]
+const DAWN := 3
+## Names indexed by lighting mode: 0 day, 1 dusk, 2 night, 3 dawn.
+const TOD_NAMES := ["Day", "Dusk", "Night", "Dawn"]
+## Order shown on the confirmation screen (after "Default"), as lighting modes.
+const TOD_ORDER := [3, 0, 1, 2]
 
 # Names, terrain ink multipliers and regional scenery weights in route order.
 const CHAPTERS := {

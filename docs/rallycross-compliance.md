@@ -288,3 +288,10 @@ All 12 circuits complete 3 laps. A human player is not affected by the AI's lane
 - In same-class grids each AI driver's skill is scaled by (car time / class average time)^1.5, clamped to -6% / +12%, using measured full-stage times per car (Catalog.PACE_TIME, Meadow Run Sprint, autopilot; regenerate with `--view=bench --only=0 --ttonly --car=N`). Mixed-class grids are not balanced.
 - Stat averages (top/accel/grip) did not predict pace, so they are not used. Pace was measured on one gravel stage; tarmac pace differences are not modelled.
 - Test (Heritage grid, Meadow Run, one race): AI finishing spread 14.5 s unbalanced -> 10.6 s balanced. The rest is driver-skill randomness (0.93-1.0) and traffic. `--nobalance` disables it for comparison.
+
+## Twenty-seventh pass: time of day as a fixed look + "Time moves on"
+
+- Time of day is now Default / Dawn / Day / Dusk / Night, each a fixed look (Dawn: paler peach/blue sky, thick low mist banks). Sunrise/Sunset are gone as options.
+- "Time moves on" (setting `time_moves`, toggle on the stage confirmation screen and the championship intro) advances the look one step over the event: dawn -> day -> dusk -> night -> dawn. Progress follows distance (stages) or race-distance fraction (circuits). Applies to championships too.
+- Confirmation screen: Time of day and Weather are now `< >` steppers on one row with the toggle beside them, freeing a row for the AI options.
+- Dev: `--tod=0..3` (day, dusk, night, dawn), `--moves`, `--lightat=0..1`.

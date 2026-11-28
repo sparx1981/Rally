@@ -14,7 +14,7 @@ var series_index := 0
 var show_ghost := true
 var ai_contact := true
 var weather_override := -1   # -1 = the stage's own weather, otherwise an index into Catalog.WEATHER_PICK
-var time_of_day := -1        # -1 = stage default, otherwise an index into Catalog.TOD_NAMES
+var time_of_day := -1        # -1 = stage default, otherwise a lighting mode (Catalog.TOD_NAMES index)
 
 # Championship in progress.
 var champ_round := 0
@@ -32,6 +32,11 @@ func _ready() -> void:
 
 
 ## Time of day for the next race: championship night series forces night.
+## "Time moves on": the chosen time of day drifts one step forward over the event.
+func race_moves() -> bool:
+	return bool(Settings.g("time_moves"))
+
+
 func race_tod() -> int:
 	if mode == Mode.CHAMPIONSHIP:
 		return 2 if bool(current_series().get("night", false)) else -1
