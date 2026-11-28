@@ -15,6 +15,13 @@ var _up_ok := 0.0
 var _changes: Array = []   # times (s) of recent scale changes
 var _hold_until := 0.0
 var _bench_running := false
+# Frame-pacing guard: a 90/120 fps cap that cannot be held bounces between 8, 17 and 25 ms frames, which looks
+# like stutter. When many frames overrun, lock to an even 60 fps for a while instead.
+var _pace_n := 0
+var _pace_bad := 0
+var _pace_t := 0.0
+var _pace_locked_until := 0.0
+var _pace_user_cap := -1
 signal benchmark_progress(fraction: float)
 signal benchmark_done(result: Dictionary)
 
@@ -43,7 +50,38 @@ func _user_scale() -> float:
 	return clampf(float(Settings.g("render_scale")), 0.4, 1.0)
 
 
+func _pace_guard(delta: float) -> void:
+	var now := Time.get_ticks_msec() / 1000.0
+	var cap := int(Settings.g("fps"))
+	if _pace_user_cap >= 0 and now >= _pace_locked_until:
+		if Engine.max_fps == 60:
+			Engine.max_fps = _pace_user_cap   # try the player's cap again
+		_pace_user_cap = -1
+		_pace_n = 0
+		_pace_bad = 0
+		_pace_t = 0.0
+		return
+	if _pace_user_cap >= 0 or (cap != 0 and cap <= 60):
+		return
+	var hz := DisplayServer.screen_get_refresh_rate()
+	var want_ms := 1000.0 / (float(cap) if cap > 0 else (hz if hz > 30.0 else 60.0))
+	_pace_n += 1
+	_pace_t += delta
+	if delta * 1000.0 > want_ms * 1.45:
+		_pace_bad += 1
+	if _pace_t >= 1.5:
+		if _pace_n > 20 and float(_pace_bad) / float(_pace_n) > 0.12:
+			_pace_user_cap = cap
+			_pace_locked_until = now + 45.0
+			Engine.max_fps = 60
+		_pace_n = 0
+		_pace_bad = 0
+		_pace_t = 0.0
+
+
 func _process(delta: float) -> void:
+	if not _bench_running and DisplayServer.get_name() != "headless" and not get_tree().paused:
+		_pace_guard(delta)
 	if _bench_running or not bool(Settings.g("dynamic_res")):
 		return
 	var vp := get_viewport()
