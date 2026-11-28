@@ -955,53 +955,198 @@ func _stage_select(focus_location := -1) -> void:
 	_focus_rows(rows, cards[clampi(selected, 0, cards.size() - 1)])
 
 
+## A "< value >" control with real arrow buttons at each end. The middle is the focusable part: tap or
+## accept steps forward, left / right (keys, pad) step either way. Returns the row; the middle button is its child 1.
+func _stepper(options: Array, current: int, on_change: Callable) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	var state := {"i": clampi(current, 0, options.size() - 1)}
+	var prev := Button.new()
+	prev.text = "<"
+	prev.focus_mode = Control.FOCUS_NONE
+	prev.custom_minimum_size = Vector2(60, 58)
+	var mid := Button.new()
+	mid.focus_mode = Control.FOCUS_ALL
+	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mid.custom_minimum_size.y = 58
+	mid.text = str(options[state["i"]])
+	var nxt := Button.new()
+	nxt.text = ">"
+	nxt.focus_mode = Control.FOCUS_NONE
+	nxt.custom_minimum_size = Vector2(60, 58)
+	var change := func(d: int):
+		state["i"] = posmod(int(state["i"]) + d, options.size())
+		mid.text = str(options[state["i"]])
+		Sfx.toggle()
+		on_change.call(state["i"])
+	prev.pressed.connect(func(): change.call(-1))
+	nxt.pressed.connect(func(): change.call(1))
+	mid.pressed.connect(func(): change.call(1))
+	mid.gui_input.connect(func(ev: InputEvent):
+		if ev.is_action_pressed("ui_left"):
+			change.call(-1)
+			mid.accept_event()
+		elif ev.is_action_pressed("ui_right"):
+			change.call(1)
+			mid.accept_event())
+	row.add_child(prev)
+	row.add_child(mid)
+	row.add_child(nxt)
+	return row
+
+
+func _field(title: String, control: Control) -> VBoxContainer:
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 4)
+	var l := Label.new()
+	l.text = title.to_upper()
+	l.add_theme_font_size_override("font_size", 15)
+	l.add_theme_color_override("font_color", PaperTheme.ACCENT)
+	box.add_child(l)
+	box.add_child(control)
+	return box
+
+
+func _toggle_button(title: String, on: bool, on_toggle: Callable) -> Button:
+	var b := _button("", func(): pass, 0)
+	b.toggle_mode = true
+	b.button_pressed = on
+	b.custom_minimum_size.y = 58
+	b.text = "%s · %s" % [title, "On" if on else "Off"]
+	b.toggled.connect(func(v: bool):
+		b.text = "%s · %s" % [title, "On" if v else "Off"]
+		on_toggle.call(v))
+	return b
+
+
+## Stage / circuit confirmation: the stage art and a one-line summary with a big Start button, quick picks for
+## common setups, and a Customise drawer (Course, Conditions, Rivals tabs) for everything else.
 func _stage_details(location: int) -> void:
 	var routes := Catalog.VARIANTS.size()
 	var location_count := Catalog.locations().size()
 	var circuit := location >= location_count
 	var circuit_index := location_count * routes + location - location_count
 	var sd: Dictionary = Catalog.stages()[circuit_index] if circuit else Catalog.locations()[location]
-	var pg := _page(sd.name, func(): _stage_carousel(circuit, location - (location_count if circuit else 0)))
-	var content: VBoxContainer = pg.content
-	var selection := {"variant": int(Catalog.stages()[Game.stage_index].variant), "time": Game.time_of_day, "laps": Game.circuit_laps, "weather": Game.weather_override, "moves": Game.race_moves()}
-	var overview := HBoxContainer.new()
-	overview.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	overview.add_theme_constant_override("separation", 16)
-	content.add_child(overview)
+	var ai_race := Game.mode == Game.Mode.RACE
+	var selection := {"variant": int(Catalog.stages()[Game.stage_index].variant), "time": Game.time_of_day, "laps": Game.circuit_laps,
+		"weather": Game.weather_override, "moves": Game.race_moves(), "contact": Game.ai_contact, "ghost": Game.show_ghost}
+	var ui := {"open": false, "tab": "course"}
+	_clear_menu()
 
-	var preview := TextureRect.new()
-	preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-	preview.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	preview.custom_minimum_size = Vector2(0, 150)
-	overview.add_child(preview)
+	var root := Control.new()
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	menu.add_child(root)
+	var art := TextureRect.new()
+	art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	art.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(art)
+	var fade := TextureRect.new()
+	var gt := GradientTexture2D.new()
+	var gr := Gradient.new()
+	gr.colors = PackedColorArray([Color(0.1, 0.05, 0.02, 0.0), Color(0.1, 0.05, 0.02, 0.0), Color(0.1, 0.05, 0.02, 0.82)])
+	gr.offsets = PackedFloat32Array([0.0, 0.45, 1.0])
+	gt.gradient = gr
+	gt.fill_from = Vector2(0, 0)
+	gt.fill_to = Vector2(0, 1)
+	gt.width = 4
+	gt.height = 256
+	fade.texture = gt
+	fade.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	fade.stretch_mode = TextureRect.STRETCH_SCALE
+	fade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(fade)
 
-	var details := PanelContainer.new()
-	details.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	overview.add_child(details)
-	var right := VBoxContainer.new()
-	right.add_theme_constant_override("separation", 8)
-	details.add_child(right)
-	var description := _note(sd.desc)
-	description.custom_minimum_size.x = 0.0
-	if Catalog.CHAPTERS.has(sd.id):
-		var chapter_names := PackedStringArray()
-		for chapter: Dictionary in Catalog.CHAPTERS[sd.id]:
-			chapter_names.append(chapter.name)
-		description.text += "\n" + "  ·  ".join(chapter_names)
-	right.add_child(description)
-	var map := StageRouteMap.new()
-	map.custom_minimum_size.y = 136
-	map.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	right.add_child(map)
-	var map_key := Label.new()
-	map_key.text = "■ Start / Finish" if circuit else "● Start                 ■ Finish"
-	map_key.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	map_key.add_theme_font_size_override("font_size", 15)
-	right.add_child(map_key)
-	var caption := Label.new()
-	caption.add_theme_font_size_override("font_size", 18)
-	right.add_child(caption)
+	var title := PaperTheme.tag(sd.name, 34)
+	title.position = Vector2(36, 24)
+	root.add_child(title)
+	var customise := _button("Customise", func(): pass, 0)
+	customise.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	customise.offset_left = -236
+	customise.offset_right = -36
+	customise.offset_top = 24
+	customise.offset_bottom = 82
+	root.add_child(customise)
+
+	# Quick picks.
+	var picks: Array = []
+	if ai_race:
+		picks = [
+			{"n": "Fair fight", "d": "Medium AI, your class, 5 rivals", "set": {"time": -1, "weather": -1, "moves": false}, "ai": {"ai_difficulty": 1, "opponents": 5, "same_class": true}},
+			{"n": "Dawn run", "d": "Dawn into day, dry", "set": {"time": 3, "weather": 0, "moves": true}},
+			{"n": "Night in the rain", "d": "Night, rain, Hard AI", "set": {"time": 2, "weather": 1, "moves": false}, "ai": {"ai_difficulty": 2}},
+		]
+	else:
+		picks = [
+			{"n": "Dawn run", "d": "Dawn into day, dry", "set": {"time": 3, "weather": 0, "moves": true}},
+			{"n": "Night run", "d": "Night, dry", "set": {"time": 2, "weather": 0, "moves": false}},
+			{"n": "Wet and grey", "d": "Rain, default light", "set": {"time": -1, "weather": 1, "moves": false}},
+		]
+	var picks_box := VBoxContainer.new()
+	picks_box.position = Vector2(36, 104)
+	picks_box.custom_minimum_size.x = 330
+	picks_box.add_theme_constant_override("separation", 10)
+	root.add_child(picks_box)
+	var picks_cap := Label.new()
+	picks_cap.text = "QUICK PICKS"
+	picks_cap.add_theme_font_size_override("font_size", 15)
+	picks_cap.add_theme_color_override("font_color", Color("#fff2d1"))
+	picks_cap.add_theme_color_override("font_outline_color", Color(0.1, 0.05, 0.02, 0.9))
+	picks_cap.add_theme_constant_override("outline_size", 5)
+	picks_box.add_child(picks_cap)
+	var pick_buttons: Array = []
+
+	# Summary chips and the bottom bar.
+	var chips := HBoxContainer.new()
+	chips.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+	chips.offset_left = 36
+	chips.offset_right = -36
+	chips.offset_top = -168
+	chips.offset_bottom = -112
+	chips.add_theme_constant_override("separation", 10)
+	root.add_child(chips)
+	var bar := HBoxContainer.new()
+	bar.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+	bar.offset_left = 36
+	bar.offset_right = -36
+	bar.offset_top = -94
+	bar.offset_bottom = -22
+	root.add_child(bar)
+
+	# Drawer.
+	var scrim := ColorRect.new()
+	scrim.color = Color(0.08, 0.04, 0.02, 0.5)
+	scrim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	scrim.modulate.a = 0.0
+	scrim.visible = false
+	root.add_child(scrim)
+	var drawer := PanelContainer.new()
+	drawer.add_theme_stylebox_override("panel", PaperTheme.box(PaperTheme.CREAM, PaperTheme.EDGE, 4, 0, 10))
+	drawer.set_anchors_and_offsets_preset(Control.PRESET_RIGHT_WIDE)
+	drawer.offset_left = 0
+	drawer.offset_right = 580
+	root.add_child(drawer)
+	var dv := VBoxContainer.new()
+	dv.add_theme_constant_override("separation", 10)
+	drawer.add_child(dv)
+	var dhead := HBoxContainer.new()
+	dv.add_child(dhead)
+	var dtitle := Label.new()
+	dtitle.text = "Customise"
+	dtitle.add_theme_font_size_override("font_size", 32)
+	dtitle.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	dhead.add_child(dtitle)
+	var done := _button("Done", func(): pass, 130)
+	dhead.add_child(done)
+	var tabs := HBoxContainer.new()
+	tabs.add_theme_constant_override("separation", 8)
+	dv.add_child(tabs)
+	var body := VBoxContainer.new()
+	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.add_theme_constant_override("separation", 14)
+	dv.add_child(body)
 
 	var distance_names: Array[String] = []
 	for variant in Catalog.VARIANTS:
@@ -1009,77 +1154,263 @@ func _stage_details(location: int) -> void:
 	var time_names: Array = ["Default · %s" % Catalog.TOD_NAMES[int(sd.get("tod", 0))]]
 	for mode: int in Catalog.TOD_ORDER:
 		time_names.append(Catalog.TOD_NAMES[mode])
-	var refresh := func():
-		var index := circuit_index if circuit else location * routes + int(selection.variant)
-		map.show_route(Catalog.stages()[index])
-		preview.texture = Catalog.stage_preview(Catalog.stages()[index])
-		caption.text = "%.2f km per lap" % (map.route_length / 1000.0) if circuit else "Best %s" % Game.fmt_time(Game.best_time(index))
-	var distance: Array
-	if circuit:
-		var lap_names: Array = range(3, 13).map(func(lap): return str(lap))
-		var lap_row := _choice("Laps", lap_names, int(selection.laps) - 3, func(index): selection.laps = index + 3)
-		content.add_child(lap_row)
-		distance = _focus_controls(lap_row)
-	else:
-		distance = _stage_options(content, "Distance", distance_names, selection.variant, func(index: int):
-			selection.variant = index
-			refresh.call())
-	var weather_names := ["Default · %s" % Catalog.weather(sd.weather).label] + Catalog.WEATHER_NAMES
-	var env_row := HBoxContainer.new()
-	env_row.add_theme_constant_override("separation", 12)
-	content.add_child(env_row)
-	var time_start := 0 if int(selection.time) < 0 else 1 + Catalog.TOD_ORDER.find(int(selection.time))
-	var time_choice := _choice("Time of day", time_names, time_start, func(i: int):
-		selection.time = -1 if i == 0 else int(Catalog.TOD_ORDER[i - 1]))
-	(time_choice.get_child(0) as Control).custom_minimum_size.x = 140
-	(time_choice.get_child(1) as Control).custom_minimum_size.x = 235
-	env_row.add_child(time_choice)
-	var weather_choice := _choice("Weather", weather_names, int(selection.weather) + 1, func(i: int):
-		selection.weather = i - 1)
-	(weather_choice.get_child(0) as Control).custom_minimum_size.x = 96
-	(weather_choice.get_child(1) as Control).custom_minimum_size.x = 215
-	env_row.add_child(weather_choice)
-	var moves_button := _button("", func(): pass, 0)
-	moves_button.toggle_mode = true
-	moves_button.button_pressed = bool(selection.moves)
-	moves_button.text = "Time moves on · " + ("On" if moves_button.button_pressed else "Off")
-	moves_button.toggled.connect(func(on: bool):
-		selection.moves = on
-		moves_button.text = "Time moves on · " + ("On" if on else "Off"))
-	moves_button.add_theme_font_size_override("font_size", 22)
-	moves_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	env_row.add_child(moves_button)
-	var times := _focus_controls(time_choice)
-	var weather := _focus_controls(weather_choice)
-	weather.append_array(_focus_controls(env_row).filter(func(n): return n == moves_button))
-	var race_option := _button("", func(): pass, 200)
-	race_option.toggle_mode = true
-	var ai_race := Game.mode == Game.Mode.RACE
-	var ai_rows: Array = _ai_rows(content) if ai_race else []
-	var option_label := "Impact with AI" if ai_race else "Show ghost"
-	race_option.button_pressed = Game.ai_contact if ai_race else Game.show_ghost
-	race_option.text = option_label + (" · On" if race_option.button_pressed else " · Off")
-	race_option.toggled.connect(func(enabled: bool):
-		race_option.text = option_label + (" · On" if enabled else " · Off"))
-	pg.bar.add_child(race_option)
-	var start := _button("Start race", func():
-		Game.stage_index = circuit_index if circuit else location * routes + int(selection.variant)
+	var weather_names: Array = ["Default · %s" % Catalog.weather(sd.weather).label] + Catalog.WEATHER_NAMES
+
+	var stage_index := func() -> int:
+		return circuit_index if circuit else location * routes + int(selection.variant)
+	var look_text := func() -> String:
+		var mode: int = int(sd.get("tod", 0)) if int(selection.time) < 0 else int(selection.time)
+		var nxt: int = [1, 2, 3, 0][clampi(mode, 0, 3)]
+		return "%s → %s" % [Catalog.TOD_NAMES[mode], Catalog.TOD_NAMES[nxt]] if bool(selection.moves) else String(Catalog.TOD_NAMES[mode])
+	var weather_text := func() -> String:
+		return String(Catalog.weather(sd.weather).label) if int(selection.weather) < 0 else String(Catalog.WEATHER_NAMES[int(selection.weather)])
+
+	var summary_chips: Array = []
+	var fn := {}   # forward-declared callables: a dictionary is captured by reference, a local Callable by value
+	var refresh_bg := func():
+		art.texture = Catalog.stage_preview(Catalog.stages()[stage_index.call()])
+		var mode: int = int(sd.get("tod", 0)) if int(selection.time) < 0 else int(selection.time)
+		var tint := Color.WHITE
+		match mode:
+			1: tint = Color(1.0, 0.82, 0.72)
+			2: tint = Color(0.5, 0.56, 0.85)
+			3: tint = Color(1.0, 0.9, 0.86)
+		var wx: int = int(selection.weather)
+		if wx == 1:
+			tint = tint * Color(0.82, 0.88, 0.94)
+		elif wx == 2:
+			tint = tint * Color(0.94, 0.96, 1.0)
+		art.modulate = tint
+	var refresh_chips := func():
+		for c in chips.get_children():
+			c.queue_free()
+		summary_chips.clear()
+		var defs: Array = []
+		defs.append([("%d laps" % int(selection.laps)) if circuit else String(distance_names[int(selection.variant)]), "course"])
+		defs.append([look_text.call(), "cond"])
+		defs.append([weather_text.call(), "cond"])
+		if ai_race:
+			defs.append(["%d rivals · %s · %s" % [int(Settings.g("opponents")), ("%s class" % Catalog.class_name_of(Game.car_index)) if bool(Settings.g("same_class")) else "any class", ["Easy", "Medium", "Hard"][int(Settings.g("ai_difficulty"))]], "rivals"])
+		else:
+			defs.append(["Ghost on" if bool(selection.ghost) else "No ghost", "course"])
+		for d in defs:
+			var chip := _button(String(d[0]), func():
+				fn.open.call(String(d[1])), 0)
+			chip.custom_minimum_size.y = 48
+			chip.add_theme_font_size_override("font_size", 21)
+			chips.add_child(chip)
+			summary_chips.append(chip)
+	var refresh_all := func():
+		refresh_bg.call()
+		refresh_chips.call()
+		if bool(ui.open):
+			fn.rebuild.call()
+
+	# Quick pick buttons.
+	for p: Dictionary in picks:
+		var pb := _button("", func():
+			for k: String in p["set"]:
+				selection[k] = p["set"][k]
+			if p.has("ai"):
+				for k: String in p["ai"]:
+					Settings.set_value(k, p["ai"][k])
+			refresh_all.call(), 0)
+		pb.custom_minimum_size = Vector2(330, 78)
+		var inner := VBoxContainer.new()
+		inner.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		inner.offset_left = 16
+		inner.offset_right = -12
+		inner.alignment = BoxContainer.ALIGNMENT_CENTER
+		inner.add_theme_constant_override("separation", 0)
+		inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var pn := Label.new()
+		pn.text = String(p["n"])
+		pn.add_theme_font_size_override("font_size", 25)
+		pn.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		inner.add_child(pn)
+		var pd := Label.new()
+		pd.text = String(p["d"])
+		pd.add_theme_font_size_override("font_size", 16)
+		pd.add_theme_color_override("font_color", Color("#6a543e"))
+		pd.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		inner.add_child(pd)
+		pb.add_child(inner)
+		picks_box.add_child(pb)
+		pick_buttons.append(pb)
+
+	# Drawer body builders.
+	var course_tab := func():
+		if circuit:
+			var lap_names: Array = range(3, 13).map(func(lap): return str(lap))
+			body.add_child(_field("Laps", _stepper(lap_names, int(selection.laps) - 3, func(i: int):
+				selection.laps = i + 3
+				refresh_chips.call())))
+			var circuit_note := _note("Rallycross circuit. Take the Joker lane once per race or lose 15 s.")
+			circuit_note.custom_minimum_size.x = 0.0
+			body.add_child(circuit_note)
+		else:
+			var grid := GridContainer.new()
+			grid.columns = 2
+			grid.add_theme_constant_override("h_separation", 8)
+			grid.add_theme_constant_override("v_separation", 8)
+			var group := ButtonGroup.new()
+			for i in distance_names.size():
+				var db := _button(distance_names[i], func():
+					selection.variant = i
+					refresh_bg.call()
+					refresh_chips.call()
+					fn.rebuild.call(), 0)
+				db.toggle_mode = true
+				db.button_group = group
+				db.button_pressed = i == int(selection.variant)
+				db.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				db.custom_minimum_size.y = 58
+				db.add_theme_font_size_override("font_size", 21)
+				grid.add_child(db)
+			body.add_child(_field("Distance", grid))
+		if not ai_race:
+			body.add_child(_toggle_button("Show ghost", bool(selection.ghost), func(v: bool):
+				selection.ghost = v
+				refresh_chips.call()))
+		var map := StageRouteMap.new()
+		map.custom_minimum_size.y = 150
+		map.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		body.add_child(map)
+		map.show_route(Catalog.stages()[stage_index.call()])
+		var caption := Label.new()
+		caption.add_theme_font_size_override("font_size", 19)
+		caption.text = "%.2f km per lap" % (map.route_length / 1000.0) if circuit else "Best %s" % Game.fmt_time(Game.best_time(stage_index.call()))
+		body.add_child(caption)
+	var cond_tab := func():
+		var time_start := 0 if int(selection.time) < 0 else 1 + Catalog.TOD_ORDER.find(int(selection.time))
+		body.add_child(_field("Time of day", _stepper(time_names, time_start, func(i: int):
+			selection.time = -1 if i == 0 else int(Catalog.TOD_ORDER[i - 1])
+			refresh_bg.call()
+			refresh_chips.call()
+			fn.rebuild.call())))
+		body.add_child(_field("Weather", _stepper(weather_names, int(selection.weather) + 1, func(i: int):
+			selection.weather = i - 1
+			refresh_bg.call()
+			refresh_chips.call())))
+		body.add_child(_toggle_button("Time moves on", bool(selection.moves), func(v: bool):
+			selection.moves = v
+			refresh_chips.call()
+			fn.rebuild.call()))
+		var mode: int = int(sd.get("tod", 0)) if int(selection.time) < 0 else int(selection.time)
+		var nxt: int = [1, 2, 3, 0][clampi(mode, 0, 3)]
+		var moves_note := _note(("%s becomes %s during the event." % [Catalog.TOD_NAMES[mode], Catalog.TOD_NAMES[nxt]]) if bool(selection.moves) else ("Stays %s the whole way." % String(Catalog.TOD_NAMES[mode]).to_lower()))
+		moves_note.custom_minimum_size.x = 0.0
+		body.add_child(moves_note)
+	var rivals_tab := func():
+		body.add_child(_field("AI difficulty", _stepper(["Easy", "Medium", "Hard"], int(Settings.g("ai_difficulty")), func(i: int):
+			Settings.set_value("ai_difficulty", i)
+			refresh_chips.call())))
+		body.add_child(_field("Opponents", _stepper(["3", "5"], 1 if int(Settings.g("opponents")) == 5 else 0, func(i: int):
+			Settings.set_value("opponents", 5 if i == 1 else 3)
+			refresh_chips.call())))
+		body.add_child(_field("Cars", _stepper(["Any class", "%s only" % Catalog.class_name_of(Game.car_index)], 1 if bool(Settings.g("same_class")) else 0, func(i: int):
+			Settings.set_value("same_class", i == 1)
+			refresh_chips.call())))
+		body.add_child(_toggle_button("Impact with AI", bool(selection.contact), func(v: bool): selection.contact = v))
+	fn.rebuild = func():
+		for c in body.get_children():
+			body.remove_child(c)
+			c.queue_free()
+		for c in tabs.get_children():
+			tabs.remove_child(c)
+			c.queue_free()
+		var names: Array = [["course", "Course"], ["cond", "Conditions"]]
+		if ai_race:
+			names.append(["rivals", "Rivals"])
+		var group := ButtonGroup.new()
+		var first_tab: Button = null
+		for t: Array in names:
+			var tb := _button(String(t[1]), func():
+				ui.tab = t[0]
+				fn.rebuild.call(), 0)
+			tb.toggle_mode = true
+			tb.button_group = group
+			tb.button_pressed = ui.tab == t[0]
+			tb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			tb.add_theme_font_size_override("font_size", 23)
+			tabs.add_child(tb)
+			if first_tab == null:
+				first_tab = tb
+		match String(ui.tab):
+			"cond": cond_tab.call()
+			"rivals": rivals_tab.call()
+			_: course_tab.call()
+		var rows: Array = [_focus_controls(tabs), _focus_controls(body), [done]]
+		_focus_rows(rows.filter(func(r): return not r.is_empty()), (_focus_controls(body)[0] if not _focus_controls(body).is_empty() else done))
+
+	# Open / close.
+	var set_drawer := func(open: bool):
+		ui.open = open
+		scrim.visible = true
+		var tw := create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		tw.tween_property(drawer, "offset_left", -580.0 if open else 0.0, 0.26)
+		tw.tween_property(drawer, "offset_right", 0.0 if open else 580.0, 0.26)
+		tw.tween_property(scrim, "modulate:a", 1.0 if open else 0.0, 0.26)
+		if not open:
+			tw.chain().tween_callback(func(): scrim.visible = false)
+	fn.open = func(tab: String):
+		ui.tab = tab
+		set_drawer.call(true)
+		fn.rebuild.call()
+	var close_drawer := func():
+		set_drawer.call(false)
+		fn.focus_closed.call()
+	fn.focus_closed = func():
+		var rows: Array = [pick_buttons, summary_chips, _focus_controls(bar), [customise]]
+		_focus_rows(rows.filter(func(r): return not r.is_empty()), _focus_controls(bar)[-1])
+
+	customise.pressed.connect(func():
+		Sfx.click()
+		fn.open.call(String(ui.tab)))
+	done.pressed.connect(func():
+		Sfx.click()
+		close_drawer.call())
+	scrim.gui_input.connect(func(ev: InputEvent):
+		if ev is InputEventMouseButton and ev.pressed and bool(ui.open):
+			close_drawer.call())
+
+	var back_to_carousel := func(): _stage_carousel(circuit, location - (location_count if circuit else 0))
+	var back := _button("Back", func():
+		if bool(ui.open):
+			close_drawer.call()
+		else:
+			back_to_carousel.call(), 0)
+	bar.add_child(back)
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bar.add_child(spacer)
+	var start := _button("Start run" if Game.mode == Game.Mode.TIME_TRIAL else "Start race", func():
+		Game.stage_index = stage_index.call()
 		if circuit:
 			Game.circuit_laps = int(selection.laps)
 		Game.time_of_day = int(selection.time)
 		Game.weather_override = int(selection.weather)
 		Settings.set_value("time_moves", bool(selection.moves))
 		if ai_race:
-			Game.ai_contact = race_option.button_pressed
+			Game.ai_contact = bool(selection.contact)
 		else:
-			Game.show_ghost = race_option.button_pressed
-		_start_race(), 200)
-	pg.bar.add_child(start)
-	refresh.call()
-	var focus_list: Array = [distance, times + weather]
-	focus_list.append_array(ai_rows)
-	focus_list.append(_focus_controls(pg.bar))
-	_focus_rows(focus_list, distance[0 if circuit else selection.variant])
+			Game.show_ghost = bool(selection.ghost)
+		_start_race(), 300)
+	start.custom_minimum_size.y = 72
+	start.add_theme_font_size_override("font_size", 32)
+	bar.add_child(start)
+	_back = func():
+		if bool(ui.open):
+			close_drawer.call()
+		else:
+			back_to_carousel.call()
+
+	drawer.offset_left = 0
+	refresh_all.call()
+	fn.focus_closed.call()
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--drawer="):
+			fn.open.call(a.substr(9))
 
 
 func _stage_options(parent: VBoxContainer, title: String, options: Array, active: int, on_change: Callable) -> Array:

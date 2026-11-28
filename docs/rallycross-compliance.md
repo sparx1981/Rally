@@ -295,3 +295,9 @@ All 12 circuits complete 3 laps. A human player is not affected by the AI's lane
 - "Time moves on" (setting `time_moves`, toggle on the stage confirmation screen and the championship intro) advances the look one step over the event: dawn -> day -> dusk -> night -> dawn. Progress follows distance (stages) or race-distance fraction (circuits). Applies to championships too.
 - Confirmation screen: Time of day and Weather are now `< >` steppers on one row with the toggle beside them, freeing a row for the AI options.
 - Dev: `--tod=0..3` (day, dusk, night, dawn), `--moves`, `--lightat=0..1`.
+
+## Twenty-eighth pass: stage confirmation, "Start first" layout
+
+- Stage/circuit confirmation is now full-screen stage art with quick picks (3 per mode), summary chips and a large Start button. Customise opens a right-hand drawer with Course (distance or laps, ghost, route + elevation), Conditions (time of day, weather, time moves on) and Rivals (difficulty, opponents, cars, impact; hidden in Time Trial) tabs. Summary chips open the matching tab. Back closes the drawer first.
+- `_stepper` has real "<" and ">" buttons (the middle is the focusable part for pad/keys). The older `_choice` control (Settings, championship intro) steps back when tapped on its left end.
+- The stage art is tinted for time of day and weather; it is not re-rendered. Dev: `--drawer=course|cond|rivals`, `--steppertest`.
