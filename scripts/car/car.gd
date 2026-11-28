@@ -684,7 +684,7 @@ func _make_backfire() -> void:
 	var tip: Vector3 = _model.get("exhaust", Vector3(-0.45, 0.3, -half_len - 0.1))
 	_flame = Node3D.new()
 	_flame.position = tip
-	_flame.visible = false
+	_flame.scale = Vector3.ONE * 0.0001   # stays "visible" but tiny so its pipeline is compiled before the first pop
 	for k in 2:
 		var cone := MeshInstance3D.new()
 		var cm := CylinderMesh.new()
@@ -733,6 +733,7 @@ func _make_backfire() -> void:
 		sp.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		_body.add_child(sp)
 		_flame_sparks = sp
+		sp.emitting = true   # one throwaway burst at setup compiles the spark pipeline ahead of the first pop
 
 
 func _backfire_capable() -> bool:
@@ -745,7 +746,6 @@ func backfire(strength := 0.8) -> void:
 		return
 	_flame_t = randf_range(0.05, 0.11) * (0.8 + strength * 0.5)
 	_flame.scale = Vector3(randf_range(0.8, 1.15), randf_range(0.8, 1.15), 0.6 + strength * 0.9)
-	_flame.visible = true
 	if _flame_sparks:
 		_flame_sparks.restart()
 		_flame_sparks.emitting = true
@@ -769,7 +769,7 @@ func _update_backfire(delta: float) -> void:
 		_flame_t -= delta
 		_flame.scale.x = randf_range(0.8, 1.15)
 		if _flame_t <= 0.0:
-			_flame.visible = false
+			_flame.scale = Vector3.ONE * 0.0001
 	if _backfire_capable() and not frozen and not in_water and absf(v_long) > 8.0:
 		var rpm_f := clampf((rpm - 1100.0) / 5800.0, 0.0, 1.0)
 		if _bf_prev_throttle > 0.6 and throttle < 0.2 and rpm_f > 0.55 and _bf_cd <= 0.0 and randf() < 0.6:
