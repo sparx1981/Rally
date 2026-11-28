@@ -120,6 +120,8 @@ func setup(car_stats: Dictionary, num: int, stg: Stage, mat: Material) -> void:
 	_mat = mat
 	_make_contact()
 	_make_dust()
+	_make_tyre_smoke()
+	_make_backfire()
 	_make_wheel_debris()
 	_make_dirt()
 	if Settings.fx_level() >= 1:
@@ -610,6 +612,172 @@ func _update_dirt(delta: float) -> void:
 		var tone := Color(0.30, 0.22, 0.14).lerp(Color(0.82, 0.74, 0.58), dust_film / maxf(dust_film + dirt, 0.001))
 		var mat := _dirt_nodes[0].material_override as StandardMaterial3D
 		mat.albedo_color = Color(tone.r, tone.g, tone.b, clampf(amount, 0.0, 1.0) * 0.6)
+
+
+# --- Tyre smoke and exhaust backfires -----------------------------------------------------------------------
+const BACKFIRE_STYLES := ["groupb_rwd", "quattro", "t16", "sixr4", "r5", "rally1", "wrc", "impreza", "integrale", "evo", "celica", "rally2", "pikes", "groups", "stratos", "m1", "cossie", "gt4"]
+var _tyre_smoke: Array[CPUParticles3D] = []
+var _flame: Node3D
+var _flame_t := 0.0
+var _flame_sparks: CPUParticles3D
+var _bf_prev_throttle := 0.0
+var _bf_pops := 0
+var _bf_next := 0.0
+var _bf_cd := 0.0
+
+
+## Real tyre smoke only happens on hard, dry ground: tarmac and concrete. Loose surfaces throw dust, wet ground
+## throws spray and snow throws snow, which the other emitters already handle.
+func _hard_surface() -> bool:
+	if stage == null or stage.kind() != "dry" or not on_road:
+		return false
+	if track.rx:
+		return patch_kind == "" or patch_kind == "tarmac"
+	return false
+
+
+func _make_tyre_smoke() -> void:
+	if Settings.fx_level() < 1 or _wheels.size() < 4:
+		return
+	for i in 2:
+		var p := Puffs.make("smoke", Color(0.92, 0.92, 0.94), stage.wx["leak"])
+		p.amount = 26
+		p.lifetime = 2.1
+		p.direction = Vector3(0, 0.25, -1)
+		p.spread = 30.0
+		p.initial_velocity_min = 0.5
+		p.initial_velocity_max = 1.6
+		p.gravity = Vector3(0, 0.55, 0)
+		p.damping_min = 0.8
+		p.damping_max = 1.6
+		p.scale_amount_min = 0.8
+		p.scale_amount_max = 1.7
+		p.emitting = false
+		var wp: Vector3 = (_wheels[2 + i] as Node3D).position
+		p.position = Vector3(wp.x, 0.14, wp.z)
+		add_child(p)
+		_tyre_smoke.append(p)
+
+
+func _update_tyre_smoke() -> void:
+	if _tyre_smoke.is_empty():
+		return
+	var spd := absf(v_long)
+	var driven_spin := throttle > 0.85 and spd < 9.0 and str(stats.get("drive", "rwd")) != "fwd"
+	var sliding := slip > 0.34 or (handbrake > 0.5 and spd > 7.0) or driven_spin or OS.get_cmdline_user_args().has("--smokedemo")
+	var on := _hard_surface() and sliding and spd > 2.0 and not airborne and not in_water and not frozen
+	for p in _tyre_smoke:
+		p.emitting = on
+		p.speed_scale = clampf(0.8 + slip * 1.3, 0.8, 2.0)
+	if on and _dust:
+		_dust.emitting = false
+
+
+func _make_backfire() -> void:
+	var tip: Vector3 = _model.get("exhaust", Vector3(-0.45, 0.3, -half_len - 0.1))
+	_flame = Node3D.new()
+	_flame.position = tip
+	_flame.visible = false
+	for k in 2:
+		var cone := MeshInstance3D.new()
+		var cm := CylinderMesh.new()
+		cm.top_radius = 0.0
+		cm.bottom_radius = 0.10 if k == 0 else 0.055
+		cm.height = 0.85 if k == 0 else 0.55
+		cm.radial_segments = 6
+		cone.mesh = cm
+		cone.rotation_degrees = Vector3(-90, 0, 0)
+		cone.position = Vector3(0, 0, -cm.height * 0.5)
+		var fm := StandardMaterial3D.new()
+		fm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		fm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		fm.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		fm.cull_mode = BaseMaterial3D.CULL_DISABLED
+		fm.albedo_color = Color(1.0, 0.5, 0.12, 0.85) if k == 0 else Color(1.0, 0.92, 0.6, 0.95)
+		fm.disable_fog = true
+		cone.material_override = fm
+		cone.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_flame.add_child(cone)
+	_body.add_child(_flame)
+	if Settings.fx_level() >= 1:
+		var sp := CPUParticles3D.new()
+		sp.one_shot = true
+		sp.emitting = false
+		sp.amount = 12
+		sp.lifetime = 0.4
+		sp.explosiveness = 1.0
+		sp.local_coords = false
+		sp.direction = Vector3(0, 0.25, -1)
+		sp.spread = 28.0
+		sp.initial_velocity_min = 4.0
+		sp.initial_velocity_max = 9.0
+		sp.gravity = Vector3(0, -9.0, 0)
+		var qm := QuadMesh.new()
+		qm.size = Vector2(0.035, 0.035)
+		var sm := StandardMaterial3D.new()
+		sm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		sm.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+		sm.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		sm.albedo_color = Color(1.0, 0.65, 0.2)
+		sm.disable_fog = true
+		qm.material = sm
+		sp.mesh = qm
+		sp.position = tip
+		sp.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_body.add_child(sp)
+		_flame_sparks = sp
+
+
+func _backfire_capable() -> bool:
+	return str(stats["style"]) in BACKFIRE_STYLES
+
+
+## A bang and a lick of flame from the exhaust (strength 0..1), with a puff of smoke and a few sparks.
+func backfire(strength := 0.8) -> void:
+	if _flame == null or in_water:
+		return
+	_flame_t = randf_range(0.05, 0.11) * (0.8 + strength * 0.5)
+	_flame.scale = Vector3(randf_range(0.8, 1.15), randf_range(0.8, 1.15), 0.6 + strength * 0.9)
+	_flame.visible = true
+	if _flame_sparks:
+		_flame_sparks.restart()
+		_flame_sparks.emitting = true
+	exhaust_puff(0.22)
+	var loud := is_player
+	var cam := get_viewport().get_camera_3d()
+	if not loud and cam != null:
+		loud = global_position.distance_to(cam.global_position) < 22.0
+	if loud:
+		Sfx.play("thud", (-4.5 if is_player else -12.0) - randf() * 3.0, randf_range(2.1, 2.7))
+
+
+func _update_backfire(delta: float) -> void:
+	if _flame == null:
+		return
+	_bf_cd = maxf(0.0, _bf_cd - delta)
+	if OS.get_cmdline_user_args().has("--bfdemo") and is_player:
+		_flame_t = maxf(_flame_t, 0.3)   # hold the flame on for a still
+		_flame.visible = true
+	if _flame_t > 0.0:
+		_flame_t -= delta
+		_flame.scale.x = randf_range(0.8, 1.15)
+		if _flame_t <= 0.0:
+			_flame.visible = false
+	if _backfire_capable() and not frozen and not in_water and absf(v_long) > 8.0:
+		var rpm_f := clampf((rpm - 1100.0) / 5800.0, 0.0, 1.0)
+		if _bf_prev_throttle > 0.6 and throttle < 0.2 and rpm_f > 0.55 and _bf_cd <= 0.0 and randf() < 0.6:
+			_bf_pops = randi_range(1, 4)
+			_bf_next = 0.04
+			_bf_cd = 1.2
+		if _bf_pops > 0 and throttle < 0.15:
+			_bf_next -= delta
+			if _bf_next <= 0.0:
+				backfire(randf_range(0.4, 1.0))
+				_bf_pops -= 1
+				_bf_next = randf_range(0.07, 0.22)
+		elif throttle > 0.3:
+			_bf_pops = 0
+	_bf_prev_throttle = throttle
 
 
 func _make_dust() -> void:
@@ -1419,6 +1587,8 @@ func _update_gear(vl: float, thr: float) -> void:
 		var previous := gear
 		gear = g
 		gear_changed.emit(g, previous)
+		if g > previous and thr > 0.75 and _backfire_capable() and randf() < 0.5:
+			backfire(0.6)   # a flame on the upshift under full throttle
 	var lo: float = GEARS[maxi(gear - 1, 0)] * float(stats["top"])
 	var hi: float = (GEARS[gear] if gear < GEARS.size() else GEARS[-1] + 6.0) * float(stats["top"])
 	var t := clampf((v - lo) / maxf(hi - lo, 1.0), 0.0, 1.0)
@@ -1509,6 +1679,8 @@ func _sync_visual(delta: float) -> void:
 	_update_wheel_debris()
 	_update_stones(delta)
 	_update_parts(delta)
+	_update_tyre_smoke()
+	_update_backfire(delta)
 	# Dust / spray / snow from the wheels.
 	if _dust:
 		var spd := absf(v_long)

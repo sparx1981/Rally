@@ -236,6 +236,7 @@ func _make_hud() -> void:
 func _on_popped() -> void:
 	if player:
 		player.exhaust_puff(0.45)
+		player.backfire(1.0)
 
 
 func _exit_tree() -> void:

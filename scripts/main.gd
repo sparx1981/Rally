@@ -161,11 +161,61 @@ func _hero_life(sky: TextureRect, startup: bool) -> void:
 	fit.call()
 
 
-## Keep a loading screen on show for a moment so its motion is seen before the (blocking) stage build starts.
+## Keep a loading screen on show for a while so its motion is seen before the (blocking) stage build starts. Any
+## tap, key or button press skips the wait.
 func _hero_hold(seconds: float) -> void:
 	if DisplayServer.get_name() == "headless" or _shot.has("path"):
 		return
-	await get_tree().create_timer(seconds).timeout
+	var t := 0.0
+	var was_down := Input.is_anything_pressed()
+	while t < seconds:
+		await get_tree().process_frame
+		t += get_process_delta_time()
+		var down := Input.is_anything_pressed()
+		if down and not was_down:
+			return
+		was_down = down
+
+
+## The boot screen waits for a tap: the art is on show for as long as the player likes, and the first tap also
+## unlocks audio on devices that need a touch first.
+func _hero_tap(sky: Control) -> void:
+	if DisplayServer.get_name() == "headless" or _shot.has("path"):
+		return
+	var prompt := Label.new()
+	prompt.text = "TAP TO START"
+	prompt.add_theme_font_override("font", PaperTheme.font())
+	prompt.add_theme_font_size_override("font_size", 30)
+	prompt.add_theme_color_override("font_color", Color("#fff3dc"))
+	prompt.add_theme_color_override("font_outline_color", Color(0.18, 0.06, 0.1, 0.9))
+	prompt.add_theme_constant_override("outline_size", 8)
+	prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	prompt.anchor_left = 0.5
+	prompt.anchor_right = 0.5
+	prompt.anchor_top = 1.0
+	prompt.anchor_bottom = 1.0
+	prompt.offset_left = -240
+	prompt.offset_right = 240
+	prompt.offset_top = -110
+	prompt.offset_bottom = -60
+	sky.add_child(prompt)
+	var tw := prompt.create_tween().set_loops()
+	tw.tween_property(prompt, "modulate:a", 0.35, 0.9).set_trans(Tween.TRANS_SINE)
+	tw.tween_property(prompt, "modulate:a", 1.0, 0.9).set_trans(Tween.TRANS_SINE)
+	var was_down := true   # a press that was already down does not count
+	var t := 0.0
+	while true:
+		await get_tree().process_frame
+		t += get_process_delta_time()
+		var down := Input.is_anything_pressed()
+		if down and not was_down and t > 0.6:
+			break
+		was_down = down
+	tw.kill()
+	Sfx.click()
+	var out := prompt.create_tween()
+	out.tween_property(prompt, "modulate:a", 0.0, 0.2)
+	await out.finished
 
 
 ## Loading screen: a cut-paper sunrise or sunset, the stage name in large type, a preview card and a tip.
@@ -200,7 +250,7 @@ func _loading_stage(sdef: Dictionary, startup := false) -> void:
 		await get_tree().process_frame
 		await get_tree().process_frame
 		await get_tree().process_frame
-		await _hero_hold(0.9)
+		await _hero_tap(sky)
 		return
 	var scrim := TextureRect.new()
 	var gr := Gradient.new()
@@ -305,7 +355,7 @@ func _loading_stage(sdef: Dictionary, startup := false) -> void:
 	sky.add_child(wait)
 	await get_tree().process_frame
 	await get_tree().process_frame
-	await _hero_hold(1.0)
+	await _hero_hold(2.4)
 	await get_tree().process_frame
 
 

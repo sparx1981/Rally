@@ -337,3 +337,9 @@ All 12 circuits complete 3 laps. A human player is not affected by the AI's lane
 
 - The boot and stage loading screens (ui/boot.png, ui/loading_hero.png) now move: the painted sky drifts and breathes (shader `hero_sky`, the baked title and the car are masked out), dust trails from both wheels and rolls out ahead of the car, tiny motes hang in the headlight beam, the lamps pulse, the brake discs glow, and a reflection slides across the windscreen (`HeroFx`, laid out in the art's own 1920x1080 pixel space and fitted like the picture's "cover" crop).
 - Each screen now holds for 0.9-1.0 s before the (blocking) build starts so the motion is seen; the build itself still freezes the frame. Low preset halves the particle counts. Dev: `--view=boot`.
+
+## Thirty-sixth pass: tap to start, backfires, tyre smoke
+
+- The boot screen waits for a tap/key/button ("TAP TO START"); stage loading screens stay up 2.4 s (any press skips). Headless and screenshot runs skip both.
+- Backfires (`Car.backfire`): a flame cone with a bright core, a few sparks, a smoke puff and a sharp crack, on throttle lift at high revs (1-4 crackling pops), on full-throttle upshifts and at the race start. Performance and Group-era cars only (BACKFIRE_STYLES); classics, trucks, 4x4s, buggies and estates never backfire. Player is loud, rivals only within 22 m of the camera.
+- Volumetric tyre smoke from both rear wheels when sliding hard (slip, handbrake, driven wheelspin below 9 m/s) on hard dry ground only: rallycross tarmac (track.rx with no loose patch). Loose, wet and snowy ground keep dust / spray / snow; rally gravel stages never produce tyre smoke. Dev: `--bfdemo`, `--smokedemo`.
