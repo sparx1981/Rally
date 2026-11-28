@@ -99,6 +99,18 @@ func _start_attract(stage_i: int, startup := false) -> void:
 	_apply_post()
 
 
+## Live background for the confirmation screens: the real stage with an AI car looping through its most
+## photogenic section under a cinematic camera (skipped on the Low preset, which keeps the still image).
+func _hero_start(stage_i: int, time: int, weather: int) -> void:
+	Catalog.apply_weather(stage_i, weather)
+	_clear_race()
+	race = Race.new()
+	world.add_child(race)
+	race.setup(stage_i, Game.Mode.RACE, [{"name": "Demo", "car": Game.car_index, "skill": 0.95, "player": false}], true, time)
+	race.start_hero()
+	_apply_post()
+
+
 func _loading(text: String) -> void:
 	_clear_menu()
 	if text != "":
@@ -1214,7 +1226,9 @@ func _stage_details(location: int) -> void:
 			if p.has("ai"):
 				for k: String in p["ai"]:
 					Settings.set_value(k, p["ai"][k])
-			refresh_all.call(), 0)
+			refresh_all.call()
+			if fn.has("hero"):
+				fn.hero.call(), 0)
 		pb.custom_minimum_size = Vector2(330, 78)
 		var inner := VBoxContainer.new()
 		inner.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -1343,6 +1357,35 @@ func _stage_details(location: int) -> void:
 		var rows: Array = [_focus_controls(tabs), _focus_controls(body), [done]]
 		_focus_rows(rows.filter(func(r): return not r.is_empty()), (_focus_controls(body)[0] if not _focus_controls(body).is_empty() else done))
 
+	# Live background: build the stage behind the screen, then fade the still image out. Rebuilt when the drawer
+	# closes with different distance, time of day or weather.
+	var live := {"sig": ""}
+	var loading_tag := PaperTheme.tag("Loading live preview…", 18)
+	loading_tag.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	loading_tag.offset_top = 30
+	loading_tag.visible = false
+	root.add_child(loading_tag)
+	fn.hero = func():
+		if Settings.fx_level() < 1:
+			return
+		var sig := "%d_%d_%d" % [stage_index.call(), int(selection.time), int(selection.weather)]
+		if sig == String(live.sig):
+			return
+		live.sig = sig
+		loading_tag.visible = true
+		var show := create_tween()
+		show.tween_property(art, "self_modulate:a", 1.0, 0.15)
+		await get_tree().process_frame
+		await get_tree().process_frame
+		if not is_instance_valid(root):
+			return
+		_hero_start(stage_index.call(), int(selection.time), int(selection.weather))
+		if not is_instance_valid(root):
+			return
+		loading_tag.visible = false
+		var hide := create_tween()
+		hide.tween_property(art, "self_modulate:a", 0.0, 0.7)
+
 	# Open / close.
 	var set_drawer := func(open: bool):
 		ui.open = open
@@ -1360,6 +1403,7 @@ func _stage_details(location: int) -> void:
 	var close_drawer := func():
 		set_drawer.call(false)
 		fn.focus_closed.call()
+		fn.hero.call()
 	fn.focus_closed = func():
 		var rows: Array = [pick_buttons, summary_chips, _focus_controls(bar), [customise]]
 		_focus_rows(rows.filter(func(r): return not r.is_empty()), _focus_controls(bar)[-1])
@@ -1411,6 +1455,8 @@ func _stage_details(location: int) -> void:
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--drawer="):
 			fn.open.call(a.substr(9))
+	if not OS.get_cmdline_user_args().has("--nohero"):
+		fn.hero.call()
 
 
 func _stage_options(parent: VBoxContainer, title: String, options: Array, active: int, on_change: Callable) -> Array:
@@ -1533,30 +1579,295 @@ func _series_select() -> void:
 			MenuCards.pop_in(carousel.cards[i], 0.04 + absi(i - carousel.selected) * 0.08)
 
 
+## Championship round confirmation: the same start-first layout as a single stage, with the standings in place of
+## the quick picks and a Customise drawer (Conditions, Rivals) for time moving on and the AI.
 func _champ_intro() -> void:
 	var se := Game.current_series()
-	var pg := _page("%s  -  Stage %d of %d" % [se["name"], Game.champ_round + 1, Game.champ_total_rounds()], _title)
-	var content: VBoxContainer = pg["content"]
 	var sd: Dictionary = Catalog.stages()[Game.stage_index]
-	var wx := Catalog.weather(sd["weather"])
-	content.add_child(PaperTheme.tag("Next: %s  (%s, %.1f km%s)" % [Catalog.stage_title(Game.stage_index), wx["label"], float(sd["length"]) / 1000.0, ", night" if Game.race_tod() == 2 else ""], 28))
-	var dl := PaperTheme.tag(sd["desc"], 20)
-	content.add_child(dl)
-	var ai_rows := _ai_rows(content, Game.champ_round > 0)
-	_standings_table(content)
-	var moves := _button("", func(): pass, 0)
-	moves.toggle_mode = true
-	moves.button_pressed = Game.race_moves()
-	moves.text = "Time moves on · " + ("On" if moves.button_pressed else "Off")
-	moves.toggled.connect(func(on: bool):
-		Settings.set_value("time_moves", on)
-		moves.text = "Time moves on · " + ("On" if on else "Off"))
-	(pg["bar"] as HBoxContainer).add_child(moves)
-	var go := _button("Start stage", _start_race, 260)
-	(pg["bar"] as HBoxContainer).add_child(go)
-	var rows: Array = ai_rows.duplicate()
-	rows.append(_focus_controls(pg.bar))
-	_focus_rows(rows, go)
+	var round_open := Game.champ_round == 0
+	var ui := {"open": false, "tab": "rivals"}
+	_clear_menu()
+	_back = _title
+
+	var root := Control.new()
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	menu.add_child(root)
+	var art := TextureRect.new()
+	art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	art.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.texture = Catalog.stage_preview(sd)
+	var tod_mode: int = int(sd.get("tod", 0)) if Game.race_tod() < 0 else Game.race_tod()
+	art.modulate = [Color.WHITE, Color(1.0, 0.82, 0.72), Color(0.5, 0.56, 0.85), Color(1.0, 0.9, 0.86)][clampi(tod_mode, 0, 3)]
+	root.add_child(art)
+	var fade := TextureRect.new()
+	var gt := GradientTexture2D.new()
+	var gr := Gradient.new()
+	gr.colors = PackedColorArray([Color(0.1, 0.05, 0.02, 0.0), Color(0.1, 0.05, 0.02, 0.0), Color(0.1, 0.05, 0.02, 0.82)])
+	gr.offsets = PackedFloat32Array([0.0, 0.45, 1.0])
+	gt.gradient = gr
+	gt.fill_from = Vector2(0, 0)
+	gt.fill_to = Vector2(0, 1)
+	gt.width = 4
+	gt.height = 256
+	fade.texture = gt
+	fade.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	fade.stretch_mode = TextureRect.STRETCH_SCALE
+	fade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(fade)
+
+	var title := PaperTheme.tag("%s  ·  Round %d of %d" % [se["name"], Game.champ_round + 1, Game.champ_total_rounds()], 30)
+	title.position = Vector2(36, 24)
+	root.add_child(title)
+	var stage_tag := PaperTheme.tag(Catalog.stage_title(Game.stage_index), 24)
+	stage_tag.position = Vector2(36, 82)
+	root.add_child(stage_tag)
+	var customise := _button("Customise", func(): pass, 0)
+	customise.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	customise.offset_left = -236
+	customise.offset_right = -36
+	customise.offset_top = 24
+	customise.offset_bottom = 82
+	root.add_child(customise)
+
+	var standings_holder := VBoxContainer.new()
+	standings_holder.position = Vector2(36, 136)
+	standings_holder.custom_minimum_size.x = 360
+	standings_holder.add_theme_constant_override("separation", 6)
+	root.add_child(standings_holder)
+	var chips := HBoxContainer.new()
+	chips.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+	chips.offset_left = 36
+	chips.offset_right = -36
+	chips.offset_top = -168
+	chips.offset_bottom = -112
+	chips.add_theme_constant_override("separation", 10)
+	root.add_child(chips)
+	var bar := HBoxContainer.new()
+	bar.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+	bar.offset_left = 36
+	bar.offset_right = -36
+	bar.offset_top = -94
+	bar.offset_bottom = -22
+	root.add_child(bar)
+
+	var scrim := ColorRect.new()
+	scrim.color = Color(0.08, 0.04, 0.02, 0.5)
+	scrim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	scrim.modulate.a = 0.0
+	scrim.visible = false
+	root.add_child(scrim)
+	var drawer := PanelContainer.new()
+	drawer.add_theme_stylebox_override("panel", PaperTheme.box(PaperTheme.CREAM, PaperTheme.EDGE, 4, 0, 10))
+	drawer.set_anchors_and_offsets_preset(Control.PRESET_RIGHT_WIDE)
+	drawer.offset_left = 0
+	drawer.offset_right = 580
+	root.add_child(drawer)
+	var dv := VBoxContainer.new()
+	dv.add_theme_constant_override("separation", 10)
+	drawer.add_child(dv)
+	var dhead := HBoxContainer.new()
+	dv.add_child(dhead)
+	var dtitle := Label.new()
+	dtitle.text = "Customise"
+	dtitle.add_theme_font_size_override("font_size", 32)
+	dtitle.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	dhead.add_child(dtitle)
+	var done := _button("Done", func(): pass, 130)
+	dhead.add_child(done)
+	var tabs := HBoxContainer.new()
+	tabs.add_theme_constant_override("separation", 8)
+	dv.add_child(tabs)
+	var body := VBoxContainer.new()
+	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.add_theme_constant_override("separation", 14)
+	dv.add_child(body)
+
+	var fn := {}
+	var look_text := func() -> String:
+		var nxt: int = [1, 2, 3, 0][clampi(tod_mode, 0, 3)]
+		return "%s → %s" % [Catalog.TOD_NAMES[tod_mode], Catalog.TOD_NAMES[nxt]] if Game.race_moves() else String(Catalog.TOD_NAMES[tod_mode])
+	var summary_chips: Array = []
+	var refresh_standings := func():
+		for c in standings_holder.get_children():
+			standings_holder.remove_child(c)
+			c.queue_free()
+		var cap := Label.new()
+		cap.text = "STANDINGS"
+		cap.add_theme_font_size_override("font_size", 15)
+		cap.add_theme_color_override("font_color", Color("#fff2d1"))
+		cap.add_theme_color_override("font_outline_color", Color(0.1, 0.05, 0.02, 0.9))
+		cap.add_theme_constant_override("outline_size", 5)
+		standings_holder.add_child(cap)
+		var panel := PanelContainer.new()
+		panel.add_theme_stylebox_override("panel", PaperTheme.box(PaperTheme.CREAM, PaperTheme.EDGE, 3, 10, 5))
+		var grid := GridContainer.new()
+		grid.columns = 4
+		grid.add_theme_constant_override("h_separation", 16)
+		grid.add_theme_constant_override("v_separation", 2)
+		panel.add_child(grid)
+		var rows := Game.standings()
+		for i in rows.size():
+			var r: Dictionary = rows[i]
+			var you: bool = r["name"] == "You"
+			for t: String in [str(i + 1), String(r["name"]), String(Catalog.cars()[int(r["car"])]["name"]), str(r["points"])]:
+				var l := Label.new()
+				l.text = t
+				l.add_theme_font_size_override("font_size", 19)
+				if you:
+					l.add_theme_color_override("font_color", PaperTheme.ACCENT)
+				if t == str(r["points"]):
+					l.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+				grid.add_child(l)
+		standings_holder.add_child(panel)
+	var refresh_chips := func():
+		for c in chips.get_children():
+			c.queue_free()
+		summary_chips.clear()
+		var wx: Dictionary = Catalog.weather(sd["weather"])
+		var defs: Array = [
+			["%.1f km" % (float(sd["length"]) / 1000.0) if not sd.get("circuit", false) else "%d laps" % Game.circuit_laps, "cond"],
+			[look_text.call(), "cond"],
+			[String(wx["label"]), "cond"],
+			["%d rivals · %s · %s" % [Game.champ_entrants.size() - 1, ("%s class" % Catalog.class_name_of(Game.car_index)) if bool(Settings.g("same_class")) else "any class", ["Easy", "Medium", "Hard"][int(Settings.g("ai_difficulty"))]], "rivals"],
+		]
+		for d in defs:
+			var chip := _button(String(d[0]), func():
+				fn.open.call(String(d[1])), 0)
+			chip.custom_minimum_size.y = 48
+			chip.add_theme_font_size_override("font_size", 21)
+			chips.add_child(chip)
+			summary_chips.append(chip)
+	var refresh_all := func():
+		refresh_standings.call()
+		refresh_chips.call()
+
+	var cond_tab := func():
+		var wx: Dictionary = Catalog.weather(sd["weather"])
+		var info := _note("This round runs in %s, %s. The championship sets the conditions; you choose whether the light changes." % [String(Catalog.TOD_NAMES[tod_mode]).to_lower(), String(wx["label"]).to_lower()])
+		info.custom_minimum_size.x = 0.0
+		body.add_child(info)
+		body.add_child(_toggle_button("Time moves on", Game.race_moves(), func(v: bool):
+			Settings.set_value("time_moves", v)
+			refresh_chips.call()
+			fn.rebuild.call()))
+		var nxt: int = [1, 2, 3, 0][clampi(tod_mode, 0, 3)]
+		var note := _note(("%s becomes %s during the stage." % [Catalog.TOD_NAMES[tod_mode], Catalog.TOD_NAMES[nxt]]) if Game.race_moves() else ("Stays %s the whole way." % String(Catalog.TOD_NAMES[tod_mode]).to_lower()))
+		note.custom_minimum_size.x = 0.0
+		body.add_child(note)
+	var rivals_tab := func():
+		body.add_child(_field("AI difficulty", _stepper(["Easy", "Medium", "Hard"], int(Settings.g("ai_difficulty")), func(i: int):
+			Settings.set_value("ai_difficulty", i)
+			refresh_chips.call())))
+		if round_open:
+			body.add_child(_field("Opponents", _stepper(["3", "5"], 1 if int(Settings.g("opponents")) == 5 else 0, func(i: int):
+				Settings.set_value("opponents", 5 if i == 1 else 3)
+				Game.reset_champ_entrants()
+				refresh_all.call())))
+			body.add_child(_field("Cars", _stepper(["Any class", "%s only" % Catalog.class_name_of(Game.car_index)], 1 if bool(Settings.g("same_class")) else 0, func(i: int):
+				Settings.set_value("same_class", i == 1)
+				Game.reset_champ_entrants()
+				refresh_all.call())))
+		else:
+			var fixed := _note("Opponents: %d · %s. The grid is fixed once a championship has started." % [Game.champ_entrants.size() - 1,
+				"%s class only" % Catalog.class_name_of(Game.car_index) if bool(Settings.g("same_class")) else "any class"])
+			fixed.custom_minimum_size.x = 0.0
+			body.add_child(fixed)
+		body.add_child(_toggle_button("Impact with AI", Game.ai_contact, func(v: bool): Game.ai_contact = v))
+	fn.rebuild = func():
+		for c in body.get_children():
+			body.remove_child(c)
+			c.queue_free()
+		for c in tabs.get_children():
+			tabs.remove_child(c)
+			c.queue_free()
+		var group := ButtonGroup.new()
+		for t: Array in [["cond", "Conditions"], ["rivals", "Rivals"]]:
+			var tb := _button(String(t[1]), func():
+				ui.tab = t[0]
+				fn.rebuild.call(), 0)
+			tb.toggle_mode = true
+			tb.button_group = group
+			tb.button_pressed = ui.tab == t[0]
+			tb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			tb.add_theme_font_size_override("font_size", 23)
+			tabs.add_child(tb)
+		if String(ui.tab) == "cond":
+			cond_tab.call()
+		else:
+			rivals_tab.call()
+		var rows: Array = [_focus_controls(tabs), _focus_controls(body), [done]]
+		_focus_rows(rows.filter(func(r): return not r.is_empty()), (_focus_controls(body)[0] if not _focus_controls(body).is_empty() else done))
+
+	var set_drawer := func(open: bool):
+		ui.open = open
+		scrim.visible = true
+		var tw := create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		tw.tween_property(drawer, "offset_left", -580.0 if open else 0.0, 0.26)
+		tw.tween_property(drawer, "offset_right", 0.0 if open else 580.0, 0.26)
+		tw.tween_property(scrim, "modulate:a", 1.0 if open else 0.0, 0.26)
+		if not open:
+			tw.chain().tween_callback(func(): scrim.visible = false)
+	fn.open = func(tab: String):
+		ui.tab = tab
+		set_drawer.call(true)
+		fn.rebuild.call()
+	var close_drawer := func():
+		set_drawer.call(false)
+		fn.focus_closed.call()
+	fn.focus_closed = func():
+		var rows: Array = [summary_chips, _focus_controls(bar), [customise]]
+		_focus_rows(rows.filter(func(r): return not r.is_empty()), _focus_controls(bar)[-1])
+	customise.pressed.connect(func():
+		Sfx.click()
+		fn.open.call(String(ui.tab)))
+	done.pressed.connect(func():
+		Sfx.click()
+		close_drawer.call())
+	scrim.gui_input.connect(func(ev: InputEvent):
+		if ev is InputEventMouseButton and ev.pressed and bool(ui.open):
+			close_drawer.call())
+
+	var back := _button("Back", func():
+		if bool(ui.open):
+			close_drawer.call()
+		else:
+			_title(), 0)
+	bar.add_child(back)
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bar.add_child(spacer)
+	var start := _button("Start stage", _start_race, 300)
+	start.custom_minimum_size.y = 72
+	start.add_theme_font_size_override("font_size", 32)
+	bar.add_child(start)
+	_back = func():
+		if bool(ui.open):
+			close_drawer.call()
+		else:
+			_title()
+	refresh_all.call()
+	fn.focus_closed.call()
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--drawer="):
+			fn.open.call(a.substr(9))
+	if Settings.fx_level() >= 1 and not OS.get_cmdline_user_args().has("--nohero"):
+		var loading_tag := PaperTheme.tag("Loading live preview…", 18)
+		loading_tag.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+		loading_tag.offset_top = 30
+		root.add_child(loading_tag)
+		await get_tree().process_frame
+		await get_tree().process_frame
+		if not is_instance_valid(root):
+			return
+		_hero_start(Game.stage_index, Game.race_tod(), -1)
+		if not is_instance_valid(root):
+			return
+		loading_tag.queue_free()
+		var hide := create_tween()
+		hide.tween_property(art, "self_modulate:a", 0.0, 0.7)
 
 
 func _standings_table(parent: Control) -> void:
@@ -2245,9 +2556,15 @@ func _run_bench() -> void:
 			var sec := {}       # lap -> [time at section start, time at section end]
 			var prev_s := race.player.s
 			var calib_a := -1.0
+			var last_us := Time.get_ticks_usec()
 			while res.is_empty() and frames < 30 * 1500:
 				await get_tree().process_frame
 				frames += 1
+				if OS.get_cmdline_user_args().has("--spikes"):
+					var now_us := Time.get_ticks_usec()
+					if frames > 10 and now_us - last_us > 35000:
+						print("SPIKE %.0f ms at t=%.1f s=%.0f lap=%d nodes=%d" % [(now_us - last_us) / 1000.0, race._race_time_for_bench(), race.player.s, race.player.lap, int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT))])
+					last_us = now_us
 				if OS.get_cmdline_user_args().has("--calib"):
 					# Car pace: time to cover 500 m -> 2000 m of the reference stage at full autopilot skill.
 					if calib_a < 0.0 and race.player.s >= 500.0:
@@ -2268,6 +2585,13 @@ func _run_bench() -> void:
 							print("RXAIR s=%.0f lat=%.1f lap=%d v=%.1f vy=%.2f" % [bp.s, bp.lat, bp.lap, bp.v_long, bp.vy])
 						bounce_air = bp.airborne
 				var jt: Dictionary = race.stage.track.joker
+				if OS.get_cmdline_user_args().has("--jokerlog") and not jt.is_empty() and race.player.laps_total > 0:
+					var jp: Car = race.player
+					var jb := race.stage.track.joker_band(jp.s)
+					if not is_nan(jb.x) and jp.lat >= jb.x - 0.5 and jp.lat <= jb.y + 0.5 and jp.s > float(jt.s0) and jp.s < float(jt.s1):
+						if not jokers.has("y"):
+							jokers["y"] = []
+						jokers["y"].append([jp.y, jp.vy, jp.v_long, jp.lat, jp.s, jb.x, jb.y, race.stage.track.surface_height(jp.pos, jp.s, jp.lat)])
 				if not jt.is_empty() and race.player.laps_total > 0:
 					var a: float = float(jt.s0) - 60.0
 					var b: float = minf(float(jt.s1) + 60.0, race.stage.track.length - 4.0)
@@ -2284,6 +2608,21 @@ func _run_bench() -> void:
 				if frames % 8 == 0 and OS.get_cmdline_user_args().has("--rxtrace") and Catalog.stages()[si].has("rx") and race.player.s > _arg_float("--rxlo=", 1250.0) and race.player.s < _arg_float("--rxhi=", 1480.0):
 					var pl: Car = race.player
 					print("RXPROGRESS t=%ds lap=%d gate=%d s=%.0f lat=%.1f v=%.1f joker=%s on_road=%s steer=%.2f thr=%.2f brk=%.2f gear=%d rpm=%.0f wl=%s wg=%s y=%.2f air=%s slip=%.2f acc=%.2f surf=%.2f grade=%.3f patch=%s h=%.2f tang=%.2f walls=%s hw=%.1f" % [frames / 30, pl.lap, int(race._circuit_progress[pl].gate), pl.s, pl.lat, pl.v_long, pl.joker_taken, pl.on_road, pl.steer, pl.throttle, pl.brake, pl.gear, pl.rpm, pl.wheel_load, pl.wheel_grip, pl.y, pl.airborne, pl.slip, pl.longitudinal_accel, pl.surface, race.stage.track.grade_along(pl.pos, pl.s, pl.lat, pl.fwd()), pl.patch_kind, pl.h, race.stage.track.heading_at(pl.track_i), race.stage.track.barriers_at(pl.s, signf(pl.lat)).map(func(b): return "%s:%.1f" % [b.kind, race.stage.track.barrier_wall(b, pl.s)]), race.stage.track.road_half_width(pl.s)])
+			if OS.get_cmdline_user_args().has("--jokerlog") and jokers.has("y"):
+				var ys: Array = jokers["y"]
+				var d2 := 0.0
+				var maxvy := 0.0
+				var n2 := 0
+				for q in range(1, ys.size() - 1):
+					var dd: float = float(ys[q][0]) - (float(ys[q - 1][0]) + float(ys[q + 1][0])) * 0.5
+					d2 += dd * dd
+					n2 += 1
+					maxvy = maxf(maxvy, absf(float(ys[q][1])))
+				var big: Array = ys.filter(func(q): return absf(float(q[1])) > 2.0)
+				big.sort_custom(func(a, b): return absf(float(a[1])) > absf(float(b[1])))
+				for q in big.slice(0, 8):
+					print("JOKERBIG y=%.2f vy=%.2f v=%.1f lat=%.2f s=%.1f band=[%.2f,%.2f] gh=%.2f" % [q[0], q[1], q[2], q[3], q[4], q[5], q[6], q[7]])
+				print("JOKERLOG samples=%d y_rms_d2=%.4f max_vy=%.2f" % [ys.size(), sqrt(d2 / maxf(n2, 1)), maxvy])
 			if res.is_empty():
 				print("BENCH stage=%d mode=%d DID NOT FINISH s=%.0f/%.0f" % [si, m, race.player.s, tr.finish_s])
 				continue
@@ -2745,6 +3084,43 @@ func _run_rxbump(list: Array) -> void:
 			if shown >= 8:
 				break
 		print("RXBUMP ", Catalog.stages()[si]["name"], " n=", found.size(), line)
+		if not tr.joker.is_empty():
+			var jf: Array = []
+			var js := float(tr.joker.s0)
+			var sumsq := 0.0
+			var cnt := 0
+			while js < float(tr.joker.s1):
+				var band := tr.joker_band(js)
+				if not is_nan(band.x):
+					var jl := (band.x + band.y) * 0.5
+					var j0 := _surf(tr, js, jl)
+					var jb := j0 - (_surf(tr, js - 3.0, jl) + _surf(tr, js + 3.0, jl)) * 0.5
+					sumsq += jb * jb
+					cnt += 1
+					if absf(jb) > 0.05:
+						jf.append([absf(jb), js, jl, jb])
+				js += 1.0
+			jf.sort_custom(func(a, b): return a[0] > b[0])
+			var jl_line := ""
+			for k in mini(8, jf.size()):
+				jl_line += " [s=%.0f lat=%.1f bump=%+.2f]" % [jf[k][1], jf[k][2], jf[k][3]]
+			if OS.get_cmdline_user_args().has("--jokerprof"):
+				var prof := ""
+				var ps2 := 368.0
+				while ps2 < 392.0:
+					var bnd := tr.joker_band(ps2)
+					var plat := (bnd.x + bnd.y) * 0.5 if not is_nan(bnd.x) else 0.0
+					prof += " %.1f:%.3f" % [ps2, _surf(tr, ps2, plat)]
+					ps2 += 1.0
+				print("JOKERPROF ", prof)
+				var bprof := ""
+				var bq := 376.0
+				while bq < 379.0:
+					bprof += " %.1f:%.4f/%.3f" % [bq, tr.bank_at(bq), tr.road_h(bq)]
+					bq += 0.25
+				print("JOKERBANK ", bprof)
+				print("JOKERFEAT ", str(tr.features.filter(func(f): return absf(float(f.get("s", -999.0)) - 377.0) < 40.0)), " stations=", str(tr.joker_chicane_stations()), " jk=", str([tr.joker.s0, tr.joker.s1]))
+			print("JOKERBUMP ", Catalog.stages()[si]["name"], " rms=%.3f n=%d" % [sqrt(sumsq / maxf(cnt, 1)), jf.size()], jl_line)
 		if OS.get_cmdline_user_args().has("--rxprof"):
 			var s0 := _arg_float("--rxlo=", 140.0)
 			if s0 > tr.length - 20.0:

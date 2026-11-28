@@ -12,6 +12,8 @@ var _t := 0.0
 var _scale := 1.0
 var _cool := 0.0
 var _up_ok := 0.0
+var _changes: Array = []   # times (s) of recent scale changes
+var _hold_until := 0.0
 var _bench_running := false
 signal benchmark_progress(fraction: float)
 signal benchmark_done(result: Dictionary)
@@ -25,13 +27,15 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 
 
+## The governor aims for a steady 60 fps at most, whatever the frame-rate cap: chasing 90 or 120 fps on a heavy
+## scene made it shrink and regrow the render target again and again, and every resize is a visible hitch.
 func _target_ms() -> float:
 	var f := int(Settings.g("fps"))
 	if f <= 0:
 		f = int(roundf(DisplayServer.screen_get_refresh_rate()))
 		if f < 30:
 			f = 60
-	return 1000.0 / float(f)
+	return 1000.0 / float(clampi(f, 30, 60))
 
 
 ## The scale the player chose; dynamic resolution never goes above it.
@@ -58,22 +62,37 @@ func _process(delta: float) -> void:
 	var target := _target_ms()
 	if _t < 1.0:
 		return
-	if _avg > target * 1.14 and _scale > MIN_SCALE:
-		_scale = maxf(MIN_SCALE, _scale - 0.05)
-		_cool = 8.0
+	var now := Time.get_ticks_msec() / 1000.0
+	if now < _hold_until:
+		_t = 0.0
+		return
+	if _avg > target * 1.2 and _scale > MIN_SCALE:
+		_scale = maxf(MIN_SCALE, _scale - 0.08)
+		_cool = 25.0
 		_up_ok = 0.0
 		_t = 0.0
 		vp.scaling_3d_scale = _scale
-	elif _avg < target * 1.04 and _scale < ceiling and _cool <= 0.0:
+		_note_change(now)
+	elif _avg < target * 0.85 and _scale < ceiling and _cool <= 0.0:
 		_up_ok += 1.0
-		if _up_ok >= 4.0:
-			_scale = minf(ceiling, _scale + 0.03)
+		if _up_ok >= 10.0:
+			_scale = minf(ceiling, _scale + 0.08)
 			_up_ok = 0.0
 			vp.scaling_3d_scale = _scale
+			_note_change(now)
 		_t = 0.0
 	else:
 		_up_ok = 0.0
 		_t = 0.0
+
+
+## More than three scale changes in a minute means the scene sits on the boundary: stop adjusting for a while.
+func _note_change(now: float) -> void:
+	_changes.append(now)
+	_changes = _changes.filter(func(t): return now - float(t) < 60.0)
+	if _changes.size() > 3:
+		_hold_until = now + 90.0
+		_changes.clear()
 
 
 ## Hidden first-launch benchmark: measure the attract demo at High, then Medium, and keep the best preset that

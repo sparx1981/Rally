@@ -349,6 +349,8 @@ func _process(delta: float) -> void:
 		_intro_camera(dt)
 	elif state == State.DONE and not attract and not autopilot and DisplayServer.get_name() != "headless":
 		_finish_camera(dt)
+	elif hero_s >= 0.0:
+		_hero_camera(dt)
 	else:
 		camera.follow(dt)
 	var vi := camera.view_index()
@@ -404,6 +406,134 @@ func _intro_camera(dt: float) -> void:
 	camera.fov = lerpf(46.0, 62.0, e)
 	if _intro_t >= INTRO_LEN:
 		_end_intro()
+
+
+## --- Cinematic hero mode (confirmation screens): an AI car drives the stage's signature section on a loop while the
+## camera cuts between a low pass-by, a high three-quarter view and a swinging chase.
+var hero_s := -1.0
+var hero_kind := ""
+var _hero_t := 0.0
+var _hero_loop := 0
+var _hero_look := Vector3.ZERO
+
+
+## The most photogenic spot of a track: a bridge, then a jump, the Joker lane, a splash, a hairpin, else the tightest bend.
+static func hero_spot(tr: Track) -> Dictionary:
+	var lo := 130.0
+	var hi := tr.length - 130.0
+	for br: Dictionary in tr.bridges:
+		var bs := float(br.get("s", -1.0))
+		if bs > lo and bs < hi:
+			return {"s": bs, "kind": "bridge"}
+	for f: Dictionary in tr.features:
+		if str(f.get("type", "")) == "jump":
+			var js := float(f.get("s", -1.0))
+			if js > lo and js < hi:
+				return {"s": js, "kind": "jump"}
+	if not tr.joker.is_empty():
+		return {"s": (float(tr.joker.s0) + float(tr.joker.s1)) * 0.5, "kind": "joker"}
+	for f: Dictionary in tr.features:
+		if str(f.get("type", "")) == "splash":
+			var ws := float(f.get("s", -1.0))
+			if ws > lo and ws < hi:
+				return {"s": ws, "kind": "splash"}
+	for n: Dictionary in tr.notes:
+		if bool(n.get("hairpin", false)) or (str(n.get("kind", "")) == "corner" and int(n.get("sev", 9)) <= 1):
+			var ns := (float(n["s0"]) + float(n["s1"])) * 0.5
+			if ns > lo and ns < hi:
+				return {"s": ns, "kind": "hairpin"}
+	var best := lo
+	var best_k := -1.0
+	var q := lo
+	while q < hi:
+		var k := float(tr.curv_abs[tr.index_at(q)])
+		if k > best_k:
+			best_k = k
+			best = q
+		q += 6.0
+	return {"s": best, "kind": "bend"}
+
+
+func start_hero() -> void:
+	var spot := Race.hero_spot(stage.track)
+	hero_s = float(spot["s"])
+	hero_kind = str(spot["kind"])
+	_hero_t = 0.0
+	_hero_loop = 0
+	_hero_restart()
+
+
+var _hero_side := 1.0
+var _hero_off := 4.2
+
+
+## True when no solid prop (tree, rock, house) stands within r metres of p.
+func _hero_free(p: Vector2, r: float) -> bool:
+	if stage.scenery == null:
+		return true
+	for o in stage.scenery.props_near(p):
+		if float(o[2]) > 0.0 and Vector2(float(o[0]), float(o[1])).distance_to(p) < float(o[2]) + r:
+			return false
+	return true
+
+
+## Pick the verge side and distance for this loop's low camera so no tree or rock stands in the way.
+func _hero_pick_side(_shot: int) -> void:
+	_hero_side = 1.0 if (_hero_loop / 3) % 2 == 0 else -1.0
+
+
+func _hero_restart() -> void:
+	_hero_pick_side(_hero_loop % 3)
+	var car := player
+	car.place_at(hero_s - 105.0, 0.0)
+	car.vel = car.fwd() * 17.0
+	_hero_t = 0.0
+	_hero_look = Vector3(car.pos.x, car.y + 0.8, car.pos.y)
+
+
+func _hero_camera(dt: float) -> void:
+	var tr := stage.track
+	var car := player
+	_hero_t += dt
+	if car.s > hero_s + 60.0 or _hero_t > 16.0 or car.s < hero_s - 140.0:
+		_hero_loop += 1
+		_hero_restart()
+	var hi := tr.index_at(hero_s)
+	var hp: Vector2 = tr.point_at(hero_s)
+	var nrm: Vector2 = tr.nrm[hi]
+	var hw := tr.road_half_width(hero_s)
+	var side := _hero_side
+	var car_pos := Vector3(car.pos.x, car.y + 0.7, car.pos.y)
+	var cam_pos := Vector3.ZERO
+	var aim := car_pos
+	var fov := 42.0
+	# Every shot keeps the camera over the road itself (never beside it), so it cannot end up inside scenery,
+	# barrier walls or a bridge's trusses.
+	var lane := side * hw * 0.5
+	match _hero_loop % 3:
+		0:   # Low pass-by: the camera crouches in the lane edge and the car sweeps past.
+			var sc := hero_s - 16.0 + _hero_t * 1.4
+			var lp := tr.point_at(sc) + tr.nrm[tr.index_at(sc)] * lane
+			cam_pos = Vector3(lp.x, tr.surface_height(lp, sc, lane) + 0.95, lp.y)
+			fov = 40.0
+		1:   # High chase: above and behind, looking along the road at the feature ahead.
+			cam_pos = car_pos - car.fwd3() * 12.0 + car.right_axis3() * lane * 0.5 + Vector3(0, 6.5, 0)
+			var hero_pt := Vector3(hp.x, tr.surface_height(hp, hero_s, 0.0) + 1.0, hp.y)
+			aim = hero_pt if car.s < hero_s - 45.0 else car_pos.lerp(hero_pt, 0.25)
+			fov = 52.0
+		_:   # Swinging low chase from behind to the side, kept inside the road width.
+			var ang := lerpf(0.3, 1.1, clampf(_hero_t / 7.0, 0.0, 1.0)) * side
+			var swing := minf(10.0, hw * 0.9 / maxf(absf(sin(ang)), 0.2))
+			var back := -car.fwd3() * cos(ang) * swing + car.right_axis3() * sin(ang) * swing
+			cam_pos = car_pos + back + Vector3(0, 1.8, 0)
+			fov = 52.0
+	# Aim a little to the left of the subject so it sits right of centre, clear of the menu on the left.
+	var to_aim := aim - cam_pos
+	aim -= to_aim.cross(Vector3.UP).normalized() * to_aim.length() * 0.2
+	_hero_look = _hero_look.lerp(aim, clampf(dt * 7.0, 0.0, 1.0))
+	camera.global_position = cam_pos
+	camera.look_at(_hero_look, Vector3.UP)
+	camera.fov = lerpf(camera.fov, fov, clampf(dt * 3.0, 0.0, 1.0))
 
 
 ## After the finish the camera swings slowly round the car while the results build.

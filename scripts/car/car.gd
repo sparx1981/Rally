@@ -951,6 +951,8 @@ func place_at(s_pos: float, lateral: float) -> void:
 	track_i = i
 	s = s_pos
 	lat = lateral
+	_s_height = s_pos
+	_has_prev_gh = false
 	y = track.surface_height(pos, s_pos, lateral)
 	vy = 0.0
 	longitudinal_accel = 0.0
@@ -1202,7 +1204,9 @@ func step(dt: float) -> void:
 	var dsh := s - _s_height
 	if track.circuit:
 		dsh = wrapf(dsh, -track.length * 0.5, track.length * 0.5)
-	if not _has_prev_gh or absf(dsh) > 6.0:
+	# Only a real teleport (respawn, grid placement) resets the height station. On a wide Joker lane the projected
+	# station can jump a few metres in one frame; following it at a limited rate keeps the ground height continuous.
+	if not _has_prev_gh or absf(dsh) > 40.0:
 		_s_height = s
 	else:
 		var reach := (absf(v_long) * 1.35 + 0.6) * dt
