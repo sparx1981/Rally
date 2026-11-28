@@ -2515,6 +2515,20 @@ func _run_bench() -> void:
 		elif a == "--rx":
 			list = Catalog.rallycross_indices()
 	Game.circuit_laps = 3
+	if OS.get_cmdline_user_args().has("--hazards"):
+		Game.mode = Game.Mode.TIME_TRIAL
+		for si in list:
+			Game.stage_index = si
+			await _start_race()
+			var tr := race.stage.track
+			var hz := ""
+			for f: Dictionary in tr.features:
+				var fs := float(f.get("s", -1.0))
+				var in_j: bool = not tr.joker.is_empty() and fs >= float(tr.joker.s0) - 15.0 and fs <= float(tr.joker.s1) + 15.0
+				hz += " %s%s@%.0f%s" % [str(f.get("type")), (":" + str(f.get("kind"))) if f.has("kind") else "", fs, "[IN JOKER]" if in_j else ""]
+			print("HAZ %s joker=[%.0f-%.0f] hay_chicanes=%s |%s" % [Catalog.stages()[si]["id"], tr.joker.s0, tr.joker.s1, str(tr.joker_chicane_stations().map(func(x): return roundi(x))), hz])
+		get_tree().quit()
+		return
 	if OS.get_cmdline_user_args().has("--soak"):
 		await _run_soak(list)
 		get_tree().quit()
