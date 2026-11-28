@@ -1285,4 +1285,10 @@ static func build_cockpit(car: Dictionary, model: Dictionary, mat: Material) -> 
 		root.add_child(trip_display)
 	if speed_pivot:
 		root.add_child(speed_pivot)
-	return {"root": root, "nose": nose, "nose_clip": nose_clip, "wheel": wheel, "needle": npiv, "speed_hand": speed_mesh, "trip_display": trip_display, "shift_leds": leds, "gear_readout": gear_readout, "speed_readout": speed_readout}
+	var screen := {}
+	if style != "buggy":
+		var sb: Vector2 = _cabin_outline(P, top_y)[1]
+		var st: Vector2 = _cabin_outline(P, top_y)[2]
+		var hxs: float = (W * 0.84) * 0.5 - 0.015
+		screen = {"o": Vector3(-hxs, sb.y, sb.x), "ex": Vector3(2.0 * hxs, 0, 0), "ey": Vector3(0, st.y - sb.y, st.x - sb.x), "head": head}
+	return {"screen": screen, "root": root, "nose": nose, "nose_clip": nose_clip, "wheel": wheel, "needle": npiv, "speed_hand": speed_mesh, "trip_display": trip_display, "shift_leds": leds, "gear_readout": gear_readout, "speed_readout": speed_readout}

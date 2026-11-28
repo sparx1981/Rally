@@ -843,6 +843,8 @@ func add_damage(at: Vector2, strength: float) -> void:
 	var x := clampf(local.dot(right_axis()), -half_wid, half_wid)
 	var z := clampf(local.dot(fwd()), -half_len, half_len)
 	var side_hit := absf(x) / half_wid > absf(z) / half_len
+	if not side_hit and z > 0.0 and strength > 8.0:
+		_crack_screen(x, strength)
 	var outward := Vector3(signf(x), 0, 0) if side_hit else Vector3(0, 0, signf(z))
 	var center := Vector3(x, _model["lamp"].y, z)
 	if side_hit:
@@ -913,10 +915,34 @@ func _crush_point(original: Vector3, current: Vector3, center: Vector3, outward:
 
 
 ## The in-car view rig (dashboard, wheel, rev needle), shown only in the cockpit camera.
+var _screen_cracks: WindscreenCracks
+var _screen_hits: Array = []   # Vector3(u, v, power) per hit that cracked the windscreen
+
+
+## A hard hit on the front cracks the windscreen at the place where it was struck.
+func _crack_screen(x: float, strength: float) -> void:
+	if _screen_hits.size() >= 5:
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 91 + _screen_hits.size() * 17
+	var u := clampf(0.5 + x / (half_wid * 2.0) * 0.8 + rng.randf_range(-0.05, 0.05), 0.12, 0.88)
+	var v := clampf(rng.randf_range(0.3, 0.65) + (strength - 10.0) * 0.01, 0.2, 0.8)
+	_screen_hits.append(Vector3(u, v, strength))
+	if _screen_cracks:
+		_screen_cracks.set_hits(_screen_hits)
+
+
 func cockpit(show: bool) -> void:
 	if show and _cockpit.is_empty():
 		_cockpit = CarModel.build_cockpit(stats, _model, _mat)
 		_body.add_child(_cockpit["root"])
+		if not (_cockpit["screen"] as Dictionary).is_empty():
+			_screen_cracks = WindscreenCracks.new()
+			_screen_cracks.setup(_cockpit["screen"])
+			(_cockpit["root"] as Node3D).add_child(_screen_cracks)
+			if OS.get_cmdline_user_args().has("--crack"):
+				_screen_hits = [Vector3(0.35, 0.45, 12.0), Vector3(0.72, 0.3, 9.0), Vector3(0.55, 0.7, 16.0)]
+			_screen_cracks.set_hits(_screen_hits)
 	if not _cockpit.is_empty():
 		_cockpit["root"].visible = show
 	var body_mesh: Node3D = _body.get_child(0)

@@ -308,3 +308,8 @@ All 12 circuits complete 3 laps. A human player is not affected by the AI's lane
 - Championship confirmation uses the same start-first layout: standings panel, summary chips, Customise drawer with Conditions (time moves on) and Rivals tabs.
 - Joker-lane bump (Timberline Crest): the car's height station was reset whenever the projected station jumped more than 6 m, which happens on the outer lane of a bend; the ground height then stepped about 0.3 m and the car was launched. The reset threshold is now 40 m (real teleports only). Measured max vertical speed in the Joker section 33 m/s -> 2 m/s. Dev: `--jokerlog`, `--jokerprof`.
 - PerfGovernor now aims for 60 fps at most, steps by 0.08, waits longer before raising the scale and holds for 90 s after more than three changes in a minute. Suspected cause of periodic pauses at 120 fps; not reproduced on desktop.
+
+## Thirtieth pass: windscreen cracks as geometry
+
+- The 2D screen overlay is gone. Each hard front hit (strength > 8, up to 5) adds a star crack on the cockpit windscreen at the lateral position of the hit: radial cracks with branches, a broken ring and a frosted patch, built as strips flush with the glass quad (`WindscreenCracks`, `shaders/windscreen_crack.gdshader`). The shader refracts the screen behind each crack sideways (opposite directions either side, strongest at the edges), adds edge glints and a scatter blur in the frosted patch.
+- Visible in the cockpit view only (the bonnet camera cannot see the windscreen, and the exterior body glass is not cracked). Rear and side hits do not crack glass. Dev: `--crack` forces three sample hits.

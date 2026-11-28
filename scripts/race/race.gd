@@ -214,9 +214,6 @@ func _make_hud() -> void:
 	add_child(_hud_layer)
 	hud = Hud.new()
 	_hud_layer.add_child(hud)
-	_cracks = GlassCracks.new()
-	_cracks.visible = false
-	_hud_layer.add_child(_cracks)
 	_rain_lens = RainLens.new()
 	_rain_lens.visible = false
 	_hud_layer.add_child(_rain_lens)
