@@ -462,7 +462,7 @@ func spark(at_world: Vector3, outward: Vector3) -> void:
 		_sparks = CPUParticles3D.new()
 		_sparks.local_coords = false
 		var q := QuadMesh.new()
-		q.size = Vector2(0.07, 0.07)
+		q.size = Vector2(0.11, 0.11)
 		var m := StandardMaterial3D.new()
 		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
@@ -692,6 +692,8 @@ func enable_lights(shadows: bool, night := false) -> void:
 		sl.rotation = Vector3(-0.085, PI + signf(mount.x)*0.035, 0.0)
 		_body.add_child(sl)
 		_lights.append(sl)
+	if OS.get_cmdline_user_args().has("--dust"):
+		_make_headlight_dust(lamp, night)
 	if LightHalo.enabled():
 		for i in mounts.size():
 			var hl := LightHalo.make(Color("#fff0d0"), 1.5, 0.9)
@@ -729,7 +731,65 @@ func enable_lights(shadows: bool, night := false) -> void:
 	_lights.append(tail)
 
 
+var _beam_dust: CPUParticles3D
+var _beam_dust_mat: StandardMaterial3D
+
+
+## PREVIEW: a few motes of dust hanging in the air ahead of the car, catching the headlights. They stay where they
+## are in the world, so they stream past as the car drives through them.
+func _make_headlight_dust(lamp: Vector3, night: bool) -> void:
+	var p := CPUParticles3D.new()
+	p.amount = 120
+	p.lifetime = 3.2
+	p.preprocess = 3.2
+	p.local_coords = false
+	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	p.emission_box_extents = Vector3(2.4, 0.9, 8.0)
+	p.direction = Vector3(0, 0.2, 0)
+	p.spread = 180.0
+	p.gravity = Vector3(0, 0.0, 0)
+	p.initial_velocity_min = 0.04
+	p.initial_velocity_max = 0.22
+	p.scale_amount_min = 0.5
+	p.scale_amount_max = 1.3
+	var gt := GradientTexture2D.new()
+	gt.fill = GradientTexture2D.FILL_RADIAL
+	gt.fill_from = Vector2(0.5, 0.5)
+	gt.fill_to = Vector2(1.0, 0.5)
+	gt.width = 32
+	gt.height = 32
+	var gr := Gradient.new()
+	gr.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 0.0)])
+	gt.gradient = gr
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	m.vertex_color_use_as_albedo = true
+	m.albedo_texture = gt
+	m.albedo_color = Color(1.0, 0.92, 0.74, 0.55 if night else 0.0)
+	m.disable_fog = true
+	var q := QuadMesh.new()
+	q.size = Vector2(0.07, 0.07)
+	q.material = m
+	p.mesh = q
+	var ramp := Gradient.new()
+	ramp.colors = PackedColorArray([Color(1, 1, 1, 0), Color(1, 1, 1, 1), Color(1, 1, 1, 1), Color(1, 1, 1, 0)])
+	ramp.offsets = PackedFloat32Array([0.0, 0.25, 0.7, 1.0])
+	p.color_ramp = ramp
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	p.position = Vector3(0, lamp.y + 0.1, half_len + 7.0)
+	p.visible = night
+	_body.add_child(p)
+	_beam_dust = p
+	_beam_dust_mat = m
+
+
 func set_headlight_level(level: float) -> void:
+	if _beam_dust:
+		_beam_dust.visible = level > 0.05
+		_beam_dust_mat.albedo_color = Color(1.0, 0.92, 0.74, clampf(level, 0.0, 1.0) * 0.55)
 	for node in _lights:
 		var light := node as Light3D
 		if not light.has_meta("full_energy"):
