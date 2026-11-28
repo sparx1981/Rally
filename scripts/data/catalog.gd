@@ -416,6 +416,58 @@ static func car_class(car_i: int) -> int:
 	return int(CAR_CLASS.get(String(cars()[car_i]["id"]), 1))
 
 
+## Measured pace: seconds an autopilot-driven car needs for the full 4 km Meadow Run sprint (dev bench, `--ttonly --car=N`). Stat averages don't predict pace well (the Comet out-runs cars with better stats), so same-class
+## balancing uses real times.
+const PACE_TIME := {
+	"alder": 165.7,
+	"badger": 168.0,
+	"celeste": 160.9,
+	"comet": 174.6,
+	"cormorant": 166.8,
+	"drover": 169.9,
+	"fennec": 159.9,
+	"gallo": 167.3,
+	"gazelle": 170.3,
+	"halcyon": 163.5,
+	"lince": 160.5,
+	"lynx": 158.8,
+	"marmot": 160.9,
+	"marten": 161.4,
+	"mirage": 167.1,
+	"mule": 166.8,
+	"nimbus": 159.2,
+	"otter": 167.9,
+	"pip": 178.6,
+	"quadra": 162.1,
+	"rook": 166.4,
+	"sandhopper": 168.4,
+	"scarab": 184.1,
+	"stiletto": 169.5,
+	"strega": 169.2,
+	"summit": 155.8,
+	"tempest": 161.9,
+	"ventura": 186.2,
+	"verbena": 169.9,
+	"vortex": 154.8,
+	"wraith": 159.1,
+}
+
+
+static func pace_time(car_i: int) -> float:
+	return float(PACE_TIME.get(String(cars()[car_i]["id"]), 57.0))
+
+
+## Average measured time of a class, used to even out same-class grids.
+static func class_pace(cls: int) -> float:
+	var sum := 0.0
+	var n := 0
+	for i in cars().size():
+		if car_class(i) == cls:
+			sum += pace_time(i)
+			n += 1
+	return sum / maxf(float(n), 1.0)
+
+
 static func class_name_of_id(car_id: String) -> String:
 	return CLASS_NAMES[int(CAR_CLASS.get(car_id, 1))]
 

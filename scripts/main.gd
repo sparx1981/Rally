@@ -1848,7 +1848,7 @@ func _run_bench() -> void:
 		get_tree().quit()
 		return
 	for si in list:
-		for m in ([Game.Mode.TIME_TRIAL] if si == 35 else ([Game.Mode.TIME_TRIAL] if Catalog.stages()[si].has("rx") and not OS.get_cmdline_user_args().has("--grid") else ([Game.Mode.RACE] if Catalog.stages()[si].has("rx") else [Game.Mode.TIME_TRIAL, Game.Mode.RACE]))):
+		for m in ([Game.Mode.TIME_TRIAL] if (si == 35 or OS.get_cmdline_user_args().has("--ttonly")) else ([Game.Mode.TIME_TRIAL] if Catalog.stages()[si].has("rx") and not OS.get_cmdline_user_args().has("--grid") else ([Game.Mode.RACE] if Catalog.stages()[si].has("rx") else [Game.Mode.TIME_TRIAL, Game.Mode.RACE]))):
 			Game.mode = m
 			Game.stage_index = si
 			var t0 := Time.get_ticks_msec()
@@ -1866,9 +1866,18 @@ func _run_bench() -> void:
 			var jokers := {}
 			var sec := {}       # lap -> [time at section start, time at section end]
 			var prev_s := race.player.s
+			var calib_a := -1.0
 			while res.is_empty() and frames < 30 * 1500:
 				await get_tree().process_frame
 				frames += 1
+				if OS.get_cmdline_user_args().has("--calib"):
+					# Car pace: time to cover 500 m -> 2000 m of the reference stage at full autopilot skill.
+					if calib_a < 0.0 and race.player.s >= 500.0:
+						calib_a = race._race_time_for_bench()
+					elif calib_a >= 0.0 and race.player.s >= 2000.0:
+						print("CALIB %s %.2f" % [Catalog.cars()[Game.car_index]["id"], race._race_time_for_bench() - calib_a])
+						get_tree().quit()
+						return
 				if OS.get_cmdline_user_args().has("--rxbounce"):
 					var bp: Car = race.player
 					var gh_now: float = race.stage.track.surface_height(bp.pos, bp.s, bp.lat)
@@ -1902,6 +1911,8 @@ func _run_bench() -> void:
 				continue
 			var r: Dictionary = res["r"]
 			var rows: Array = r["rows"]
+			if OS.get_cmdline_user_args().has("--gridinfo"):
+				print("FIELD ", rows.map(func(x): return "%s:%s=%.1f" % [x["name"], Catalog.cars()[maxi(int(x["car"]), 0)]["id"], float(x["time"])]))
 			if race.stage.track.rx:
 				var laps_log: Array = race._lap_log[race.player]
 				var splits := []

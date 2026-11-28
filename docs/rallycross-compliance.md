@@ -282,3 +282,9 @@ All 12 circuits complete 3 laps. A human player is not affected by the AI's lane
 - Four racing classes (Catalog.CAR_CLASS): Heritage (8), Groups (11), Elite (8), Off-road (4). Shown on the car-select card.
 - "Cars: Any class / <Class> only" option on the Race and Championship confirmation screens (setting `same_class`, off by default). Same-class grids use each rival in turn and repeat models in an alternate livery when the class is smaller than the grid (Off-road with 5 opponents repeats Badger and Mule). Locked after round one of a championship.
 - Dev: `--car=N --sameclass --gridinfo` print the grid.
+
+## Twenty-sixth pass: same-class AI skill balancing
+
+- In same-class grids each AI driver's skill is scaled by (car time / class average time)^1.5, clamped to -6% / +12%, using measured full-stage times per car (Catalog.PACE_TIME, Meadow Run Sprint, autopilot; regenerate with `--view=bench --only=0 --ttonly --car=N`). Mixed-class grids are not balanced.
+- Stat averages (top/accel/grip) did not predict pace, so they are not used. Pace was measured on one gravel stage; tarmac pace differences are not modelled.
+- Test (Heritage grid, Meadow Run, one race): AI finishing spread 14.5 s unbalanced -> 10.6 s balanced. The rest is driver-skill randomness (0.93-1.0) and traffic. `--nobalance` disables it for comparison.

@@ -65,10 +65,22 @@ func make_entrants(count: int) -> Array:
 		else:
 			# Same-class grid: use each rival in turn; when the class runs out the models repeat in another livery.
 			var entry := {"name": names[i % names.size()], "car": pool[i % pool.size()], "skill": rng.randf_range(0.93, 1.0), "player": false}
+			entry["skill"] = float(entry["skill"]) * class_balance(int(entry["car"]))
 			if i >= pool.size():
 				entry["livery"] = 1 + (i / pool.size() - 1) % 2   # a repeated model is painted differently
 			out.append(entry)
 	return out
+
+
+## Within a class the slower cars drive a little harder and the quicker ones a little easier, so the field
+## stays close and driver skill (not just the car) decides the race. Based on measured pace (Catalog.PACE_TIME):
+## the slower the car is than its class average, the more its AI driver commits (clamped -6% / +12%).
+## Mixed-class grids are deliberately left unbalanced.
+func class_balance(car_i: int) -> float:
+	if OS.get_cmdline_user_args().has("--nobalance"):
+		return 1.0
+	var mean := Catalog.class_pace(Catalog.car_class(car_i))
+	return clampf(pow(Catalog.pace_time(car_i) / mean, 1.5), 0.94, 1.12)
 
 
 func difficulty_factor() -> float:
